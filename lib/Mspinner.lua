@@ -80,10 +80,6 @@ end
 
 function IControl:inc(goingUp,wrapping)  
     if self.vals then IncrementValue(self.val)
-
-
-
-
     local inc = nil
     if goingUp then inc = 1 else inc = -1 end
     if goingUp == nil then goingUp = true end
