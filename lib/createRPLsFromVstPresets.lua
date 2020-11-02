@@ -13,7 +13,7 @@ function GetPresetList(emptyName)
     --msg('tracknum = '..tracknum)
     if focused then
         Dbg('track num =',tracknum)
-        local track = getTrack(tracknum)
+        local track = GetTrack(tracknum)
         local _,fx_name = reaper.TrackFX_GetFXName(track, fx_num,"")
         --msg('fx name = '..fx_name)
     end
