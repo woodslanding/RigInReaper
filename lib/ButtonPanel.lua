@@ -9,7 +9,7 @@ end
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
 require 'moonUtils'
-require 'Icontrol'
+require 'Mbutton'
 
 loadfile(libPath .. "scythe.lua")()
 local GUI = require("gui.core")
@@ -28,43 +28,46 @@ local ImageFolder = reaper.GetResourcePath().."/Scripts/MOON/Images"
 local Element = require("gui.element")
 local Multi = false
 local Rows, Cols = 5,8
-local Ht, Wd = 40, 120
+local Ht, Wd = 40, 100
 local hue, sat, level = 40, 99, 40
 
-local Titles = {}
+local titles = {}
 
 
-local Switches = {}
-local Spinner
+local switches = {}
+local pager
+local selection = {}
+
+function GetName(idx)  return titles[idx] end
+function SetNames(str) titles = str end
 
 function CreateSwitch(i, xpos, ypos, wd, ht, title, hue, sat, level)
 
     local switch = GUI.createElement({
-        mode = MODES.SWITCH,
         w = wd,h = ht, x = xpos, y = ypos,
         color = GetRGB(hue,sat,level),
         loop = true,
         frames = 2,
-        caption = title,
-        vals = {0,i},
+        caption = '',
+        min = 0, max = i, value = 0,
         name = 'button'..i,
-        type = "IControl",
+        type = "MButton",
         --labelX = 0, labelY = 0,
-        image =  ImageFolder.."/".."comboButton2pos.png",
-        func = function(self) M.Msg('setting val to '..i) end,
+        image =  "comboButton2pos.png",
+        func = function(self) M.Msg('setting val to '..i,'caption = '..self.caption) end,
         params = {"a", "b", "c"}
     })
     function switch:onMouseUp()
-        if Multi then MultiSel(switch.vals[2])
-        else Select(switch.vals[2]) end
+        if Multi then MultiSel(switch.max)
+        else Select(switch.max) end
     end
-    Switches[i] = switch
+    switches[i] = switch
     return switch
 end
 
 function CreatePager()
-    Spinner = GUI.createElement({
-        mode = MODES.SPINNER,
+    pager = GUI.createElement({
+        spinner =true,
         horizontal = true,
         w = 80, h = 40,
         x = Wd * Cols, y = Ht * (Rows - 1),
@@ -72,36 +75,42 @@ function CreatePager()
         frames = 1,
         caption = '',
         font = 1,
-        type = "IControl",
-        image =  ImageFolder.."/".."fxSel.png",
-        func = function(self) SetPage(self:val()) end
+        value = 1,
+        type = "MButton",
+        image =  "fxSel.png",
+        func = function(self) M.Msg('page = '..self.value) SetPage(self.value)  end
     })
-    return Spinner
+    return pager
 end
 
 function MultiSel(set)
-    local sw = Switches[set]
+    local sw = switches[set]
     M.Msg(' val = '..sw:val())
-    if sw.frame == 0 then sw:setFrame(1)
-    else sw:setFrame(0) end
+    if sw.frame == 0 then sw.frame(1)
+    else sw.frame(0) end
     sw:redraw()
 end
 
-function Select(set)
+function Select(set) 
+    M.Msg('setting to '..set)
     for idx = 1,Rows * Cols do
-        local sw = Switches[idx]
-        if sw.vals[2] == set then sw:val(set)
-        else sw:val(0) end
+        local sw = switches[idx]
+        if sw.max == set then 
+            sw:val(set)
+            --selection = {set}
+        else sw:val(sw.min) end
         sw:redraw()
     end
 end
 
 function SetPage(pageNum) --pages start at 1
-    Spinner.max = math.ceil(#Titles/Rows * Cols)
+    M.Msg('setting page to '..pageNum)
+    pager.max = math.ceil(#titles/(Rows * Cols))
+    M.Msg('set max to'..pager.max)
     for idx = 1, Rows * Cols do
-        local sw = Switches[idx]
-        sw.caption = Titles[(Rows * Cols * (pageNum - 1)) + idx] or '---'
-        Spinner.caption = ' '..pageNum..' '
+        local sw = switches[idx]
+        sw.caption = titles[(Rows * Cols * (pageNum - 1)) + idx] or '---'
+        pager.caption = pageNum
         sw:redraw()
     end
 end
@@ -112,18 +121,19 @@ end
 
 
 local window = GUI.createWindow({
-  name = "This Part Works!",
+  name = "BUTTON PANEL TEST",
   w = 1200,
   h = 300,
-  x = 0, y = 0,
-  anchor = nil, corner = nil
+  x = 200, y = 100,
 })
 ------------------------------------
 -------- GUI Elements --------------
 ------------------------------------
-for i = 0,250 do
-    table.insert(Titles,' '..i..' ')
+local str = {}
+for i = 1,250 do
+    table.insert(str,i)
 end
+SetNames(str)
 local xpos, ypos
 local index = 1
 local layer = GUI.createLayer({name = "Layer1", z = 1})
@@ -134,12 +144,12 @@ for i = 1, Cols do
         hue = 15
         sat = 95
         level = 50
-        layer:addElements(CreateSwitch(index, xpos, ypos, Wd, Ht, "test"..index, hue, sat, level))
+        layer:addElements(CreateSwitch(index, xpos, ypos, Wd, Ht, GetName(i), hue, sat, level))
         index = index + 1
     end
 end
 layer:addElements(CreatePager())
-SetPage(0)
+SetPage(1)
 window:addLayers(layer)
 window:open()
 

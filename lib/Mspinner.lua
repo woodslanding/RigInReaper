@@ -1,7 +1,7 @@
 ------------------------------MSPINNER--------------------------------
 -- has a single image and a range of values or a table of values
 -- vals = {1,3,4,6} or min = 1, max = 5, inc = 1
--- 
+--
 ----------------------------------------------------------------------
 -- The core library must be loaded prior to anything else
 local libPath = reaper.GetExtState("Scythe v3", "libPath")
@@ -36,14 +36,16 @@ MSpinner.defaultProps = {
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,
     caption = "", font = 2, textColor = "white",
+    captions = {},
     color = 'black', round = 0,
     func = function () end,
     params = {},
-    val = 0,
+    value = 0,
     vals = nil,
     min = 0,
     max = 10,
     inc = 1,
+    interval = 1,
     image = nil,
     frame = 0,
     frames = 1
@@ -56,7 +58,7 @@ end
 
 function MSpinner:init()
     self.sprite = Sprite:new({})
-    self.sprite:setImage(self.image)
+    self.sprite:setImage(IMAGE_FOLDER.."/"..self.image)
     self.sprite.frame = { w = self.w, h = self.h }
     if not self.sprite.image then error("Mspinner: The specified image was not found") end
 end
@@ -67,7 +69,7 @@ function MSpinner:draw()
     gfx.mode = 0
     Color.set(self.color)
     GFX.roundRect(self.x, self.y, self.w-1, self.h-1, self.round, true, true)
-    self.sprite:draw(x, y, w+1, h+1, 0, 1)
+    self.sprite:draw(x, y, w+1, h+1,self.frame, self.frames)
 
     Color.set(self.textColor)
     Font.set(self.font)
@@ -81,33 +83,43 @@ function MSpinner:draw()
     gfx.drawstr(str)
 end
 
-function MSpinner:inc(goingUp,wrapping)
-    if self.vals then IncrementValue(self.val) end
-    local inc = nil
-    if goingUp then inc = 1 else inc = -1 end
-    if goingUp == nil then goingUp = true end
-    if wrapping == nil then wrapping = true end
-    local min, max
-    if self.frames == 1 then 
-        max = self.max min = self.min
-    else max = self.frames - 1 min = 0 end
-    if (self.frames == max and goingUp and wrapping)
-       or (self.frame == min and not goingUp and not wrapping) then
-        self:setState(min)
-    elseif (self.frame == min and not goingUp and wrapping)
-        or (self.frame == max and goingUp and not wrapping) then
-            self:setState(max)
-    else self:setState(self.frame + inc) end
+function MSpinner:increment(incVal,wrapping)
+    --[[
+        if only one frame,  then just increment or decrement the value by interval
+        if multiple frames, then select next frame/next value in table
+        if 1 frame and table of vals send error
+        if multiple frames and min and max, send error
+    ]]
+    if (self.frames == 1 and type(self.vals) == 'table') then M.Msg('vals table ignored with static frame')
+    elseif (self.frames > 1 and type(self.vals) ~= 'table') then M.Msg('min and max ignored with multiple frames')
+    end
+    if self.min and self.max and self.inc and type(self.vals) ~= 'table' then
+        --only one frame, so...
+        self.frame = 0
+        M.Msg('value = '..self.value,'min = '..self.min,'inc = '..incVal)
+        self.value = IncrementValue(self.value,self.min,self.max,wrapping,incVal)
+        
+    else
+        local limit = self.frames - 1
+        if (self.frame == limit and incVal and wrapping)
+        or (self.frame == 0 and not incVal and not wrapping) then self.frame = 0
+        elseif (self.frame == 0 and not incVal and wrapping)
+            or (self.frame == limit and incVal and not wrapping) then self.frame = limit
+        else self.frame = self.frame + incVal end
+        self.value = self.vals[self.frame + 1]  --frames numbered from zero
+        self.caption = self.captions[self.frame + 1]
+    end
     return true
 end
 
 function MSpinner:onMouseUp(state)
     local midX = self.x + (self.w/2)
     local midY = self.y + (self.h/2)
-    if self.horizontal and state.mouse.x < midX then self:inc(false,self.wrap)
-    elseif self.horizontal and state.mouse.x > midX then self:inc(true,self.wrap)
-    elseif not self.horizontal and state.mouse.y > midY then self:inc(false,self.wrap)
-    elseif not self.horizontal and state.mouse.y < midY then self:inc(true,self.wrap)
+    local change = self.inc or 1
+    if self.horizontal and state.mouse.x < midX then self:increment(0 - change,self.wrap)
+    elseif self.horizontal and state.mouse.x > midX then self:increment(change,self.wrap)
+    elseif not self.horizontal and state.mouse.y > midY then self:increment(0 - change,self.wrap)
+    elseif not self.horizontal and state.mouse.y < midY then self:increment(change,self.wrap)
     end
     if self:containsPoint(state.mouse.x, state.mouse.y) then
         self:func(table.unpack(self.params))
@@ -117,10 +129,6 @@ end
 
 
 function MSpinner:onMouseDown(state)
-    if self.mode == MODES.BUTTON then
-        self:setState(1)
-        self:redraw()
-    end
 end
 
 -- Not used
@@ -130,81 +138,89 @@ end
 --[[
     When setting value externally, we will want to use the value in the table
     But internally we will be using the table index.  If it is a one-frame sprite
-    we will look to max and min to set the value, and frame won't matter.  If we 
-    have a value table, however, we'll want to deliver the appropriate value by 
-    referencing the FrameNumber.  
-
-
+    we will look to max and min to set the value, and frame won't matter.  If we
+    have a value table, however, we'll want to deliver the appropriate value by
+    referencing the FrameNumber.
 ]]
 
-
-function MSpinner:state(frameNum)
-    self.frame = frameNum
-    local val = type(self.vals) == 'table' and self.vals[self.frame + 1] or self.frame  --frames numbered from 0
-    self:val(val)
-end
-
 function MSpinner:val(set)
-    if not set then return self.vals[self.frame] or self.frame end
     if type(self.vals) == 'table' then
         for frame,val in pairs(self.vals) do
-            --M.Msg('checking frame',frame,'for val',set,'got',val)
             if val == set then
                 self.frame = frame - 1
                 if self.captions then self.caption = self.captions[frame] end
-                --M.Msg('set frame'..self.frame)--,'val = '..self.vals[self.frame],'caption = '..self.caption)
                 return true
             end
         end
         M.Msg("can't set value of control to: "..set)
-    --can just set by frame, if there are no values
-    elseif set > 0 and set < self.frames - 1 then self.frame = set end
+    elseif self.min and self.max then
+        if set >= self.min and set <= self.max then
+            self.value = set  --frame should stay 0
+        end
+    end
 end
 
 GUI.elementClasses.MSpinner = MSpinner
-
-local ImageFolder = reaper.GetResourcePath().."/Scripts/MOON/Images"
+------------Test---------------
+--[[
 function CreateSwitch(i)
     local switch = GUI.createElement({
-        mode = MODES.SPINNER,
         w = 144,h = 40,
         x = (i-1) * 144,
         color = GetRGB(i*40,90,50),
         wrap = true,
         frames = 3,
-        captions = {'one','two','three'},
-        vals = {0,1,2},
+        captions = {'one','two','five'},
+        caption = 'one',
+        vals = {1,2,5},
+        value = 1,
         name = "switch"..i,
         type = "MSpinner",
         labelX = 0, labelY = 0,
-        image =  ImageFolder.."/".."comboButton3Pos.png",
-        func = function(self) M.Msg('setting track '..i) TrackName(i,"track "..self.caption) end,
+        image =  "comboButton3Pos.png",
+        func = function(self) M.Msg('setting track '..i..' to '..self.caption) TrackName(i,"track "..self.caption) end,
         params = {"a", "b", "c"}
     })
     return switch
 end
+function MSpinnerTest()
+    local spinner = GUI.createElement({
+        type = "MSpinner",
+        color = GetRGB(140,100,50),
+        w = BUTTON_HEIGHT * 2, h = BUTTON_HEIGHT,
+        x = 0,y = 200,
+        wrap = true,
+        frames = 1,
+        caption = '0',
+        value = 0,
+        min = 0, max = 11,
+        image = "fxSel.png",
+        func = function(self) M.Msg('page = '..self.value) self.caption = self.value end,
+    })
+    return spinner
+end
 ------------------------------------
 -------- Window settings -----------
 ------------------------------------
---[[
+
 local window = GUI.createWindow({
   name = "MSpinner Test",
   w = 600,
-  h = 500,
-  anchor = "mouse"
+  h = 500
 })
 ------------------------------------
 -------- GUI Elements --------------
 ------------------------------------
 
 local layer = GUI.createLayer({name = "Layer1", z = 1})
-for i = 1,4 do
+for i = 1,2 do
     layer:addElements(CreateSwitch(i))
 end
+layer:addElements(MSpinnerTest())
 window:addLayers(layer)
 window:open()
 --M.Msg(GetRGB(120,.8,.5))
 --switch:val(1)
 
 GUI.Main()
---]]
+]]

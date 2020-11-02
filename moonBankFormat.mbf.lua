@@ -79,7 +79,7 @@ plugin {
     banks = {
         name='Pianos', hue=14,sat=.45, presets = {'Black','forster'}
     }
-}--]]
+}
 table.sort(plugin.presets)
 --table.sort (t)
-print('presets = {\"'..table.concat (plugin.presets,'\", \"')..'\" }')
+print('presets = {\"'..table.concat (plugin.presets,'\", \"')..'\" }')]]

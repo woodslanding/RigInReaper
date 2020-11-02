@@ -199,7 +199,7 @@ local slider = GUI.createElement({
     frames = 11,
     name = "slider",
     min = -5,
-    max == 5,
+    max = 5,
     type = "IControl",
     w = 180,h = 48,x = 0,y = 0,
     labelX = 0,labelY = 0,

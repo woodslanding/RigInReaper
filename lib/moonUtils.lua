@@ -4,6 +4,14 @@ local hsluv = require "hsluv"
 
 DBG = false
 
+IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images"
+
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+CHANNEL_WIDTH = 120
+BUTTON_WIDTH = 60
+BUTTON_HEIGHT = 48
+
 HUES = {
     CRIMSON = 0,
     RED = 14,
@@ -112,16 +120,13 @@ function Msg(string)
     return reaper.ShowConsoleMsg(string..'\n')
 end
 
-function Dbg(string,data,string2,data2)
+function Dbg(...)
     if DBG then
-        if data == nil then data = 'nil'
+        local out = {}
+        for _, v in ipairs({...}) do
+        out[#out+1] = tostring(v)
         end
-        if string2 == nil then
-            return Msg(string..' '..tostring(data))
-        elseif data2 == nil then
-            data2 = 'nil'
-        end
-        return Msg(string..' '..tostring(data)..',  '..string2..' '..tostring(data2))
+        reaper.ShowConsoleMsg(table.concat(out, ", ").."\n")
     end
 end
 
@@ -181,19 +186,23 @@ end
 
 function IncrementValue(value,min,max,wrap,inc)
     inc = inc or 1
-    wrap = wrap or true
-    if value == false then return true
-    elseif value == true and wrap then return false
-    elseif value == true then return true
+    --Dbg('value = '..value)
+    if inc < 0 then return DecrementValue(value,min,max,wrap,0 - inc)
     else
-        --Dbg('incrementValue:  val=',value,'max=',max)
-        if value < min or value > max then
-            Msg('incrementValue: value must be between min and max')
-        elseif value < max then
-            return value + inc
-        elseif wrap then
-            return min
-        else return max
+        wrap = wrap or true
+        if value == false then return true
+        elseif value == true and wrap then return false
+        elseif value == true then return true
+        else
+            --Dbg('incrementValue:  val=',value,'max=',max)
+            if value < min or value > max then
+                Msg('incrementValue: value must be between min and max')
+            elseif value < max then
+                return value + inc
+            elseif wrap then
+                return min
+            else return max
+            end
         end
     end
 end
