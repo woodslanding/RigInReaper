@@ -28,10 +28,10 @@ local T = Table.T
 
 local Element = require("gui.element")
 
-local IControl = Element:new()
-IControl.__index = IControl
-IControl.defaultProps = {
-    name = "ispinner", type = "ISPINNER",
+local MSpinner = Element:new()
+MSpinner.__index = MSpinner
+MSpinner.defaultProps = {
+    name = "mspinner", type = "MSPINNER",
     wrap= true, horizontal = true,
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,
@@ -39,26 +39,29 @@ IControl.defaultProps = {
     color = 'black', round = 0,
     func = function () end,
     params = {},
+    val = 0,
+    vals = nil,
     min = 0,
     max = 10,
     inc = 1,
-    val = 0,
     image = nil,
+    frame = 0,
+    frames = 1
 }
 
-function IControl:new(props)
-    local IControl = self:addDefaultProps(props)
-    return setmetatable(IControl, self)
+function MSpinner:new(props)
+    MSpinner = self:addDefaultProps(props)
+    return setmetatable(MSpinner, self)
 end
 
-function IControl:init()
+function MSpinner:init()
     self.sprite = Sprite:new({})
     self.sprite:setImage(self.image)
     self.sprite.frame = { w = self.w, h = self.h }
     if not self.sprite.image then error("Mspinner: The specified image was not found") end
 end
 
-function IControl:draw()
+function MSpinner:draw()
 
     local x, y, w, h = self.x, self.y, self.w, self.h
     gfx.mode = 0
@@ -78,7 +81,7 @@ function IControl:draw()
     gfx.drawstr(str)
 end
 
-function IControl:inc(goingUp,wrapping)
+function MSpinner:inc(goingUp,wrapping)
     if self.vals then IncrementValue(self.val) end
     local inc = nil
     if goingUp then inc = 1 else inc = -1 end
@@ -98,7 +101,7 @@ function IControl:inc(goingUp,wrapping)
     return true
 end
 
-function IControl:onMouseUp(state)
+function MSpinner:onMouseUp(state)
     local midX = self.x + (self.w/2)
     local midY = self.y + (self.h/2)
     if self.horizontal and state.mouse.x < midX then self:inc(false,self.wrap)
@@ -113,7 +116,7 @@ function IControl:onMouseUp(state)
 end
 
 
-function IControl:onMouseDown(state)
+function MSpinner:onMouseDown(state)
     if self.mode == MODES.BUTTON then
         self:setState(1)
         self:redraw()
@@ -121,7 +124,7 @@ function IControl:onMouseDown(state)
 end
 
 -- Not used
-function IControl:onDrag()
+function MSpinner:onDrag()
 end
 
 --[[
@@ -135,13 +138,13 @@ end
 ]]
 
 
-function IControl:state(frameNum)
+function MSpinner:state(frameNum)
     self.frame = frameNum
     local val = type(self.vals) == 'table' and self.vals[self.frame + 1] or self.frame  --frames numbered from 0
     self:val(val)
 end
 
-function IControl:val(set)
+function MSpinner:val(set)
     if not set then return self.vals[self.frame] or self.frame end
     if type(self.vals) == 'table' then
         for frame,val in pairs(self.vals) do
@@ -158,7 +161,7 @@ function IControl:val(set)
     elseif set > 0 and set < self.frames - 1 then self.frame = set end
 end
 
-GUI.elementClasses.IControl = IControl
+GUI.elementClasses.MSpinner = MSpinner
 
 local ImageFolder = reaper.GetResourcePath().."/Scripts/MOON/Images"
 function CreateSwitch(i)
@@ -172,7 +175,7 @@ function CreateSwitch(i)
         captions = {'one','two','three'},
         vals = {0,1,2},
         name = "switch"..i,
-        type = "IControl",
+        type = "MSpinner",
         labelX = 0, labelY = 0,
         image =  ImageFolder.."/".."comboButton3Pos.png",
         func = function(self) M.Msg('setting track '..i) TrackName(i,"track "..self.caption) end,
@@ -185,7 +188,7 @@ end
 ------------------------------------
 --[[
 local window = GUI.createWindow({
-  name = "IControl Test",
+  name = "MSpinner Test",
   w = 600,
   h = 500,
   anchor = "mouse"
