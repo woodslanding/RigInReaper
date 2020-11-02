@@ -59,56 +59,43 @@ MIDIVOL = {}
 INSTRUMENT_SLOT = 2
 
 --MIDI ch strip Settings
-MCS = {}
-    MCS.NAME = "JS: midiChStrip" 
-    MCS.SLOT = 1
-    MCS.MIDI_ON = 0
-    MCS.OCTAVE = 1
-    MCS.SEMI = 2
-    MCS.HANDS = 4
-    MCS.LO_NOTE = 5
-    MCS.HI_NOTE = 6
-    MCS.NS_SOLO = 9
-    MCS.NS_MUTE_LO = 10
-    MCS.NS_MUTE_HI = 11
-    MCS.SUSTAIN = 12
-    MCS.HOLD = 13
-    MCS.EXPRESSION = 14
-    MCS.NOTESOURCE = 16
-    MCS.AUDIO_OUT = 25
-    MCS.AUDIO_IN = 26
-    MCS.USE_DRAWBARS = 27
-    MCS.HUE = 29
-    MCS.SAT = 30
-    MCS.NS_MUTED = 31
+MCS = {
+    NAME = "JS: midiChStrip",
+    SLOT = 1,
+    MIDI_ON = 0,
+    OCTAVE = 1,
+    SEMI = 2,
+    HANDS = 4,
+    LO_NOTE = 5,
+    HI_NOTE = 6,
+    NS_SOLO = 9,
+    NS_MUTE_LO = 10,
+    NS_MUTE_HI = 11,
+    SUSTAIN = 12,
+    HOLD = 13,
+    EXPRESSION = 14,
+    NOTESOURCE = 16,
+    AUDIO_OUT = 25,
+    AUDIO_IN = 26,
+    USE_DRAWBARS = 27,
+    HUE = 29,
+    SAT = 30,
+    NS_MUTED = 31
+}
 
-AUDIO_IN = {}    
-    AUDIO_IN.NONE = 0 
-    AUDIO_IN.EXT = 1
-    AUDIO_IN.MIXER = 2
-    AUDIO_IN.BOTH = 3
+AUDIO_IN = {
+    NONE = 0, EXT = 1, MIXER = 2, BOTH = 3
+}
 
 NS_COUNT = 4
-NS = {}
-    NS.KBD = 0
-    NS.DUAL = 1
-    NS.ROLI = 2
-    NS.NONE = 3
+NS = {KBD = 0, DUAL = 1, ROLI = 2, NONE = 3}
 
 --Audio outputs
-AUDIO_OUT = {}
-    AUDIO_OUT.A = 0
-    AUDIO_OUT.B = 1
-    AUDIO_OUT.C = 2
-    AUDIO_OUT.D = 3
+AUDIO_OUT = {A = 0,B = 1,C = 2,D = 3}
 --track numbers
 OUT_OFFSET = 3 --difference between param#s and track# for outputs
 
-REAPER = {}
-    REAPER.SEND = 0
-    REAPER.RCV = -1
-    REAPER.STEREO = 1024
-    REAPER.MONO = 0
+REAPER = {SEND = 0, RCV = -1, STEREO = 1024, MONO = 0 }
 
 local previousNotesourceSetting = 0
 
@@ -127,22 +114,19 @@ end
 
 function Dbg(string,data,string2,data2)
     if DBG then
-        if data == nil then data = 'nil' 
+        if data == nil then data = 'nil'
         end
-        if string2 == nil then 
-            return Msg(string..' '..tostring(data)) 
-        elseif data2 == nil then 
+        if string2 == nil then
+            return Msg(string..' '..tostring(data))
+        elseif data2 == nil then
             data2 = 'nil'
         end
-        return Msg(string..' '..tostring(data)..',  '..string2..' '..tostring(data2))   
+        return Msg(string..' '..tostring(data)..',  '..string2..' '..tostring(data2))
     end
 end
 
 function GetRGB(hue,sat,level)
-    local color = {}
-    color[1] = hue
-    color[2] = sat
-    color[3] = level
+    local color = { hue, sat, level }
     local rgb = hsluv.hpluv_to_rgb(color)
     --Dbg('GetRGB: r:',rgb[1],'g:',rgb[2])
     --Dbg('b:',rgb[3])
@@ -168,19 +152,19 @@ end
 
 function GetMoonParam(tracknum,param)
     local track = GetTrack(tracknum)
-    local val,_,_ = reaper.TrackFX_GetParam( track, MCS.SLOT, param) 
+    local val,_,_ = reaper.TrackFX_GetParam( track, MCS.SLOT, param)
     return val
 end
 
 function SetMoonParam(tracknum,param,val)
     local track = GetTrack(tracknum)
     Dbg('Setting moon param',param,'to',val)
-    _ = reaper.TrackFX_SetParam(track,MCS.SLOT,param,val) 
+    _ = reaper.TrackFX_SetParam(track,MCS.SLOT,param,val)
 end
 
 function SetVolParam(tracknum,param,val)
     local track = GetTrack(tracknum)
-    _ = reaper.TrackFX_SetParam(track,MIDIVOL.SLOT,param,val) 
+    _ = reaper.TrackFX_SetParam(track,MIDIVOL.SLOT,param,val)
 end
 
 function string.starts(s, start)
@@ -203,11 +187,11 @@ function IncrementValue(value,min,max,wrap,inc)
     elseif value == true then return true
     else
         --Dbg('incrementValue:  val=',value,'max=',max)
-        if value < min or value > max then 
+        if value < min or value > max then
             Msg('incrementValue: value must be between min and max')
         elseif value < max then
             return value + inc
-        elseif wrap then 
+        elseif wrap then
             return min
         else return max
         end
@@ -221,11 +205,11 @@ function DecrementValue(value,min,max,wrap,inc)
     elseif value == false and wrap then return true
     elseif value == false then return false
     else
-        if value < min or value > max then 
+        if value < min or value > max then
             Msg('decrementValue: value must be between min and max')
         elseif value > min then
             return value - inc
-        elseif wrap then 
+        elseif wrap then
             return max
         else return min
         end
@@ -240,7 +224,7 @@ function GetTrack(tracknum)
 end
 
 function GetSelectedTrackNumber()
-    local tr = GetSelectedTrack(0,0) 
+    local tr = GetSelectedTrack(0,0)
     return GetNumberOfTrack(tr)
 end
 
@@ -260,7 +244,7 @@ end
 function GetNumberOfTrack(mediatrack)
     --(returns zero if not found, -1 for master track) (read-only, returns the int directly)
     local num = reaper.GetMediaTrackInfo_Value( mediatrack,'IP_TRACKNUMBER')
-    if num == 0 then Msg('GetSelectedTrackNumber: Track Not Found') 
+    if num == 0 then Msg('GetSelectedTrackNumber: Track Not Found')
     else return num
     end
 end
@@ -277,16 +261,16 @@ end
 
 function TrackName(tracknum,name)
     local track = GetTrack(tracknum)
-    if name then reaper.GetSetMediaTrackInfo_String(track, "P_NAME",name,true) 
+    if name then reaper.GetSetMediaTrackInfo_String(track, "P_NAME",name,true)
     else _,name = reaper.GetTrackName(track,'')
         return name
-    end          
+    end
 end
 
 function IsMoonTrack(tracknum)
     --Dbg('IsMoonTrack:  checking track ',tracknum)
     local track = reaper.GetTrack(0, tracknum - 1)
-    --GetTrack(tracknum) 
+    --GetTrack(tracknum)
     local fxSlot = MCS.SLOT
     local _,fxname = reaper.TrackFX_GetFXName(track, fxSlot, '')
     --Dbg('effect name in slot 1: ',fxname)
@@ -338,7 +322,7 @@ function GetReceiveCount(tracknum)
     return reaper.GetTrackNumSends( GetTrack(tracknum), REAPER.RCV )
 end
 
-function GetReceive(tracknum,index)        
+function GetReceive(tracknum,index)
     local tr = GetTrack(tracknum)
     local srcTrack = reaper.BR_GetMediaTrackSendInfo_Track( tr, REAPER.RCV, index-1, 0)
     return GetNumberOfTrack( srcTrack )
@@ -363,7 +347,7 @@ function AddReceive(desttrack,srctrack)
 end
 
 function AddSend(srctrack,desttrack)
-    addReceive(desttrack,srctrack)
+    AddReceive(desttrack,srctrack)
 end
 
 function IsReceiveMuted(tracknum,index)
@@ -396,18 +380,18 @@ function MuteSend(tracknum,dest,Setmute)
     Dbg('MuteSend: Set mute = ',Setmute,'dest = ',dest)
     if tracknum == dest then return end  --thought we checked thIs elsewhere, but we'll do it again here!
     local index = GetSendIndex(tracknum,dest)
-    if index then  
+    if index then
         Dbg('MuteSend: found index = ',index,'dest = ',dest)
-        if Setmute then reaper.SetTrackSendInfo_Value( GetTrack(tracknum), REAPER.SEND, index-1,'B_MUTE', BoolToInt(Setmute)) 
+        if Setmute then reaper.SetTrackSendInfo_Value( GetTrack(tracknum), REAPER.SEND, index-1,'B_MUTE', BoolToInt(Setmute))
         else return IsSendMuted(tracknum,index) end
     end
 end
 
 function SetSendPreFader(tracknum,dest)
-    local idx = GetSendIndex(tracknum,dest) 
+    local idx = GetSendIndex(tracknum,dest)
     local worked = reaper.SetTrackSendInfo_Value( GetTrack(tracknum), REAPER.SEND, idx-1, 'I_SENDMODE',3 )
-    --Dbg('SetSendPreFader: Success=',worked,'dest=',dest)   
-end   
+    --Dbg('SetSendPreFader: Success=',worked,'dest=',dest)
+end
 
 function SetSendPhase(tracknum, dest, flipped)
     --Dbg('SetSendPhase: track=',tracknum,'ph=',flipped)
@@ -483,7 +467,7 @@ end
 --because it will not include the effect itself.
 --so when Getting the lIst of available effects, we need to know who Is asking!!
 function IsEffectTrack(tracknum)
-    local IsFX = GetMoonParam(tracknum,MCS.AUDIO_IN)    
+    local IsFX = GetMoonParam(tracknum,MCS.AUDIO_IN)
     return IsFX > 1  --0 no input, 1 exernal input
 end
 --a lIst of all the instruments with mixer inputs, i.e. effects
@@ -493,9 +477,9 @@ function GetEffectsForTrack(tracknum)
     Dbg('track count = ',trackcount)
     local effectCount = 0
     for i = 1,trackcount do
-        if IsMoonTrack(i) and IsEffectTrack(i) and (i ~= tracknum) then         
-            effectCount = effectCount + 1           
-            Dbg('GetEffectsForTrack: adding effect track: ',i,'to table position ',effectCount)  
+        if IsMoonTrack(i) and IsEffectTrack(i) and (i ~= tracknum) then
+            effectCount = effectCount + 1
+            Dbg('GetEffectsForTrack: adding effect track: ',i,'to table position ',effectCount)
             effectTracks[effectCount] = i
         end
     end
@@ -508,7 +492,7 @@ function GetCurrentEffect(tracknum)
         local dest = GetSendDest(tracknum,i)
         Dbg('GetCurrentEffect: index',i,'destination Is',dest)
         local muted = IsSendMuted(tracknum,i)
-        if IsMoonTrack(dest) and not muted then 
+        if IsMoonTrack(dest) and not muted then
             Dbg('GetCurrentEffect: dest =',dest)
             return dest
         end
@@ -523,7 +507,7 @@ function GetCurrentEffect(tracknum)
     end
     return GetSendDest(tracknum,1) --nothing selected at all, return first fx
 end
-     
+
 function GetEffectForIndex(tracknum,index)
     --Dbg('GetEffectForIndex: Get for index: ',index)
     local tracks,count = GetEffectsForTrack(tracknum)
@@ -580,7 +564,7 @@ end
 function SetTrackEffectMuted(tracknum,mute)
     --keep track of the last muted fx by reversing its phase
     local dest = GetCurrentEffect(tracknum)
-    Dbg('SetTrackEffectMuted: tracknum=',tracknum,'dest=',dest) 
+    Dbg('SetTrackEffectMuted: tracknum=',tracknum,'dest=',dest)
     --muted =  IsSendMuted(tracknum,dest) --TODO: do we need thIs check?
     SetSendPhase(tracknum,dest,mute)
     MuteSend(tracknum,dest,mute)
@@ -601,20 +585,20 @@ end
 
 function GetEffectLevel(tracknum)
     --TODO: SetWetDryLevelFader
-    --wet = 
+    --wet =
 end
 
 function Volume(tracknum,fader)
     if fader then
         for output = TRACKS.OUT_MON,TRACKS.OUT_D do
             --Dbg('SetWetDryLevels: Setting level',fader)
-            local sendIdx = GetSendIndex(tracknum,output)   
-            --Dbg('SetWetDryLevels: Setting level for index',sendIdx,'vol=',dryVol) 
-            reaper.SetTrackSendUIVol(GetTrack(tracknum), sendIdx-1, fader*fader, 0)     
+            local sendIdx = GetSendIndex(tracknum,output)
+            --Dbg('SetWetDryLevels: Setting level for index',sendIdx,'vol=',dryVol)
+            reaper.SetTrackSendUIVol(GetTrack(tracknum), sendIdx-1, fader*fader, 0)
         end
-    else 
+    else
         local _,vol,pan = reaper.GetTrackSendUIVolPan(GetTrack(tracknum),TRACKS.OUT_MON) --should be the same as the others
-        return vol  
+        return vol
     end
 end
 --[[
@@ -633,7 +617,7 @@ end--]]
 function Notesource(tracknumber,nsindex) --Get or Set
     if nsindex then
         --Set midiChStrip value for input type
-        SetMoonParam(tracknumber,MCS.NOTESOURCE,nsindex)   
+        SetMoonParam(tracknumber,MCS.NOTESOURCE,nsindex)
         SetOutputByNotesource(tracknumber,nsindex)
         MuteSendsByNotesource(tracknumber,nsindex)
     else return GetMoonParam(tracknumber,MCS.NOTESOURCE)
@@ -647,65 +631,65 @@ function SetOutputByNotesource(tracknumber,nsindex)
     Dbg('SetOutputByNotesource: output=',output)
     if output ~= AUDIO_OUT.D then
         Dbg('SetOutputByNotesource: Setting by notesource',nsindex)
-        if nsindex == NS.KBD then 
+        if nsindex == NS.KBD then
             SetOutputSend(tracknumber,TRACKS.OUT_A)
             SetMoonParam(tracknumber,MCS.AUDIO_OUT,AUDIO_OUT.A)
-        elseif nsindex == NS.ROLI then  
+        elseif nsindex == NS.ROLI then
             SetOutputSend(tracknumber,TRACKS.OUT_B)
             SetMoonParam(tracknumber,MCS.AUDIO_OUT,AUDIO_OUT.B)
         elseif nsindex == NS.DUAL then
             SetOutputSend(tracknumber,TRACKS.OUT_A)
             SetMoonParam(tracknumber,MCS.AUDIO_OUT,AUDIO_OUT.A)
-        elseif nsindex == NS.NONE then 
+        elseif nsindex == NS.NONE then
             SetOutputSend(tracknumber,TRACKS.OUT_C)
             SetMoonParam(tracknumber,MCS.AUDIO_OUT,AUDIO_OUT.C)
-        end 
+        end
     else SetOutputSend(tracknumber,TRACKS.OUT_D)
         Dbg('SetOutputByNotesource: Setting by output D,',output)
     end
 end
 
 function MuteSendsByNotesource(tracknumber,nsIndex)
-    if nsIndex == NS.KBD then 
+    if nsIndex == NS.KBD then
         MuteSend(TRACKS.IN_KEYB,tracknumber,false)
         MuteSend(TRACKS.IN_ROLI,tracknumber,true)
-    elseif nsIndex == NS.ROLI then  
+    elseif nsIndex == NS.ROLI then
         MuteSend(TRACKS.IN_KEYB,tracknumber,true)
         MuteSend(TRACKS.IN_ROLI,tracknumber,false)
     elseif nsIndex == NS.DUAL then
         MuteSend(TRACKS.IN_KEYB,tracknumber,false)
-        MuteSend(IN_ROLI,tracknumber,true)
-    elseif nsIndex == NS.NONE then 
+        MuteSend(TRACKS.IN_ROLI,tracknumber,true)
+    elseif nsIndex == NS.NONE then
         MuteSend(TRACKS.IN_KEYB,tracknumber,true)
         MuteSend(TRACKS.IN_ROLI,tracknumber,true)
-    end 
+    end
 end
 
 function IncrementNotesource(tracknumber)
-    local nsIndex = notesource(tracknumber)
+    local nsIndex = Notesource(tracknumber)
     --increment it
     nsIndex = IncrementValue(nsIndex,0,NS_COUNT-1)
     Notesource(tracknumber,nsIndex)
 end
 
 function DecrementNotesource(tracknumber)
-    local nsIndex = notesource(tracknumber)
+    local nsIndex = Notesource(tracknumber)
     --decrement it
     nsIndex = DecrementValue(nsIndex,0,NS_COUNT-1)
     Notesource(tracknumber,nsIndex)
-end   
+end
 -------------------------------------------------------------------------------------
 ---------------------------------------NOTESOURCE SOLOING----------------------------
 function TrackLimits(tracknumber, lo,hi)
-    if not lo or hi then 
+    if not lo or hi then
         return GetMoonParam(tracknumber,MCS.LO_NOTE), GetMoonParam(tracknumber,MCS.HI_NOTE) end
     if lo then SetMoonParam(tracknumber,MCS.LO_NOTE,lo) end
     if hi then SetMoonParam(tracknumber,MCS.HI_NOTE,hi) end
 end
 
 function NotesoloLimits(tracknumber, lo, hi)
-    if not lo or hi then 
-        return GetMoonParam(tracknumber,NS_MUTE_LOW_PARAM), GetMoonParam(tracknumber,MCS.NS_MUTE_HI) end
+    if not lo or hi then
+        return GetMoonParam(tracknumber,MCS.NS_MUTE_LO), GetMoonParam(tracknumber,MCS.NS_MUTE_HI) end
     if lo then SetMoonParam(tracknumber,MCS.NS_MUTE_LO,lo) end
     if hi then SetMoonParam(tracknumber,MCS.NS_MUTE_HI,hi) end
 end
@@ -718,7 +702,7 @@ function GetTracksWithNS(nsNum)
             table.insert(nsTracks,tracknum)
         end
     end
-    return nsTracks   
+    return nsTracks
 end
 
 function GetNsSoloMuteRange(nsNum)
@@ -741,8 +725,8 @@ function NsSolo(tracknumber,solo)
         SetMoonParam(tracknumber,MCS.NS_SOLO,solo)
         Dbg('SetNsSolo: Setting nss to',solo,'track',tracknumber)
         local nsNum = GetMoonParam(tracknumber,MCS.NOTESOURCE)
-        local low,high = GetNsSoloMuteRange(nsNum) 
-        Dbg('SetNsSolo: low =',low,'high=',high)         
+        local low,high = GetNsSoloMuteRange(nsNum)
+        Dbg('SetNsSolo: low =',low,'high=',high)
         for i,tracknum in ipairs(GetTracksWithNS(nsNum)) do
             if GetMoonParam(tracknum,MCS.NS_SOLO) ~= 1 then
                 Dbg('SetNsSolo: found non-soloed track',tracknum)
@@ -755,7 +739,7 @@ function NsSolo(tracknumber,solo)
                 end
             end
         end
-    else return GetMoonParam(tracknumber,MCS.NS_SOLO) 
+    else return GetMoonParam(tracknumber,MCS.NS_SOLO)
     end
 end
 
@@ -771,16 +755,17 @@ end
 --  Set track to audio input
 
 function SetAudioInput(tracknum,stereo, dev_name)
+    local dev_id
     for i = 1,  reaper.GetNumAudioInputs() do
         local nameout =  reaper.GetInputChannelName( i-1 )
         --Dbg('SetAudioInput:  Device name =',nameout)
-        if nameout:lower():match(dev_name:lower()) then local dev_id = i-1 end
+        if nameout:lower():match(dev_name:lower()) then dev_id = i-1 end
     end
     if not dev_id then return end
     local tr = GetTrack(tracknum)
     reaper.SetMediaTrackInfo_Value( tr, 'I_RECINPUT',stereo + dev_id)
 end
-  
+
 function RemoveAudioInput(tracknum)
     reaper.SetMediaTrackInfo_Value(GetTrack(tracknum), 'I_RECINPUT',-1)
 end
@@ -792,9 +777,9 @@ function ClearRouting(track)
     local commandID = reaper.NamedCommandLookup("_S&M_SENDS5") --remove receives
     reaper.Main_OnCommand(commandID, 0)
 end
-  
+
 --when loading a new fxchain...
-function ConfigureTrack(newtrack) 
+function ConfigureTrack(newtrack)
     --clear any fx sends or returns
     ClearRouting(newtrack)
     --add all outputs to the track:
@@ -806,14 +791,14 @@ function ConfigureTrack(newtrack)
         AddReceive(newtrack,inp)
         --MuteSend(inp,newtrack,true)
     end
-    --enable sustain      
+    --enable sustain
     --MuteSend(TRACKS.IN_SUS,newtrack,false)
     --enable drawbars
     if GetMoonParam(newtrack,MCS.USE_DRAWBARS) == 1 then
         MuteSend(newtrack,TRACKS.IN_DRWB,true)
     end
     --add sends for all effects tracks
-    for i,effect in pairs(GetEffectsForTrack(newtrack)) do     
+    for i,effect in pairs(GetEffectsForTrack(newtrack)) do
         Dbg('ConfigureTrack: adding send to new track',effect)
         AddSend(newtrack,effect)
         MuteSend(newtrack,effect,true)
@@ -834,23 +819,23 @@ function ConfigureTrack(newtrack)
         --for sure effects will go out output C.  A or B will Get Set if NS changes
         SetMoonParam(newtrack,MCS.AUDIO_OUT,AUDIO_OUT.C)
     end
-    if input == AUDIO_IN.EXT or input == AUDIO_IN.BOTH then   
+    if input == AUDIO_IN.EXT or input == AUDIO_IN.BOTH then
         Dbg('ConfigureTrack: Setting audio input',input)
         SetAudioInput(newtrack,REAPER.STEREO,INPUT_DEVICE_NAME)
     end
     if input == AUDIO_IN.NONE or input == AUDIO_IN.MIXER then
         Dbg('ConfigureTrack: removing audio input',input)
         RemoveAudioInput(newtrack)
-    end  
+    end
     --Inst will have a preferred NS
     local ns = GetMoonParam(newtrack,MCS.NOTESOURCE)
     Dbg('ConfigureTrack: ns=',ns)
-    MuteSendsByNotesource(newtrack,ns) 
-    SetOutputByNotesource(newtrack,ns)  
-    --Set effect to idx1, Volume off 
+    MuteSendsByNotesource(newtrack,ns)
+    SetOutputByNotesource(newtrack,ns)
+    --Set effect to idx1, Volume off
     --if idx1 Is ourselves, thIs will fail. kludgey...but
     local fx = GetEffectForIndex(1)
-    if fx == newtrack then fx = GetEffectForIndex(2) end 
+    if fx == newtrack then fx = GetEffectForIndex(2) end
     MuteSend(newtrack,fx,false)
     SetWetDryLevels(newtrack,0)
 end
@@ -865,13 +850,13 @@ function SavePreset(tracknum,presetname) end
 function OpenVSTBank(tracknum,bankname) end --for VSTs that support loading banks
 function SetRPLBank(tracknum,bankname) end --filter the lIst of presets for those that start with the bank name
 --alternatively, make it easy to take a bank of vst presets and convert to RPL
---thIs means removing presets with the same name from the RPL INI and replacing.  
---Not sure how reaper handles thIs. 
+--thIs means removing presets with the same name from the RPL INI and replacing.
+--Not sure how reaper handles thIs.
 
     ------#######################################################################################################
-    ------------------------------------------------ FXCHAIN LOADING ---------------------------------------------    
+    ------------------------------------------------ FXCHAIN LOADING ---------------------------------------------
 
-function LoadInstrument(tracknum,chainname)  
+function LoadInstrument(tracknum,chainname)
     --need to give these chains the exact same name as in the reabank file, minus the fx prefix.
     --then we can use '//*' data in that file to e.g. Set the param numbers for all the BH controls
     --also to Set the track color
@@ -879,12 +864,12 @@ function LoadInstrument(tracknum,chainname)
     local path = FX_PREFIX..chainname..'.RfxChain'
         --reaper.GetResourcePath('')..'/FXChains/'..chainname..'.RfxChain'
     Dbg('loadInstrument: path=',path)
-    removeFX(tracknum)
+    RemoveFX(tracknum)
     local trk = GetTrack(tracknum)
     reaper.TrackFX_AddByName(trk, path, false, -1)
     ConfigureTrack(tracknum)
     Dbg('tracknum=',tracknum,'chain=',chainname)
-    trackName(tracknum,chainname)
+    TrackName(tracknum,chainname)
     reaper.PreventUIRefresh(-1)
 end
 
@@ -892,8 +877,7 @@ function SaveInstrument(tracknum)
     ClearRouting(tracknum)
     local name = GetInstName(tracknum)
     Dbg('saveInstrument: name=',name)
-    name = INST_PREFIX..name
-    --just a stub.  We may not be able to do this at all....
+    
 end
 
 function GetInstName()
@@ -916,10 +900,10 @@ function Test()
     --loadInstrument(GetSelectedTrackNumber(),'PrIsm')
     --loadInstrument(GetSelectedTrackNumber(),'Guitar Rig')
 
-    --SetWetDryLevels(GetSelectedTrackNumber(),.1)   
-    --SetWetDryLevels(GetSelectedTrackNumber(),.3)    
-    --SetWetDryLevels(GetSelectedTrackNumber(),.5)   
-    --SetWetDryLevels(GetSelectedTrackNumber(),.7)  
+    --SetWetDryLevels(GetSelectedTrackNumber(),.1)
+    --SetWetDryLevels(GetSelectedTrackNumber(),.3)
+    --SetWetDryLevels(GetSelectedTrackNumber(),.5)
+    --SetWetDryLevels(GetSelectedTrackNumber(),.7)
     --SetWetDryLevels(GetSelectedTrackNumber(),.9)
 
     --cue(21,0)
