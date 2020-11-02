@@ -78,8 +78,8 @@ function IControl:draw()
     gfx.drawstr(str)
 end
 
-function IControl:inc(goingUp,wrapping)  
-    if self.vals then IncrementValue(self.val)
+function IControl:inc(goingUp,wrapping)
+    if self.vals then IncrementValue(self.val) end
     local inc = nil
     if goingUp then inc = 1 else inc = -1 end
     if goingUp == nil then goingUp = true end
@@ -125,7 +125,11 @@ function IControl:onDrag()
 end
 
 --[[
-    Set val:  if vals then 
+    When setting value externally, we will want to use the value in the table
+    But internally we will be using the table index.  If it is a one-frame sprite
+    we will look to max and min to set the value, and frame won't matter.  If we 
+    have a value table, however, we'll want to deliver the appropriate value by 
+    referencing the FrameNumber.  
 
 
 ]]
