@@ -30,7 +30,7 @@
     we can open this page and 
     1.  Just save the preset under its current name  or
     2.  Select a new name and bank(s) for the preset
- ]]--
+
 
 return {
     name = 'Reaktor',
@@ -70,7 +70,7 @@ return {
         }
     }
 }
---[[MEANWHILE IN ANOTHER FILE--one vst per file
+MEANWHILE IN ANOTHER FILE--one vst per file
 --************************************************************************************
 plugin { 
     name='Kontakt', 
