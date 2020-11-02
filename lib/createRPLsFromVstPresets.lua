@@ -10,11 +10,12 @@ function GetPresetList(emptyName)
     local writeFile = true  --true:write, false, write to console
     --Check that fx window is focused----------------------------------------------------
     local focused,tracknum,_,fx_num = reaper.GetFocusedFX()
+    local fx_name
     --msg('tracknum = '..tracknum)
     if focused then
         Dbg('track num =',tracknum)
         local track = GetTrack(tracknum)
-        local _,fx_name = reaper.TrackFX_GetFXName(track, fx_num,"")
+        _,fx_name = reaper.TrackFX_GetFXName(track, fx_num,"")
         --msg('fx name = '..fx_name)
     end
     local vstWindowTitle = reaper.JS_Localize(fx_name, "common") 

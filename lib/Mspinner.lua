@@ -1,4 +1,8 @@
-------------------------------ICONROL--------------------------------
+------------------------------MSPINNER--------------------------------
+-- has a single image and a range of values or a table of values
+-- vals = {1,3,4,6} or min = 1, max = 5, inc = 1
+-- 
+----------------------------------------------------------------------
 -- The core library must be loaded prior to anything else
 local libPath = reaper.GetExtState("Scythe v3", "libPath")
 if not libPath or libPath == "" then
@@ -24,24 +28,22 @@ local T = Table.T
 
 local Element = require("gui.element")
 
-MODES = { BUTTON = 0, SWITCH = 1, SPINNER = 2, DISPLAY = 3 }
-
 local IControl = Element:new()
 IControl.__index = IControl
 IControl.defaultProps = {
-    name = "icontrol", type = "ICONTROL",
-    mode = MODES.SWITCH, loop= true, horizontal = true,
+    name = "ispinner", type = "ISPINNER",
+    wrap= true, horizontal = true,
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,
     caption = "", font = 2, textColor = "white",
     color = 'black', round = 0,
     func = function () end,
     params = {},
-    vals = {0,1},
+    min = 0,
+    max = 10,
     inc = 1,
+    val = 0,
     image = nil,
-    frames = 2,
-    frame = 0
 }
 
 function IControl:new(props)
@@ -53,8 +55,7 @@ function IControl:init()
     self.sprite = Sprite:new({})
     self.sprite:setImage(self.image)
     self.sprite.frame = { w = self.w, h = self.h }
-    self:setFrame(0)
-    if not self.sprite.image then error("IControl: The specified image was not found") end
+    if not self.sprite.image then error("Mspinner: The specified image was not found") end
 end
 
 function IControl:draw()
@@ -63,7 +64,7 @@ function IControl:draw()
     gfx.mode = 0
     Color.set(self.color)
     GFX.roundRect(self.x, self.y, self.w-1, self.h-1, self.round, true, true)
-    self.sprite:draw(x, y, w+1, h+1, self.frame, self.frames)
+    self.sprite:draw(x, y, w+1, h+1, 0, 1)
 
     Color.set(self.textColor)
     Font.set(self.font)
@@ -77,40 +78,33 @@ function IControl:draw()
     gfx.drawstr(str)
 end
 
-function IControl:ongoingUpdate(state)
-  if self.frame > 0 and not self:containsPoint(state.mouse.x, state.mouse.y) then
-    self.frame = 0
-    self:redraw()
-  end
-end
-
-function IControl:incFrame(goingUp,wrapping)
-    
+function IControl:inc(goingUp,wrapping)
+    if self.vals then IncrementValue(self.val) end
     local inc = nil
     if goingUp then inc = 1 else inc = -1 end
     if goingUp == nil then goingUp = true end
     if wrapping == nil then wrapping = true end
-    local limit = self.frames - 1
-    if (self.frame == limit and goingUp and wrapping)
-       or (self.frame == 0 and not goingUp and not wrapping) then
-        self:setFrame(0)
-    elseif (self.frame == 0 and not goingUp and wrapping)
-        or (self.frame == limit and goingUp and not wrapping) then
-            self:setFrame(limit)
-    else self:setFrame(self.frame + inc) end
+    local min, max
+    if self.frames == 1 then 
+        max = self.max min = self.min
+    else max = self.frames - 1 min = 0 end
+    if (self.frames == max and goingUp and wrapping)
+       or (self.frame == min and not goingUp and not wrapping) then
+        self:setState(min)
+    elseif (self.frame == min and not goingUp and wrapping)
+        or (self.frame == max and goingUp and not wrapping) then
+            self:setState(max)
+    else self:setState(self.frame + inc) end
     return true
 end
 
 function IControl:onMouseUp(state)
     local midX = self.x + (self.w/2)
     local midY = self.y + (self.h/2)
-    if self.mode == MODES.SWITCH then self:incFrame(true,true)
-    elseif self.mode == MODES.DISPLAY then return
-    elseif self.mode == MODES.BUTTON then self:setFrame(0)
-    elseif self.mode == MODES.SPINNER and self.horizontal and state.mouse.x < midX then self:incFrame(false,self.loop)
-    elseif self.mode == MODES.SPINNER and self.horizontal and state.mouse.x > midX then self:incFrame(true,self.loop)
-    elseif self.mode == MODES.SPINNER and not self.horizontal and state.mouse.y > midY then self:incFrame(false,self.loop)
-    elseif self.mode == MODES.SPINNER and not self.horizontal and state.mouse.y < midY then self:incFrame(true,self.loop)
+    if self.horizontal and state.mouse.x < midX then self:inc(false,self.wrap)
+    elseif self.horizontal and state.mouse.x > midX then self:inc(true,self.wrap)
+    elseif not self.horizontal and state.mouse.y > midY then self:inc(false,self.wrap)
+    elseif not self.horizontal and state.mouse.y < midY then self:inc(true,self.wrap)
     end
     if self:containsPoint(state.mouse.x, state.mouse.y) then
         self:func(table.unpack(self.params))
@@ -121,7 +115,7 @@ end
 
 function IControl:onMouseDown(state)
     if self.mode == MODES.BUTTON then
-        self:setFrame(1)
+        self:setState(1)
         self:redraw()
     end
 end
@@ -130,8 +124,18 @@ end
 function IControl:onDrag()
 end
 
+--[[
+    When setting value externally, we will want to use the value in the table
+    But internally we will be using the table index.  If it is a one-frame sprite
+    we will look to max and min to set the value, and frame won't matter.  If we 
+    have a value table, however, we'll want to deliver the appropriate value by 
+    referencing the FrameNumber.  
 
-function IControl:setFrame(frameNum)
+
+]]
+
+
+function IControl:state(frameNum)
     self.frame = frameNum
     local val = type(self.vals) == 'table' and self.vals[self.frame + 1] or self.frame  --frames numbered from 0
     self:val(val)
@@ -163,7 +167,7 @@ function CreateSwitch(i)
         w = 144,h = 40,
         x = (i-1) * 144,
         color = GetRGB(i*40,90,50),
-        loop = true,
+        wrap = true,
         frames = 3,
         captions = {'one','two','three'},
         vals = {0,1,2},
