@@ -21,6 +21,8 @@ local Image = require("public.image")
 local Buffer = require("public.buffer")
 local Color = require("public.color")
 
+require 'moonUtils'
+
 local sharedBuffer = Buffer.get()
 
 local Sprite = {}

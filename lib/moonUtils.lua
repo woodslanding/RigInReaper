@@ -4,7 +4,7 @@ local hsluv = require "hsluv"
 
 DBG = false
 
-IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images"
+IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080

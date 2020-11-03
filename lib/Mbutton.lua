@@ -68,7 +68,7 @@ function MButton:init()
         self.sprite:setImage(IMAGE_FOLDER.."/"..self.image)
         self.sprite.frame = { w = self.w, h = self.h }
     end
-    if not self.sprite.image then error("Mspinner: The specified image was not found") end
+    --if not self.sprite.image then error("Mspinner: The specified image was not found") end
 end
 
 function MButton:draw()
@@ -162,7 +162,8 @@ end
 ]]
 
 function MButton:val(set)
-    if self.vals then
+    if not set then return self.value
+    elseif self.vals then
         if type(self.vals) == 'table' then
             for frame,val in pairs(self.vals) do
                 if val == set then
