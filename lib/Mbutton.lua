@@ -64,8 +64,10 @@ end
 
 function MButton:init()
     self.sprite = Sprite:new({})
-    self.sprite:setImage(IMAGE_FOLDER.."/"..self.image)
-    self.sprite.frame = { w = self.w, h = self.h }
+    if self.image then
+        self.sprite:setImage(IMAGE_FOLDER.."/"..self.image)
+        self.sprite.frame = { w = self.w, h = self.h }
+    end
     if not self.sprite.image then error("Mspinner: The specified image was not found") end
 end
 
@@ -75,7 +77,7 @@ function MButton:draw()
     gfx.mode = 0
     Color.set(self.color)
     GFX.roundRect(self.x, self.y, self.w-1, self.h-1, self.round, true, true)
-    self.sprite:draw(x, y, w+1, h+1,self.frame, self.frames)
+    if self.image then self.sprite:draw(x, y, w+1, h+1,self.frame, self.frames) end
 
     Color.set(self.textColor)
     Font.set(self.font)
@@ -127,7 +129,7 @@ function MButton:onMouseUp(state)
     if self.stateless then
         self.value = self.min
         self.frame = 0
-    elseif not self.spinner then self:increment(change,self.wrap)
+    elseif not self.spinner then self:increment(change,true) --must wrap!
     elseif self.horizontal and state.mouse.x < midX then self:increment(0 - change,self.wrap)
     elseif self.horizontal and state.mouse.x > midX then self:increment(change,self.wrap)
     elseif not self.horizontal and state.mouse.y > midY then self:increment(0 - change,self.wrap)
@@ -160,15 +162,17 @@ end
 ]]
 
 function MButton:val(set)
-    if type(self.vals) == 'table' then
-        for frame,val in pairs(self.vals) do
-            if val == set then
-                self.frame = frame - 1
-                if self.captions and self.caption then self.caption = self.captions[frame] end
-                return true
+    if self.vals then
+        if type(self.vals) == 'table' then
+            for frame,val in pairs(self.vals) do
+                if val == set then
+                    self.frame = frame - 1
+                    if self.captions and self.caption then self.caption = self.captions[frame] end
+                    return true
+                end
             end
+            M.Msg("can't set value of control to: "..set)
         end
-        M.Msg("can't set value of control to: "..set)
     elseif self.min and self.max then
         if set >= self.min and set <= self.max then
             self.value = set
