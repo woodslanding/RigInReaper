@@ -13,14 +13,15 @@ end
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
 require 'moonUtils'
+--require 'VSprite'
 
 loadfile(libPath .. "scythe.lua")()
 local GUI = require("gui.core")
 local M = require("public.message")
-local Sprite = require("public.sprite")
 local Image = require("public.image")
 local Font = require("public.font")
 local Color = require("public.color")
+local Sprite = require("public.sprite")
 local Math = require("public.math")
 local Table = require("public.table")
 local GFX = require("public.gfx")
@@ -31,7 +32,7 @@ local Element = require("gui.element")
     for a momentary switch set stateless = true.  On and off values are min and max
     for a multi-position switch set stateless false.  A spinner increments and decrements
     depending on which side is clicked.  Top/bottom vs left/right is set with 'horizontal'
-    only vertical frames are supported by my version of 'sprite'
+    only vertical frames are supported by my version of 'vSprite'
 ]]
 local MButton = Element:new()
 MButton.__index = MButton
@@ -43,7 +44,6 @@ MButton.defaultProps = {
     labelX = 0, labelY = 0,
     caption = "", font = 2, textColor = "white",
     captions = {},
-    color = 'black', round = 0,
     func = function () end,
     params = {},
     value = 0,
@@ -54,7 +54,8 @@ MButton.defaultProps = {
     interval = 1,
     image = nil,
     frame = 0,
-    frames = 1
+    frames = 1,
+    horizFrames = false
 }
 
 function MButton:new(props)
@@ -68,16 +69,18 @@ function MButton:init()
         self.sprite:setImage(IMAGE_FOLDER.."/"..self.image)
         self.sprite.frame = { w = self.w, h = self.h }
     end
-    --if not self.sprite.image then error("Mspinner: The specified image was not found") end
+    --if not self.vSprite.image then error("Mspinner: The specified image was not found") end
 end
 
 function MButton:draw()
 
     local x, y, w, h = self.x, self.y, self.w, self.h
     gfx.mode = 0
-    Color.set(self.color)
-    GFX.roundRect(self.x, self.y, self.w-1, self.h-1, self.round, true, true)
-    if self.image then self.sprite:draw(x, y, w+1, h+1,self.frame, self.frames) end
+    if self.color then
+        Color.set(self.color)
+        GFX.roundRect(self.x, self.y, self.w-1, self.h-1, self.round, true, true)
+    end
+    if self.image then self.sprite:draw(x, y, w, h,self.frame, self.frames, self.horizFrames) end
 
     Color.set(self.textColor)
     Font.set(self.font)
@@ -155,7 +158,7 @@ end
 
 --[[
     When setting value externally, we will want to use the value in the table
-    But internally we will be using the table index.  If it is a one-frame sprite
+    But internally we will be using the table index.  If it is a one-frame vSprite
     we will look to max and min to set the value, and frame won't matter.  If we
     have a value table, however, we'll want to deliver the appropriate value by
     referencing the FrameNumber.
