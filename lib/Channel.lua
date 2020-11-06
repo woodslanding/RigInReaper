@@ -1,6 +1,6 @@
 --[[11 x 48 = 528 --channels
 
-1080-36 = 1044  --title bar
+1080-36 = 1044  --titleLayer bar
 -528            --channels
 = 516           --for buttons
 
@@ -36,6 +36,10 @@ local Math = require("public.math")
 local Table = require("public.table")
 local T = Table.T
 local Element = require("gui.element")
+local Theme = require("gui.theme")
+
+
+Theme.fonts[2] = {'Calibri', 28,"b"}
 
 --[[
 
@@ -58,103 +62,99 @@ Meter Display
 Mini Displays
 	enc,sw1,sw2,drawbars,fsw
     mute fx,solo, hands]]
-local floor = 0
 
-local slider = GUI.createElement({
-    frames = 144,horizontal = false,
-    --horizFrames = true,
-    --vertText = true,
-    name = "slider",
-    min = 0,
-    max = 99,
-    value = 0,
-    type = "MSlider",
-    w = 64,h = 288,x = 0,y = 200,
-    labelX = 0,labelY = 0,
-    --image =  "meterL.png",
-    image = "VolVert.png",
-    func = function(self, a, b, c) Msg(self.name, self:val()) end,
-    params = {"a", "b", "c"}
-})
+local mainLayer = GUI.createLayer({name = "mainLayer", z = 2})
+local titleLayer = GUI.createLayer({name = "titleLayer", z = 1})
+local bkgdLayer = GUI.createLayer({name = "bkgdLayer", z = 3})
 
-local label = GUI.createElement ({
-    type = "MLabel",
-    vertical = true,
-    caption = 'Ships Piano',
-    name = 'testLabel',
-    w = 150, h = 30,
-    x = 6, y = 250
-})
-local noSus = GUI.createElement({
-    name = "nosus",
-    type = "MButton",
-    w = 56,h = 48,
-    x = 64,y = 200,
-    color = nil,
-    wrap = true,
-    frames = 2,
-    vals = {0,1},
-    value = 0,
-    image =  "NoSus.png",
-    func = function(self)  end,
-    params = {"a", "b", "c"}
-})
-local hold = GUI.createElement({
-    name = "hold",
-    type = "MButton",
-    w = 56,h = 48,
-    x = 64,y = 248,
-    color = nil,
-    wrap = true,
-    frames = 2,
-    vals = {0,1},
-    value = 0,
-    image =  "Hold.png",
-    func = function(self)  end,
-    params = {"a", "b", "c"}
-})
-local bc = GUI.createElement({
-    name = "breath",
-    type = "MButton",
-    w = 56,h = 48,
-    x = 64,y = 296,
-    color = nil,
-    wrap = true,
-    frames = 2,
-    vals = {0,1},
-    value = 0,
-    image =  "Breath.png",
-    func = function(self)  end,
-    params = {"a", "b", "c"}
-})
-local ped2 = GUI.createElement({
-    name = "ped2",
-    type = "MButton",
-    w = 56,h = 48,
-    x = 64,y = 344,
-    color = nil,
-    wrap = true,
-    frames = 2,
-    vals = {0,1},
-    value = 0,
-    image =  "Ped2.png",
-    func = function(self)  end,
-    params = {"a", "b", "c"}
-})
-local exp = GUI.createElement({
-    name = "exp",
-    type = "MButton",
-    w = 56,h = 48,
-    x = 64,y = 392,
-    color = nil,
-    wrap = true,
-    frames = 2,
-    vals = {0,1},
-    value = 0,
-    image =  "Exp.png",
-    func = function(self)  end,
-    params = {"a", "b", "c"}
-})
+local yOffset = 500
+Channels = {}
+Bkgds = {}
+local scaling = .8
+local testNames = {'Ships Piano','Showdown','Large Sliver Globes', 'Lush Strings',
+                    'Ships Piano','Showdown','Large Sliver Globes', 'Lush Strings',
+                    'Ships Piano','Showdown','Large Sliver Globes', 'Lush Strings',
+                    'Ships Piano','Showdown','Large Sliver Globes', 'Lush Strings'}
+
+function Scale(val)
+    return Math.round(val * scaling)
+end
+
+function CreateChannel(chanNum,color)
+    
+    local chanW = Scale(120)
+    local chanH = Scale(528)
+    local xpos = (chanNum - 1) * chanW
+    local leftW = Scale(64) local rightW = Scale(56)
+    local btnH = Scale(48)
+
+    local bkgd = GUI.createElement({
+        type = "Frame",
+        name = 'bkgd'..chanNum,
+        x = xpos, y = yOffset, h = chanH, w = chanW,
+        bg = color
+    })
+    Bkgds[chanNum] = bkgd
+    bkgdLayer:addElements(bkgd)
+
+    local label = GUI.createElement ({
+        type = "MLabel",
+        vertical = true,
+        caption = testNames[chanNum],
+        name = 'testLabel'..chanNum,
+        w = Scale(150), h = Scale(30),
+        x = xpos + 6, y = yOffset
+    })
+    titleLayer:addElements(label)
+
+    local slider = GUI.createElement({
+        frames = 144,horizontal = false,
+        --horizFrames = true,
+        --vertText = true,
+        name = "slider"..chanNum,
+        min = 0,
+        max = 99,
+        value = 0,
+        type = "MSlider",
+        w = leftW,h = Scale(288),x = xpos,y = yOffset,
+        labelX = 0,labelY = 0,
+        --image =  "meterL.png",
+        image = "VolVert.png",
+        func = function(self, a, b, c) Msg(self.name, self:val()) end,
+        params = {"a", "b", "c"}
+    })
+    mainLayer:addElements(slider)
+
+
+    local mixIcons = {'NoSus','Hold','Breath','Ped2','Exp','Enable'}
+    local mixFuncs = {}
+    local mixCtls = {}
+    for slotNum,icon in pairs(mixIcons) do
+        mixCtls[slotNum] = GUI.createElement({
+            name = icon..chanNum,
+            type = "MButton",
+            w = rightW, h = btnH,
+            x = xpos + leftW, y = (btnH * (slotNum - 1)) + yOffset,
+            color = nil,
+            frames = 2,
+            vals = {0,1},
+            value= 0,
+            image = icon..'.png',
+            func = mixFuncs[slotNum],
+        })
+        mainLayer:addElements(mixCtls[slotNum])
+    end
+
+    mixCtls[6].vals = {0,1,2,3}
+    mixCtls[6].frames = 4
+end
+
+for i = 1,16 do
+    CreateChannel(i,GetRGB(i * 130,100,50))
+    --M.Msg('creating channel'..i)
+end
+
+
 
 
 ------------------------------------
@@ -163,21 +163,19 @@ local exp = GUI.createElement({
 
 local window = GUI.createWindow({
     name = "CHANNEL",
-    w = 120,
-    h = 528
+    w = 1920,
+    h = 1000,
+    x = -12,
+    y = 0
   })
-  
+
   ------------------------------------
   -------- GUI Elements --------------
   ------------------------------------
-  
-  local layer = GUI.createLayer({name = "Layer1", z = 2})
-  local layer2 = GUI.createLayer({name = "Layer2", z = 1})
-  
-  layer:addElements(slider,noSus,bc,hold,ped2,exp)
-  layer2:addElements(label)
-  window:addLayers(layer)
-  window:addLayers(layer2)
+
+
+
+  window:addLayers(mainLayer,titleLayer,bkgdLayer)
   window:open()
-  
+
   GUI.Main()

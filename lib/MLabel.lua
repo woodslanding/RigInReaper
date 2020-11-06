@@ -8,17 +8,16 @@ end
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
-DEGREES_TO_RADIANS = 0.017453
-local lenX,lenY
-
 loadfile(libPath .. "scythe.lua")()
 local GUI = require("gui.core")
 local Buffer = require("public.buffer")
 local Font = require("public.font")
 local Color = require("public.color")
 local Text = require("public.text")
-
 local Element = require("gui.element")
+
+local font = {'Calibri', 28,"b"}
+local lenX,lenY
 
 local MLabel = Element:new()
 MLabel.__index = MLabel
@@ -33,11 +32,10 @@ MLabel.defaultProps = {
     h = 0,
 
     caption = "MLabel",
-    font =    1,
+    font = font,
     color =   "text",
     bg =      "cyan",
 }
-
 
 function MLabel:new(props)
   local label = self:addDefaultProps(props)

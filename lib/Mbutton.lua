@@ -12,7 +12,7 @@ end
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
-require 'moonUtils'
+--require 'moonUtils'
 --require 'VSprite'
 
 loadfile(libPath .. "scythe.lua")()

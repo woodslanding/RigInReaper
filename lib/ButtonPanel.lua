@@ -8,9 +8,7 @@ end
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
---require 'moonUtils'
 require 'Mbutton'
-
 loadfile(libPath .. "scythe.lua")()
 local GUI = require("gui.core")
 local M = require("public.message")
@@ -164,6 +162,22 @@ function GetOptionForButton(buttonNum)
     return option, num
 end
 
+function CreatButtonPanel(rows, columns)
+    local xpos, ypos
+    local index = 1
+    for i = 1, columns do
+        xpos = (i - 1) * Wd
+        for j = 1, rows do
+            ypos = (j - 1) * Ht
+            hue = 15
+            sat = 95
+            level = 50
+            layer:addElements(CreateSwitch(index, xpos, ypos, Wd, Ht, GetOptionName(i), hue, sat, level))
+            index = index + 1
+        end
+    end
+end
+
 ------------------------------------
 -------- Window settings -----------
 ------------------------------------
@@ -185,20 +199,9 @@ for i = 1,250 do
         val = 0
     }
 end
-local xpos, ypos
-local index = 1
+
 local layer = GUI.createLayer({name = "Layer1", z = 1})
-for i = 1, Cols do
-    xpos = (i - 1) * Wd
-    for j = 1, Rows do
-        ypos = (j - 1) * Ht
-        hue = 15
-        sat = 95
-        level = 50
-        layer:addElements(CreateSwitch(index, xpos, ypos, Wd, Ht, GetOptionName(i), hue, sat, level))
-        index = index + 1
-    end
-end
+
 
 layer:addElements(CreateSelButton(),CreatePager(pageCount))
 window:addLayers(layer)
