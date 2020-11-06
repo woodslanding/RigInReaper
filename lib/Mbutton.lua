@@ -12,20 +12,13 @@ end
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
---require 'moonUtils'
---require 'VSprite'
-
 loadfile(libPath .. "scythe.lua")()
 local GUI = require("gui.core")
 local M = require("public.message")
-local Image = require("public.image")
 local Font = require("public.font")
 local Color = require("public.color")
 local Sprite = require("public.sprite")
-local Math = require("public.math")
-local Table = require("public.table")
 local GFX = require("public.gfx")
-local T = Table.T
 
 local Element = require("gui.element")
 --[[
@@ -39,7 +32,7 @@ MButton.__index = MButton
 MButton.defaultProps = {
     name = "mbutton", type = "MBUTTON",
     stateless = false,
-    wrap= true, spinner = false, horizontal = true,
+    wrap= true, spinner = false, vertical = true,
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,
     caption = "", font = 2, textColor = "white",
@@ -55,7 +48,7 @@ MButton.defaultProps = {
     image = nil,
     frame = 0,
     frames = 1,
-    horizFrames = false
+    vertFrames = true
 }
 
 function MButton:new(props)
@@ -66,7 +59,7 @@ end
 function MButton:init()
     self.sprite = Sprite:new({})
     if self.image then
-        self.sprite:setImage(IMAGE_FOLDER.."/"..self.image)
+        self.sprite:setImage(self.image,self.vertFrames)
         self.sprite.frame = { w = self.w, h = self.h }
     end
     --if not self.vSprite.image then error("Mspinner: The specified image was not found") end
@@ -80,7 +73,7 @@ function MButton:draw()
         Color.set(self.color)
         GFX.roundRect(self.x, self.y, self.w-1, self.h-1, self.round, true, true)
     end
-    if self.image then self.sprite:draw(x, y, w, h,self.frame, self.frames, self.horizFrames) end
+    if self.image then self.sprite:draw(x, y, w, h,self.frame, self.frames, self.vertFrames) end
 
     Color.set(self.textColor)
     Font.set(self.font)
@@ -190,20 +183,22 @@ end
 GUI.elementClasses.MButton = MButton
 ------------Test---------------
 --[[
+local imageFolder = reaper.GetResourcePath().."/Scripts/Images/"
+
 function CreateSwitch(i,width)
     local switch = GUI.createElement({
         w = width,h = 40,
         x = (i-1) * width,
-        color = GetRGB(i*40,90,50),
+        color = 'blue',
         wrap = true,
-        frames = 4,
-        vals = {1,2,4,8},
+        frames = 3,
+        vals = {1,2,4},
         value = 1,
         name = "switch"..i,
         type = "MButton",
         labelX = 0, labelY = 0,
         inc = 1,
-        image =  "nsSel.png",
+        image =  imageFolder.."Notesource.png",
         func = function(self) M.Msg('setting track '..i..' to '..self.value) TrackName(i,"track "..self.value) end,
         params = {"a", "b", "c"}
     })
@@ -212,7 +207,8 @@ end
 function MSpinnerTest()
     local spinner = GUI.createElement({
         type = "MButton", spinner = true,
-        color = GetRGB(140,100,50),
+        name = 'spinner',
+        color = 'red',
         w = BUTTON_HEIGHT * 2, h = BUTTON_HEIGHT,
         x = 0,y = 200,
         wrap = true,
@@ -220,7 +216,7 @@ function MSpinnerTest()
         caption = '0',
         value = 0,
         min = 0, max = 11,
-        image = "fxSel.png",
+        image = imageFolder.."EffectSpin.png",
         func = function(self) M.Msg('page = '..self.value) self.caption = self.value end,
     })
     return spinner
@@ -245,8 +241,6 @@ end
 layer:addElements(MSpinnerTest())
 window:addLayers(layer)
 window:open()
---M.Msg(GetRGB(120,.8,.5))
---switch:val(1)
 
 GUI.Main()
 --]]

@@ -65,7 +65,7 @@ local sliderLayer = GUI.createLayer({name = "sliderLayer", z = 3})
 local bkgdLayer = GUI.createLayer({name = "bkgdLayer", z = 4})
 local backdropLayer = GUI.createLayer({name = "backdropLayer", z = 5})
 
-
+local ifl = IMAGE_FOLDER  --from MoonUtilities
 local leftPad = 4
 local scaling = .8
 local function randomColor()
@@ -143,7 +143,7 @@ function CreateChannel(chanNum,color,fxColor)
         type = "MSlider",
         w = leftW,h = btnH * 4,x = xpos,y = fxOffset,
         labelX = 0,labelY = 0,
-        image = "Send.png",
+        image = ifl.."Send.png",
         func = function(self, a, b, c) end,
         params = {"a", "b", "c"}
     })
@@ -164,7 +164,7 @@ function CreateChannel(chanNum,color,fxColor)
             frames = 1,
             min = -5,max = 5,
             value= 0,
-            image = icon..'.png',
+            image = ifl..icon..'.png',
             func = spinFuncs[slotNum],
         })
         controlLayer:addElements(mixSpinners[slotNum])
@@ -181,7 +181,7 @@ function CreateChannel(chanNum,color,fxColor)
         meterCtls[slotNum] = GUI.createElement ({
             type = "MSlider",
             name = icon..chanNum,
-            image = icon..'.png',
+            image = ifl..icon..'.png',
             frames = 25, frame = math.random(25),
             horizontal = true,
             min = 0, max = 1, value = 0,
@@ -228,7 +228,7 @@ function CreateChannel(chanNum,color,fxColor)
         type = "MSlider",
         w = leftW,h = btnH * 6,x = xpos,y = volOffset,
         labelX = 0,labelY = 0,
-        image = "Volume.png",
+        image = ifl.."Volume.png",
         func = function(self, a, b, c) end,
         params = {"a", "b", "c"}
     })
@@ -248,7 +248,7 @@ function CreateChannel(chanNum,color,fxColor)
             frames = 2,
             vals = {0,1},
             value= 0,
-            image = icon..'.png',
+            image = ifl..icon..'.png',
             func = mixFuncs[slotNum],
         })
         controlLayer:addElements(mixCtls[slotNum])
