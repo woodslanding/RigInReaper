@@ -28,7 +28,7 @@ local origVal = 0
 local MSlider = Element:new()
 MSlider.__index = MSlider
 MSlider.defaultProps = {
-    name = "mslider", type = "MSLIDER", display = false,
+    name = "mslider", type = "MSLIDER", displayOnly = false,
     frames = 20, horizontal = false,
     x = 16, y = 32, w = 24, h = 24,
     labelX = 0, labelY = 0,
@@ -57,6 +57,14 @@ function MSlider:init()
     end
     --well, I could imagine implementing an invisible slider someday....
     --if not self.sprite.image then error("MSlider: The specified image was not found") end
+end
+
+--this keeps the component from responding to the mouse
+function MSlider:containsPoint (x, y)
+    if self.displayOnly then return false 
+    else return  ( x >= (self.x or 0) and x < ((self.x or 0) + (self.w or 0)) and
+                   y >= (self.y or 0) and y < ((self.y or 0) + (self.h or 0)) )
+    end
 end
 
 function MSlider:draw()

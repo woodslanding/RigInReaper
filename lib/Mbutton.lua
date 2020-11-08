@@ -18,9 +18,12 @@ local M = require("public.message")
 local Font = require("public.font")
 local Color = require("public.color")
 local Sprite = require("public.sprite")
+local Math = require("public.math")
 local GFX = require("public.gfx")
 
 local Element = require("gui.element")
+
+require 'moonUtils'  --for inc/dec
 --[[
     for a momentary switch set stateless = true.  On and off values are min and max
     for a multi-position switch set stateless false.  A spinner increments and decrements
@@ -31,20 +34,16 @@ local MButton = Element:new()
 MButton.__index = MButton
 MButton.defaultProps = {
     name = "mbutton", type = "MBUTTON",
-    stateless = false,
+    displayOnly = false,
+    stateless = false, loop = true,
     wrap= true, spinner = false, vertical = true,
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,
     caption = "", font = 2, textColor = "white",
     captions = {},
-    func = function () end,
-    params = {},
-    value = 0,
-    vals = nil,
-    min = 0,
-    max = 10,
-    inc = 1,
-    interval = 1,
+    value = 0, --stores tableIndex if using vals{} not actual table val
+    vals = nil, --use this OR min,max,inc
+    min = 0,  max = 10, inc = 1,
     image = nil,
     frame = 0,
     frames = 1,
@@ -52,8 +51,8 @@ MButton.defaultProps = {
 }
 
 function MButton:new(props)
-    MButton = self:addDefaultProps(props)
-    return setmetatable(MButton, self)
+    local button = self:addDefaultProps(props)
+    return setmetatable(button, self)
 end
 
 function MButton:init()
@@ -64,14 +63,22 @@ function MButton:init()
     end
     --if not self.vSprite.image then error("Mspinner: The specified image was not found") end
 end
+--this keeps the component from responding to the mouse
+function MButton:containsPoint (x, y)
+    if self.displayOnly then return false
+    else return  ( x >= (self.x or 0) and x < ((self.x or 0) + (self.w or 0)) and
+                   y >= (self.y or 0) and y < ((self.y or 0) + (self.h or 0)) )
+    end
+end
 
 function MButton:draw()
-
+    self:val(self.value)
     local x, y, w, h = self.x, self.y, self.w, self.h
     gfx.mode = 0
     if self.color then
         Color.set(self.color)
-        GFX.roundRect(self.x, self.y, self.w-1, self.h-1, self.round, true, true)
+        local round = self.round or 0
+        GFX.roundRect(self.x, self.y, self.w-1, self.h-1, round, true, true)
     end
     if self.image then self.sprite:draw(x, y, w, h,self.frame, self.frames, self.vertFrames) end
 
@@ -89,47 +96,58 @@ function MButton:draw()
     end
 end
 
-function MButton:increment(incVal,wrapping)
-    --[[
-        if only one frame,  then just increment or decrement the value by interval
-        if multiple frames, then select next frame/next value in table
-        if 1 frame and table of vals send error
-        if multiple frames and min and max, send error
-    ]]
-    if (self.frames == 1 and type(self.vals) == 'table') then M.Msg('vals table ignored with static frame')
-    elseif (self.frames > 1 and type(self.vals) ~= 'table') then M.Msg('min and max ignored with multiple frames')
+function MButton:setFrame(frame)
+    if self.frames == 1 then self.frame = 0
+    elseif frame <= self.frames and frame >= 0 then
+        self.frame = frame
     end
-    if self.min and self.max and self.inc and type(self.vals) ~= 'table' then
-        --only one frame, so...
-        self.frame = 0
-        --M.Msg('value = '..self.value,'min = '..self.min,'inc = '..incVal)
-        self.value = IncrementValue(self.value,self.min,self.max,wrapping,incVal)
+end
 
-    else
-        local limit = self.frames - 1
-        if (self.frame == limit and incVal and wrapping)
-        or (self.frame == 0 and not incVal and not wrapping) then self.frame = 0
-        elseif (self.frame == 0 and not incVal and wrapping)
-            or (self.frame == limit and incVal and not wrapping) then self.frame = limit
-        else self.frame = self.frame + incVal end
-        self.value = self.vals[self.frame + 1]  --frames numbered from zero
-        if self.caption and self.captions then self.caption = self.captions[self.frame + 1] end
+function MButton:increment(incVal,wrapping)
+    local usingRange = self.min and self.max
+    if self.vals and (#self.vals ~= self.frames) then M.Msg('#vals must = frames')
+    elseif not wrapping then
+        if (self.vals and self.value == self.vals[1] and incVal < 0)
+            or (self.vals and self.value == self.vals[#self.vals] and incVal > 0)
+            or (usingRange and self.value == self.min and incVal < 0)
+            or (usingRange and self.value == self.max and incVal > 0)
+        then return 0
+        end
+    --we are wrapping from here on out
+    elseif self.vals then
+        if self.value == self.vals[1] and incVal < 0 then
+            self.value = #self.vals
+            self:setFrame(self.frames - 1)
+        elseif self.value == self.vals[#self.vals] and incVal > 0 then
+            self.value = 1
+            self.frame = 0
+        elseif incVal < 0 then
+            self.value = self.value - 1     self:setFrame(self.frame - 1)
+        else self.value = self.value + 1    self:setFrame(self.frame + 1)
+        end
+    elseif usingRange then
+        if self.value == self.min and incVal < 0 then
+            self.value = self.max           self:setFrame(self.frames - 1)
+        elseif self.value == self.max and incVal > 0 then
+            self.value = self.min           self:setFrame(0)
+        else self.value = self.value + incVal
+            if incVal > 0 then              self:setFrame(self.frame + 1)
+            else                            self:setFrame(self.frame - 1)
+            end
+        end
     end
-    return true
 end
 
 function MButton:onMouseUp(state)
-    local midX = self.x + (self.w/2)
-    local midY = self.y + (self.h/2)
-    local change = self.inc or 1
-    if self.stateless then
-        self.value = self.min
+    if self.stateless then self.value = self.min or self.vals[1] or 0
         self.frame = 0
-    elseif not self.spinner then self:increment(change,true) --must wrap!
-    elseif self.horizontal and state.mouse.x < midX then self:increment(0 - change,self.wrap)
-    elseif self.horizontal and state.mouse.x > midX then self:increment(change,self.wrap)
-    elseif not self.horizontal and state.mouse.y > midY then self:increment(0 - change,self.wrap)
-    elseif not self.horizontal and state.mouse.y < midY then self:increment(change,self.wrap)
+    elseif self.spinner then
+        local midX = self.x + (self.w/2)
+        local midY = self.y + (self.h/2)
+        local up = ( self.horizontal and state.mouse.x > midX ) or ( not self.horizontal and state.mouse.y < midY )
+        if up then self:increment(self.inc or 1, self.wrap) else self:increment(0 - self.inc or -1, self.wrap) end
+    elseif not self.spinner then self:increment(self.inc, true)
+    else M.Msg('onMouseup confusion at: '..self.name)  --should not happen
     end
     if self:containsPoint(state.mouse.x, state.mouse.y) then
         self:func(table.unpack(self.params))
@@ -137,10 +155,9 @@ function MButton:onMouseUp(state)
     self:redraw()
 end
 
-
 function MButton:onMouseDown(state)
     if self.stateless then
-        self.value = self.max
+        self.value = self.max or 1
         self.frame = 1
     end
 end
@@ -158,66 +175,72 @@ end
 ]]
 
 function MButton:val(set)
-    if not set then return self.value
+    if not set and self.vals then return self.vals[self.value]
+    elseif not set and self.min and self.max then return self.value
     elseif self.vals then
-        if type(self.vals) == 'table' then
-            for frame,val in pairs(self.vals) do
-                if val == set then
-                    self.frame = frame - 1
-                    if self.captions and self.caption then self.caption = self.captions[frame] end
-                    return true
+        for index,val in pairs(self.vals) do
+            if val == set then
+                self.value = index
+                self:setFrame(index - 1)
+                if self.captions and self.caption then
+                     self.caption = self.captions[self.frame]
                 end
-            end
-            M.Msg("can't set value of control to: "..set)
-        end
+                return true
+            end           
+        end      
+        M.Msg("can't set value of control to: "..set)
     elseif self.min and self.max then
         if set >= self.min and set <= self.max then
             self.value = set
-            if self.frames == 2 and set == self.max then self.frame = 1
-            elseif self.frames == 2 and set == self.min then self.frame = 0
-            end
+            local pct = (self.value - self.min)/(self.max - self.min)
+            local frame = Math.round((self.frames) * pct)
+            self:setFrame(frame)
         end
     end
 end
 
+--return MButton
 GUI.elementClasses.MButton = MButton
 ------------Test---------------
 --[[
 local imageFolder = reaper.GetResourcePath().."/Scripts/Images/"
 
-function CreateSwitch(i,width)
+switches = {}
+function createSwitch(i)
     local switch = GUI.createElement({
-        w = width,h = 40,
-        x = (i-1) * width,
+        stateless = false,
+        w = 80,h = 40,
+        x = i * 80,y = 0,
         color = 'blue',
         wrap = true,
         frames = 3,
-        vals = {1,2,4},
+        vals = {1,2,3},
         value = 1,
         name = "switch"..i,
         type = "MButton",
         labelX = 0, labelY = 0,
-        inc = 1,
         image =  imageFolder.."Notesource.png",
-        func = function(self) M.Msg('setting track '..i..' to '..self.value) TrackName(i,"track "..self.value) end,
+        func = function(self) M.Msg('setting track'..i.. 'to '..self.value) TrackName(i,"track "..self.value) end,
         params = {"a", "b", "c"}
     })
+    switches[i] = switch
     return switch
 end
+
 function MSpinnerTest()
     local spinner = GUI.createElement({
         type = "MButton", spinner = true,
         name = 'spinner',
         color = 'red',
-        w = BUTTON_HEIGHT * 2, h = BUTTON_HEIGHT,
+        w = 40,h = 80,
         x = 0,y = 200,
         wrap = true,
         frames = 1,
-        caption = '0',
-        value = 0,
-        min = 0, max = 11,
+        caption = '1',
+        value = 1,
+        min = 1, max = 3,
         image = imageFolder.."EffectSpin.png",
-        func = function(self) M.Msg('page = '..self.value) self.caption = self.value end,
+        func = function(self) switches[1]:val(self.value) self.caption = self:val() M.Msg('function called:'..self.value) end,
     })
     return spinner
 end
@@ -235,8 +258,8 @@ local window = GUI.createWindow({
 ------------------------------------
 
 local layer = GUI.createLayer({name = "Layer1", z = 1})
-for i = 1,4 do
-    layer:addElements(CreateSwitch(i,80))
+for i = 1,8 do
+    layer:addElements(createSwitch(i))
 end
 layer:addElements(MSpinnerTest())
 window:addLayers(layer)

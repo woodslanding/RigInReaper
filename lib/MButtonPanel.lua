@@ -7,187 +7,178 @@ if not libPath or libPath == "" then
 end
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
+loadfile(libPath .. "scythe.lua")()
 
 require 'Mbutton'
-loadfile(libPath .. "scythe.lua")()
+require "MoonUtils"
+
 local GUI = require("gui.core")
 local M = require("public.message")
-local Font = require("public.font")
-local Color = require("public.color")
 local Table = require("public.table")
 local T = Table.T
 
-local Multi = 0
-local Rows, Cols = 5,8
-local Ht, Wd = 40, 100
-local hue, sat, level = 40, 99, 40
-
-local switches = {}
-local pager
-local pageCount
-local pageNum
-
-local options = {}
-function GetOption(idx)
-    if not options[idx] then options[idx] = {} end
-    return options[idx]
-end
-function SetOption(idx,name,val)
-    local option = GetOption(idx)
-    option.name = name
-    option.val = val
-end
-
-function GetOptionName(idx)  return GetOption(idx).name or '---' end
-function GetOptionVal(idx) return  GetOption(idx).val or 0 end
-function SetOptionVal(idx,val)   GetOption(idx).val = val end
-function SetOptionName(idx,name) GetOption(idx).name = name end
-function ZeroAllOptions() for _,option in pairs(options) do  option.val = 0 end end
-
-function CreateSwitch(i, xpos, ypos, wd, ht, title, hue, sat, level)
-    local switch = GUI.createElement({
-        w = wd,h = ht, x = xpos+wd, y = ypos + ht,
-        color = GetRGB(hue,sat,level),
-        loop = true,
-        frames = 2,
-        caption = '',
-        min = 0, max = i, value = 0,
-        name = 'button'..i,
-        type = "MButton",
-        --labelX = 0, labelY = 0,
-        image =  "comboButton2pos.png",
-        func = function(self) M.Msg('setting val to '..i,'caption = '..self.caption) end,
-        params = {"a", "b", "c"}
-    })
-    function switch:onMouseUp()
-        if Multi > 0 then MultiSel(switch.max)
-        else Select(switch.max) end
-    end
-    switches[i] = switch
-    return switch
-end
-
-function CreateButtonPanel(rows, columns, w, h)
-    local panel = {}
+local function createButtons(parent,image,layer,rows, columns, x, y, w, h)
+    local switches = {}
     local xpos, ypos
     local index = 1
     for i = 1, columns do
-        xpos = (i - 1) * Wd
+        xpos = x + ((i - 1) * w)
         for j = 1, rows do
-            ypos = (j - 1) * Ht
-            hue = 15
-            sat = 95
-            level = 50       
-            panel[index] = CreateSwitch(index, xpos, ypos, w, h, '' + i, hue, sat, level)
+            ypos = y + ((j - 1) * h)
+            local switch = GUI.createElement({
+                w = w,h = h, x = xpos, y = ypos,
+                color = 'black',
+                loop = true,
+                frames = 2,
+                caption = '',
+                min = 0, max = index, value = 0,
+                name = 'button'..index,
+                type = "MButton",
+                image =  image,
+                func = function(self) parent:select(self.max) end,
+                params = {"a", "b", "c"}
+            })
+            layer:addElements(switch)
+            switches[index] = switch
             index = index + 1
         end
     end
-    return panel
+    return switches
 end
 
-function CreatePager()
+local function createPager(parent,layer,x,y,w,h)
+    local pager
     pager = GUI.createElement({
         name = 'pager',
         spinner = true,
         horizontal = true,
-        w = 80, h = 40,
-        x = 0, y = Ht * (Rows - 1),
+        w = w, h = h,
+        x = x, y = y,
         loop = true, min = 1,
-        max = 10, --just a placeholder
+        max = 1, --just a placeholder
         inc = 1,
         frames = 1,
         caption = '',
-        font = 1,
+        font = 2,
         value = 1,
         type = "MButton",
-        image =  "fxSel.png",
-        func = function(self) M.Msg('page = '..self.value) SetPage(self.value)  end
+        image =  "",
+        func = function(self) parent:setPage(self.value)  end
     })
+    layer:addElements(pager)
     return pager
 end
 
-function CreateSelButton()
-    -- M.Msg('creating sel button')
-    local selType = GUI.createElement({
-        name = 'selectionType',
-        w = 80, h = 40,
-        x = 0, y = 80, vals = {0,1},
-        frames = 2,
-        value = 0,
-        type = "MButton",
-        image = "hands.png",
-        func = function(self) Multi = self.value end
-    })
-    return selType
+MButtonPanel = {}
+MButtonPanel.__index = MButtonPanel
+
+function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,pX,pY,pW,pH)
+    local self = setmetatable({}, MButtonPanel)
+    self.layer = layer
+    self.h = h self.w = w self.x = x self.y = y
+    self.multi = false
+    self.rows = rows self.cols = cols
+    self.color = 'black'
+    self.options = {}
+    self.pageCount = 4 self.pageNum = 1
+    self.switches = createButtons(self,image,layer,self.rows,self.cols,self.x,self.y,self.w,self.h)
+    self.pager = createPager(self,layer,pX,pY,pW,pH)
+    return self
 end
 
-function MultiSel(set)
-    local sw = switches[set]
-    local option,idx = GetOptionForButton(set)
+function MButtonPanel:getOption(idx)
+    if not self.options[idx] then self.options[idx] = {} end
+    return self.options[idx]
+end
+function MButtonPanel:setOption(idx,name,val)
+    local option = self:getOption(idx)
+    option.name = name
+    option.val = val
+end
+
+function MButtonPanel:getOptionName(idx)  return self:getOption(idx).name or '---' end
+function MButtonPanel:getOptionVal(idx) return  self:getOption(idx).val or 0 end
+function MButtonPanel:setOptionVal(idx,val)   self:getOption(idx).val = val end
+function MButtonPanel:setOptionName(idx,name) self:getOption(idx).name = name end
+function MButtonPanel:zeroOptions() for _,option in pairs(self.options) do  option.val = 0 end end
+
+
+function MButtonPanel:MultiSel(set)
+    local sw = self.switches[set]
+    local option,_ = self:getOptionForButton(set)
     if option.val then --some buttons on the last page may not have an option
         if option.val == 0 then
             option.val = 1
             sw.frame = 1
-            M.Msg('option '..option.name,'on')
         else
             option.val = 0
             sw.frame = 0
-            M.Msg('option '..option.name,'off')
         end
         sw:redraw()
     end
 end
 
-function Select(set)
-    ZeroAllOptions()
-    for button = 1,Rows * Cols do
-        local option, idx = GetOptionForButton(button)
-        local sw = switches[button]
-        if sw.max == set then
-            sw.frame = 1
-            option.val = 1
-            M.Msg('option '..option.name,' enabled')
-        else sw.frame = 0
+function MButtonPanel:select(set)
+    if self.multi then self:MultiSel(set)
+    else
+        self:zeroOptions()
+        for button = 1,self.rows * self.cols do
+            local option, _ = self:getOptionForButton(button)
+            local sw = self.switches[button]
+            if sw.max == set then
+                sw.frame = 1
+                option.val = 1
+                M.Msg('option '..option.name,' enabled')
+            else sw.frame = 0
+            end
+            sw:redraw()
         end
-        sw:redraw()
     end
 end
 
-function SetPage(page) --pages start at 1
-    pageCount = math.ceil(#options/(Rows * Cols))
-    pager.max = pageCount
-    if page > pageCount then pageNum = pageCount else pageNum = page end
-    for buttonNum = 1, Rows * Cols do
-        local sw = switches[buttonNum]
-        local option = GetOptionForButton(buttonNum)
+function MButtonPanel:setPage(page) --pages start at 1
+    self.pageCount = math.ceil(#self.options/(self.rows * self.cols))
+    M.Msg('pageCount = '..self.pageCount)
+    self.pager.max = self.pageCount
+    if page > self.pageCount then self.pageNum = self.pageCount else self.pageNum = page end
+    for buttonNum = 1, self.rows * self.cols do
+        local sw = self.switches[buttonNum]
+        local option = self:getOptionForButton(buttonNum)
         sw.caption = option.name or '---'
-        pager.caption = pageNum
+        self.pager.caption = self.pageNum
         if option.val and option.val > 0 then
-            M.Msg('setting button '..buttonNum..' on')
+            --M.Msg('setting button '..buttonNum..' on')
             sw.frame = 1
         else sw.frame = 0 end
         sw:redraw()
     end
 end
 
-function GetPage()
-    return pageNum
-
+function MButtonPanel:setColor(color)
+    for buttonNum = 1, self.rows * self.cols do
+        local sw = self.switches[buttonNum]
+        sw.color = color
+        self.pager.color = color
+        sw:redraw()
+    end
 end
 
-function GetOptionForButton(buttonNum)
-    local num = (Rows * Cols * (pageNum - 1)) + buttonNum
-    local option = GetOption(num)
+
+function MButtonPanel:getOptionForButton(buttonNum)
+    local num = (self.rows * self.cols * (self.pageNum - 1)) + buttonNum
+    local option = self:getOption(num)
     return option, num
 end
+
+--return MButtonPanel
 
 ------------------------------------
 -------- Window settings -----------
 ------------------------------------
-
+--
 
 local window = GUI.createWindow({
-  name = "BUTTON PANEL TEST",
+  name = "BUTTON switches TEST",
   w = 1000,
   h = 300,
   x = 100, y = 0,
@@ -195,18 +186,23 @@ local window = GUI.createWindow({
 ------------------------------------
 -------- GUI Elements --------------
 ------------------------------------
+local imageFolder = reaper.GetResourcePath().."\\scripts\\_RigInReaper\\Images\\"
+local layer = GUI.createLayer({name = "Layer1", z = 1})
+
 --create 250 options
+local cols, w = 8, 96
+local panel = MButtonPanel.new(imageFolder.."Combo.png",layer,5,cols,
+                            0,0,w,32,       --button
+                            w*cols,0,36,44) --spinner
 for i = 1,250 do
-    options[i] = {
+    panel.options[i] = {
         name = i,
         val = 0
     }
 end
-
-local layer = GUI.createLayer({name = "Layer1", z = 1})
-layer:addElements(CreateSelButton(),CreatePager(),CreateButtonPanel())
-window:addLayers(layer)
-SetPage(1)
+panel.pager.image = imageFolder.."EffectSpin.png"
+panel:setColor(GetRGB(120,100,60))
+window:addLayers(panel.layer)
 window:open()
 
-GUI.Main()
+GUI.Main()--]]

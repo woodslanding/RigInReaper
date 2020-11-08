@@ -43,6 +43,9 @@ function MLabel:new(props)
   return setmetatable(label, self)
 end
 
+function MLabel:containsPoint (x, y)
+    return false
+end
 
 function MLabel:init()
 

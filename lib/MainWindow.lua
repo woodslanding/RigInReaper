@@ -46,6 +46,7 @@ require 'moonUtils'
 require 'MLabel'
 require 'MSlider'
 require 'MButton'
+require 'MButtonPanel'
 
 loadfile(libPath .. "scythe.lua")()
 local GUI = require("gui.core")
@@ -65,11 +66,24 @@ local sliderLayer = GUI.createLayer({name = "sliderLayer", z = 3})
 local bkgdLayer = GUI.createLayer({name = "bkgdLayer", z = 4})
 local backdropLayer = GUI.createLayer({name = "backdropLayer", z = 5})
 
+local ChannelCount = 2
+local Channels = {}
+
 local ifl = IMAGE_FOLDER  --from MoonUtilities
 local leftPad = 4
 local scaling = .8
 local function randomColor()
     return GetRGB(math.random(360),100-(math.random(10) * math.random(10)),50)
+end
+
+
+local function fakeOptions(panel)
+    for i = 1,250 do
+        panel.options[i] = {
+            name = i..'-'..math.random(1111111,9999999),
+            val = 0
+        }
+    end
 end
 
 local testNames = {'Ships Piano','Showdown','Large Sliver Globes', 'Lush Strings',
@@ -92,13 +106,43 @@ function SetBackdrop()
     backdropLayer:addElements(bkdp)
 end
 
+--
+function CreateParams()
+    local rows, cols, w, h = 4, 8, 96 , 32
+    local params = MButtonPanel.new(ifl.."Combo.png",controlLayer,rows,cols,
+                                192,240,w,h,       --button
+                                192,200,96,32) --spinner
+    fakeOptions(params)
+    params.multi = true
+    params.pager.image = ifl.."Combo.png"
+    params:setPage(1)
+    params:setColor(randomColor())
+    return params
+end
+--TODO: need a means to store and recall the selection values for each channel
+function CreatePresets()
+    local rows, cols = 5,8
+    local w, h = 96, 36
+    local presets = MButtonPanel.new(ifl.."Combo.png",sliderLayer,rows,cols,
+                                leftPad,0,w,h,       --button
+                                (w * cols) + 8,0,44,72) --spinner
+    fakeOptions(presets)
+    presets.pager.image = ifl.."EffectSpin.png"
+    presets:setPage(1)
+    presets:setColor(randomColor())
+    return presets
+end
+
+PresetPanel = CreatePresets()
+ParamPanel = CreateParams()--]]
+
 Channels = {}
-Bkgds = {}
 -----------------------------------------------------------------------------------------------------------------------------------
                                           --    CREATE   --
-                                          --    CHANNEL  --                                      
+                                          --    CHANNEL  --
 -----------------------------------------------------------------------------------------------------------------------------------
 function CreateChannel(chanNum,color,fxColor)
+    local channel = {}
     local fxOffset = 390
     local btnH = 36
     local meterH = 12
@@ -109,30 +153,33 @@ function CreateChannel(chanNum,color,fxColor)
     local leftW = 52
     local rightW = 44
 
+    channel.color = color
+    channel.fxColor = fxColor
     ------------------------------------------------------------------------------------------------------
     --------------------------------------------------------SEND------------------------------------------
-    local sendBg = GUI.createElement({
+    channel.sendBg = GUI.createElement({
         type = "Frame",
         name = 'fxbg'..chanNum,
         x = xpos, y = fxOffset, h = btnH * 4, w = chanW,
         bg = fxColor,
-        color = 'black'
+        color = 'black',
+        
     })
-    --Bkgds[chanNum] = sendBg
-    bkgdLayer:addElements(sendBg)
+    bkgdLayer:addElements(channel.sendBg)
 
-    local fxLabel = GUI.createElement ({
+    channel.fxLabel = GUI.createElement ({
         type = "MLabel",
         vertical = true,
         caption = testNames[chanNum],
         name = 'fxLabel'..chanNum,
         font = {'Calibri', 18,"b"},
         w = Scale(150), h = Scale(30),
-        x = xpos + 8, y = fxOffset + 10
+        x = xpos + 8, y = fxOffset + 10,
+        
     })
-    titleLayer:addElements(fxLabel)
+    titleLayer:addElements(channel.fxLabel)
 
-    local send = GUI.createElement({
+    channel.send = GUI.createElement({
         frames = 72,horizontal = false,
         --horizFrames = true,
         --vertText = true,
@@ -145,19 +192,35 @@ function CreateChannel(chanNum,color,fxColor)
         labelX = 0,labelY = 0,
         image = ifl.."Send.png",
         func = function(self, a, b, c) end,
-        params = {"a", "b", "c"}
+        
     })
-    sliderLayer:addElements(send)
+    sliderLayer:addElements(channel.send)
+
+    channel.octave = GUI.createElement({
+            name = 'oct'..chanNum,
+            type = "MButton",
+            displayOnly = true,
+            w = 16, h = 66,
+            x = xpos +38, y = fxOffset + 72,
+            color = nil,
+            frames = 11,
+            min = -5, max = 5,
+            value= 0,
+            image = ifl..'oct'..'.png',
+            
+        })
+    titleLayer:addElements(channel.octave)
     ------------------------------------------------------------------------------------------------------------------
     -----------------------------------------------------------------SPINNERS-------------------------------------------
-    local mixSpinIcons = {'EffectSpin','OctaveSpin'}
-    local spinFuncs = {}
-    local mixSpinners = {}
-    for slotNum,icon in pairs(mixSpinIcons) do
-        mixSpinners[slotNum] = GUI.createElement({
+    channel.mixSpinIcons = {'EffectSpin','OctaveSpin'}
+    channel.spinFuncs = {}
+    channel.spinFuncs[2] = function(self) channel.octave:val(self:val()) end
+    channel.mixSpinners = {}
+    for slotNum,icon in pairs(channel.mixSpinIcons) do
+        channel.mixSpinners[slotNum] = GUI.createElement({
             name = icon..chanNum,
             type = "MButton",
-            spinner = true,
+            spinner = true, loop = false,
             w = 44, h = 72,
             x = xpos + leftW, y = (btnH * (slotNum - 1) * 2) + fxOffset,
             color = nil,
@@ -165,59 +228,66 @@ function CreateChannel(chanNum,color,fxColor)
             min = -5,max = 5,
             value= 0,
             image = ifl..icon..'.png',
-            func = spinFuncs[slotNum],
+            func = channel.spinFuncs[slotNum],
+            
         })
-        controlLayer:addElements(mixSpinners[slotNum])
-    end
+        controlLayer:addElements(channel.mixSpinners[slotNum])
+     end
 
-    mixSpinners[1].min = -7
-    mixSpinners[1].max = 7
+    channel.mixSpinners[1].min = -7
+    channel.mixSpinners[1].max = 7
+
     ------------------------------------------------------------------------------------------------------------------
     -----------------------------------------------------------------METERS-------------------------------------------
-    local meterIcons = {'Pan','MeterL','MeterR'}
-    local meterFuncs = {}
-    local meterCtls = {}
-    for slotNum,icon in pairs(meterIcons) do
-        meterCtls[slotNum] = GUI.createElement ({
+    channel.meterIcons = {'Pan','MeterL','MeterR'}
+    channel.meterFuncs = {}
+    channel.meterCtls = {}
+    for slotNum,icon in pairs(channel.meterIcons) do
+        channel.meterCtls[slotNum] = GUI.createElement ({
             type = "MSlider",
+            displayOnly = true,
             name = icon..chanNum,
             image = ifl..icon..'.png',
             frames = 25, frame = math.random(25),
             horizontal = true,
             min = 0, max = 1, value = 0,
             w = chanW, h = 6, x = xpos, y = volOffset - 12,
-            func = meterFuncs[slotNum],
+            func = channel.meterFuncs[slotNum],
+            
         })
     end
-    meterCtls[1].h = 12
+    channel.meterCtls[1].h = 12
+    channel.meterCtls[1].displayOnly = false
     --pan
-    controlLayer:addElements(meterCtls[1])
+    controlLayer:addElements(channel.meterCtls[1])
     --meters
-    meterCtls[3].y = volOffset - 6
-    sliderLayer:addElements(meterCtls[2])
-    sliderLayer:addElements(meterCtls[3])
+    channel.meterCtls[3].y = volOffset - 6
+    sliderLayer:addElements(channel.meterCtls[2])
+    sliderLayer:addElements(channel.meterCtls[3])
     -------------------------------------------------------------------------------------------------------
     --------------------------------------------------------VOLUME-----------------------------------------
-    local bkgd = GUI.createElement({
+    channel.bkgd = GUI.createElement({
         type = "Frame",
         name = 'bkgd'..chanNum,
         x = xpos, y = volOffset - meterH, h = chanH + meterH + 4, w = chanW,
         bg = color,
-        color = 'black'
+        color = 'black',
+        
     })
-    bkgdLayer:addElements(bkgd)
+    bkgdLayer:addElements(channel.bkgd)
 
-    local label = GUI.createElement ({
+    channel.label = GUI.createElement ({
         type = "MLabel",
         vertical = true,
         caption = testNames[chanNum],
         name = 'instLabel'..chanNum,
         w = Scale(150), h = Scale(30),
-        x = xpos + 4, y = volOffset + 10
+        x = xpos + 4, y = volOffset + 10,
+        
     })
-    titleLayer:addElements(label)
+    titleLayer:addElements(channel.label)
 
-    local slider = GUI.createElement({
+    channel.slider = GUI.createElement({
         frames = 108,horizontal = false,
         --horizFrames = true,
         --vertText = true,
@@ -229,17 +299,24 @@ function CreateChannel(chanNum,color,fxColor)
         w = leftW,h = btnH * 6,x = xpos,y = volOffset,
         labelX = 0,labelY = 0,
         image = ifl.."Volume.png",
-        func = function(self, a, b, c) end,
-        params = {"a", "b", "c"}
+        
     })
-    sliderLayer:addElements(slider)
+    sliderLayer:addElements(channel.slider)
     ------------------------------------------------------------------------------------------------------------------
     ----------------------------------------------------------------BUTTONS-------------------------------------------
-    local mixIcons = {'NoSus','Hold','Breath','Ped2','Exp','Enable','Select','Notesource'}
-    local mixFuncs = {}
-    local mixCtls = {}
-    for slotNum,icon in pairs(mixIcons) do
-        mixCtls[slotNum] = GUI.createElement({
+    channel.mixIcons = {'NoSus','Hold','Breath','Ped2','Exp','Enable','Select','Notesource'}
+    channel.mixFuncs = {}
+    channel.mixFuncs[7] = function(self)
+        M.Msg('setting value of select to ch'..chanNum)
+        for i = 1,ChannelCount do
+            Channels[i].mixCtls[7]:val(0)
+        end
+        self:val(1)
+        PresetPanel:setColor(channel.color)
+    end
+    channel.mixCtls = {}
+    for slotNum,icon in pairs(channel.mixIcons) do
+        channel.mixCtls[slotNum] = GUI.createElement({
             name = icon..chanNum,
             type = "MButton",
             w = rightW, h = btnH,
@@ -249,24 +326,27 @@ function CreateChannel(chanNum,color,fxColor)
             vals = {0,1},
             value= 0,
             image = ifl..icon..'.png',
-            func = mixFuncs[slotNum],
+            func = channel.mixFuncs[slotNum],
+            
         })
-        controlLayer:addElements(mixCtls[slotNum])
+        controlLayer:addElements(channel.mixCtls[slotNum])
     end
     --enable
-    mixCtls[6].vals = {0,1,2,3}
-    mixCtls[6].frames = 4
+    channel.mixCtls[6].vals = {0,1,2,3}
+    channel.mixCtls[6].frames = 4
     --notesource
-    mixCtls[8].vals = {0,1,2}
-    mixCtls[8].frames = 3
-    mixCtls[8].x = xpos
-    mixCtls[8].y = (btnH * 6) + volOffset
-    mixCtls[8].w = leftW
+    channel.mixCtls[8].vals = {0,1,2}
+    channel.mixCtls[8].frames = 3
+    channel.mixCtls[8].x = xpos
+    channel.mixCtls[8].y = (btnH * 6) + volOffset
+    channel.mixCtls[8].w = leftW
+
+    return channel
 end
 
 SetBackdrop()
-for i = 1,16 do
-    CreateChannel(i,randomColor(),randomColor())
+for i = 1,ChannelCount do
+    Channels[i] = CreateChannel(i,randomColor(),randomColor())
     --M.Msg('creating channel'..i)
 end
 
@@ -279,7 +359,7 @@ end
 
 local window = GUI.createWindow({
     name = "CHANNEL",
-    w = 1920,
+    w = 960,
     h = 980,
     x = -12,
     y = 0
