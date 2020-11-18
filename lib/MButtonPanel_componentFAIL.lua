@@ -13,48 +13,66 @@ require 'Mbutton'
 require "moonUtils"
 
 local GUI = require("gui.core")
+local Element = require("gui.element")
 local M = require("public.message")
 local Table = require("public.table")
 local T = Table.T
 
-local function createButtons(parent,image,layer,rows, columns, x, y, w, h)
-    local switches = {}
+local MButtonPanel = Element:new()
+MButtonPanel.__index = MButtonPanel
+MButtonPanel.defaultProps = {
+    name = "buttonpanel", type = "MButtonPanel",
+    rows = 3, cols = 3, x = 0, y = 0, w= 96, h = 40,
+    multi = false,
+    color = 'black',
+    options = {},
+    switches = {},
+    pager = nil,
+    pagerW = 48, pagerH = 80, pagerX = 288,pagerY = 120,
+    pagerVert = true,
+    pageNum = 1,
+    image = nil,
+}
+
+function MButtonPanel:new(props)
+    local panel = self:addDefaultProps(props)
+    setmetatable(panel, self)
+    panel:createComponents()
+    return panel
+end
+
+function MButtonPanel:createComponents()
     local xpos, ypos
     local index = 1
-    for i = 1, columns do
-        xpos = x + ((i - 1) * w)
-        for j = 1, rows do
-            ypos = y + ((j - 1) * h)
-            local switch = GUI.createElement({
-                w = w,h = h, x = xpos, y = ypos,
-                color = 'black',
+    for i = 1, self.cols do
+        xpos = self.x + ((i - 1) * self.w)
+        for j = 1, self.rows do
+            ypos = self.y + ((j - 1) * self.h)
+            M.Msg('creating switch # '..index)
+            self.switches[index] = GUI.createElement({
+                name = self.name..'button'..index,
+                type = "MButton",
+                w = self.w,h = self.h, x = xpos, y = ypos,
+                color = self.color,
                 loop = true,
                 frames = 2,
                 caption = '',
                 min = 0, max = index,
                 value = 0,
-                name = 'button'..index,
-                type = "MButton",
-                image =  image,
-                func = function(self) parent:select(self.max) end,
+                image =  self.image,
+                func = function() end,
                 params = {"a", "b", "c"}
             })
-            layer:addElements(switch)
-            switches[index] = switch
             index = index + 1
         end
     end
-    return switches
-end
-
-local function createPager(parent,layer,x,y,w,h)
-    local pager
-    pager = GUI.createElement({
-        name = 'pager',
+    self.pager = GUI.createElement({
+        name = self.name..'pager',
+        type = "MButton",
         spinner = true,
-        horizontal = true,
-        w = w, h = h,
-        x = x, y = y,
+        horizontal = false,
+        w = self.pagerW, h = self.pagerH,
+        x = self.pagerX, y = self.pagerY,
         loop = true, min = 1,
         max = 1, --just a placeholder
         inc = 1,
@@ -62,31 +80,18 @@ local function createPager(parent,layer,x,y,w,h)
         caption = '',
         font = 2,
         value = 1,
-        type = "MButton",
-        image =  "",
-        func = function(self) parent:setPage(self.value)  end
+        image =  self.image,
+        func = function() end
     })
-    layer:addElements(pager)
-    return pager
 end
 
-MButtonPanel = {}
-MButtonPanel.__index = MButtonPanel
+function MButtonPanel:getElements()
+    return self.pager,table.unpack(self.switches)
+end
 
-function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,usePager,pX,pY,pW,pH)
-    local self = setmetatable({}, MButtonPanel)
-    self.layer = layer
-    self.h = h self.w = w self.x = x self.y = y
-    self.multi = false
-    self.rows = rows self.cols = cols
-    self.color = 'black'
-    self.options = {}
-    self.pageCount = 4 self.pageNum = 1
-    self.switches = createButtons(self,image,layer,self.rows,self.cols,self.x,self.y,self.w,self.h)
-    if usePager then
-        self.pager = createPager(self,layer,pX,pY,pW,pH)
-    end
-    return self
+function MButtonPanel:init()
+    M.Msg('calling init')
+    --self:createComponents()
 end
 
 function MButtonPanel:getOption(idx)
@@ -131,7 +136,7 @@ function MButtonPanel:select(set)
             if sw.max == set then
                 sw.frame = 1
                 option.val = 1
-                M.Msg('option '..option.name,' enabled')
+                M.Msg('option '..option.name,' enabled', 'frame set to 1!')
             else sw.frame = 0
             end
             sw:redraw()
@@ -142,29 +147,30 @@ end
 function MButtonPanel:setPage(page) --pages start at 1
     self.pageCount = math.ceil(#self.options/(self.rows * self.cols))
     M.Msg('pageCount = '..self.pageCount)
-    if self.pager then self.pager.max = self.pageCount end
+    self.pager.max = self.pageCount
     if page > self.pageCount then self.pageNum = self.pageCount else self.pageNum = page end
     for buttonNum = 1, self.rows * self.cols do
         local sw = self.switches[buttonNum]
         local option = self:getOptionForButton(buttonNum)
         sw.caption = option.name or '---'
-        if self.pager then self.pager.caption = self.pageNum end
+        self.pager.caption = self.pageNum
         if option.val and option.val > 0 then
             --M.Msg('setting button '..buttonNum..' on')
             sw.frame = 1
         else sw.frame = 0 end
         sw:redraw()
     end
-    --M.Msg('PAGE SET')
+    M.Msg('PAGE SET')
 end
 
 function MButtonPanel:setColor(color)
     for buttonNum = 1, self.rows * self.cols do
         local sw = self.switches[buttonNum]
         sw.color = color
-        if self.pager then self.pager.color = color end
         sw:redraw()
     end
+    self.pager.color = color
+    self.pager:redraw()
 end
 
 
@@ -175,14 +181,15 @@ function MButtonPanel:getOptionForButton(buttonNum)
 end
 
 --return MButtonPanel
+GUI.elementClasses.MButtonPanel = MButtonPanel
 
 ------------------------------------
 -------- Window settings -----------
 ------------------------------------
---[[
+----
 
 local window = GUI.createWindow({
-  name = "BUTTON switches TEST",
+  name = "BUTTONPANEL TEST",
   w = 1000,
   h = 300,
   x = 100, y = 0,
@@ -191,23 +198,39 @@ local window = GUI.createWindow({
 -------- GUI Elements --------------
 ------------------------------------
 local imageFolder = reaper.GetResourcePath().."\\scripts\\_RigInReaper\\Images\\"
-local layer = GUI.createLayer({name = "Layer1", z = 1})
 
 --create 250 options
-local cols, w = 8, 96
-local panel = MButtonPanel.new(imageFolder.."Combo.png",layer,5,cols,
-                            0,0,w,32,       --button
-                            w*cols,0,36,72) --spinner
+local cols,rows, w, h = 8, 5, 96, 32
+
+local panel = GUI.createElement({
+    type = 'MButtonPanel',
+    name = 'testPanel',
+    image = imageFolder.."Combo.png",
+    rows = rows, cols = cols, w = w, h = h, x = 0, y = 0,         --matrix
+    pagerW = 32, pagerH = 72, pagerX = w*cols, pagerY = h*rows,   --pager
+})
+
 for i = 1,250 do
     panel.options[i] = {
         name = i,
         val = 0
     }
 end
-panel.pager.image = imageFolder.."EffectSpin.png"
-panel:setColor(GetRGB(120,100,60))
-panel:setPage(1)
-window:addLayers(panel.layer)
-window:open()
 
+local layer = GUI.createLayer({name = "Layer1", z = 1})
+layer:addElements(panel)
+M.Msg('pre-init???')
+for i = 1,#panel.switches do
+   layer:addElements(panel.switches[i])
+   M.Msg('adding switch '..i)
+end
+--layer:addElements(table.unpack(panel.switches))
+layer:addElements(panel.pager)
+window:addLayers(layer)
+window:open()
+M.Msg('calling main')
 GUI.Main()--]]
+
+panel.pager.image = imageFolder.."EffectSpin.png"
+--panel:setPage(1)
+--panel:setColor(GetRGB(20,100,60))

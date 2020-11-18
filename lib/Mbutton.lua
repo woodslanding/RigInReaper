@@ -22,8 +22,6 @@ local Math = require("public.math")
 local GFX = require("public.gfx")
 
 local Element = require("gui.element")
-
-require 'moonUtils'  --for inc/dec
 --[[
     for a momentary switch set stateless = true.  On and off values are min and max
     for a multi-position switch set stateless false.  A spinner increments and decrements
@@ -33,10 +31,10 @@ require 'moonUtils'  --for inc/dec
 local MButton = Element:new()
 MButton.__index = MButton
 MButton.defaultProps = {
-    name = "mbutton", type = "MBUTTON",
+    name = "mbutton", type = "MButton",
     displayOnly = false,
     stateless = false, loop = true,
-    wrap= true, spinner = false, vertical = true,
+    wrap = true, spinner = false, vertical = true,
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,
     caption = "", font = 2, textColor = "white",
@@ -45,6 +43,8 @@ MButton.defaultProps = {
     vals = nil, --use this OR min,max,inc
     min = 0,  max = 10, inc = 1,
     image = nil,
+    func = function(self) end,
+    params = {},
     frame = 0,
     frames = 1,
     vertFrames = true
@@ -62,6 +62,7 @@ function MButton:init()
         self.sprite.frame = { w = self.w, h = self.h }
     end
     --if not self.vSprite.image then error("Mspinner: The specified image was not found") end
+    self:val(self.value)
 end
 --this keeps the component from responding to the mouse
 function MButton:containsPoint (x, y)
@@ -72,7 +73,6 @@ function MButton:containsPoint (x, y)
 end
 
 function MButton:draw()
-    self:val(self.value)
     local x, y, w, h = self.x, self.y, self.w, self.h
     gfx.mode = 0
     if self.color then
@@ -101,10 +101,12 @@ function MButton:setFrame(frame)
     elseif frame <= self.frames and frame >= 0 then
         self.frame = frame
     end
+    self:redraw()
 end
 
 function MButton:increment(incVal,wrapping)
-    local usingRange = self.min and self.max
+    local usingRange = self.min ~= nil and self.max ~= nil
+    self:m('calling inc =,'..incVal..' using range = '..tostring(usingRange))
     if self.vals and (#self.vals ~= self.frames) then M.Msg('#vals must = frames')
     elseif not wrapping then
         if (self.vals and self.value == self.vals[1] and incVal < 0)
@@ -112,27 +114,36 @@ function MButton:increment(incVal,wrapping)
             or (usingRange and self.value == self.min and incVal < 0)
             or (usingRange and self.value == self.max and incVal > 0)
         then return 0
+        elseif (usingRange and incVal < 0) then self.value = self.value - 1 self:setFrame(self.frame - 1)
+        else self.value = self.value + 1 self:setFrame(self.frame + 1)
         end
     --we are wrapping from here on out
     elseif self.vals then
         if self.value == self.vals[1] and incVal < 0 then
             self.value = #self.vals
             self:setFrame(self.frames - 1)
+            self:m('setting frame to'..self.frames - 1)
         elseif self.value == self.vals[#self.vals] and incVal > 0 then
             self.value = 1
             self.frame = 0
         elseif incVal < 0 then
-            self.value = self.value - 1     self:setFrame(self.frame - 1)
+            self.value = self.value - 1     self:setFrame(self.frame - 1) 
+            self:m('setting frame to'..self.frame - 1)
         else self.value = self.value + 1    self:setFrame(self.frame + 1)
+            self:m('setting frame to'..self.frame + 1)
         end
     elseif usingRange then
         if self.value == self.min and incVal < 0 then
             self.value = self.max           self:setFrame(self.frames - 1)
+            self:m('setting frame to'..self.frames - 1)
         elseif self.value == self.max and incVal > 0 then
             self.value = self.min           self:setFrame(0)
+            self:m('setting frame to'..0)
         else self.value = self.value + incVal
             if incVal > 0 then              self:setFrame(self.frame + 1)
+                self:m('setting frame to'..self.frame + 1)
             else                            self:setFrame(self.frame - 1)
+                self:m('setting frame to'..self.frame - 1)
             end
         end
     end
@@ -140,8 +151,10 @@ end
 
 function MButton:onMouseUp(state)
     if self.stateless then self.value = self.min or self.vals[1] or 0
+        --M.Msg('stateless at '..self.name)
         self.frame = 0
     elseif self.spinner then
+        --M.Msg('spinner at '..self.name)
         local midX = self.x + (self.w/2)
         local midY = self.y + (self.h/2)
         local up = ( self.horizontal and state.mouse.x > midX ) or ( not self.horizontal and state.mouse.y < midY )
@@ -175,6 +188,7 @@ end
 ]]
 
 function MButton:val(set)
+    --if set then M.Msg('calling val of '..set..' for '..self.name)end
     if not set and self.vals then return self.vals[self.value]
     elseif not set and self.min and self.max then return self.value
     elseif self.vals then
@@ -192,11 +206,16 @@ function MButton:val(set)
     elseif self.min and self.max then
         if set >= self.min and set <= self.max then
             self.value = set
-            local pct = (self.value - self.min)/(self.max - self.min)
+            local range = self.max - self.min + 1
+            local pct =  (set-self.min)/range
             local frame = Math.round((self.frames) * pct)
             self:setFrame(frame)
         end
     end
+end
+
+function MButton:m(text)
+    M.Msg(self.name..': '..text)
 end
 
 --return MButton

@@ -12,8 +12,6 @@ CHANNEL_WIDTH = 120
 BUTTON_WIDTH = 60
 BUTTON_HEIGHT = 48
 
-DEGREES_TO_RADIANS = 0.017453
-
 HUES = {
     CRIMSON = 0,
     RED = 14,
@@ -111,6 +109,16 @@ local previousNotesourceSetting = 0
 
 function Esc(str) return ("%q"):format(str) end
 
+function Fullscreen(windowTitle)
+    local win = reaper.JS_Window_Find(windowTitle, true)
+    local style = reaper.JS_Window_GetLong(win, 'STYLE')
+    if style then
+        style = style & (0xFFFFFFFF - 0x00C40000) --removes window frame
+        reaper.JS_Window_SetLong(win, "STYLE", style)
+    end
+    reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+end
+
 function TableSort(t)
     local sorted = {}
     for n in pairs(t) do table.insert(sorted, n) end
@@ -138,6 +146,10 @@ function GetRGB(hue,sat,level)
     --Dbg('GetRGB: r:',rgb[1],'g:',rgb[2])
     --Dbg('b:',rgb[3])
     return rgb
+end
+
+function RandomColor(brightness)
+    return GetRGB(math.random(360),100-(math.random(10) * math.random(10)),brightness or 50)
 end
 
 function BoolToInt(val)

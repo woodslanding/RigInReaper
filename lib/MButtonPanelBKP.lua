@@ -73,7 +73,7 @@ end
 MButtonPanel = {}
 MButtonPanel.__index = MButtonPanel
 
-function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,usePager,pX,pY,pW,pH)
+function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,pX,pY,pW,pH)
     local self = setmetatable({}, MButtonPanel)
     self.layer = layer
     self.h = h self.w = w self.x = x self.y = y
@@ -83,9 +83,7 @@ function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,usePager,pX,pY,pW,pH)
     self.options = {}
     self.pageCount = 4 self.pageNum = 1
     self.switches = createButtons(self,image,layer,self.rows,self.cols,self.x,self.y,self.w,self.h)
-    if usePager then
-        self.pager = createPager(self,layer,pX,pY,pW,pH)
-    end
+    self.pager = createPager(self,layer,pX,pY,pW,pH)
     return self
 end
 
@@ -142,27 +140,27 @@ end
 function MButtonPanel:setPage(page) --pages start at 1
     self.pageCount = math.ceil(#self.options/(self.rows * self.cols))
     M.Msg('pageCount = '..self.pageCount)
-    if self.pager then self.pager.max = self.pageCount end
+    self.pager.max = self.pageCount
     if page > self.pageCount then self.pageNum = self.pageCount else self.pageNum = page end
     for buttonNum = 1, self.rows * self.cols do
         local sw = self.switches[buttonNum]
         local option = self:getOptionForButton(buttonNum)
         sw.caption = option.name or '---'
-        if self.pager then self.pager.caption = self.pageNum end
+        self.pager.caption = self.pageNum
         if option.val and option.val > 0 then
             --M.Msg('setting button '..buttonNum..' on')
             sw.frame = 1
         else sw.frame = 0 end
         sw:redraw()
     end
-    --M.Msg('PAGE SET')
+    M.Msg('PAGE SET')
 end
 
 function MButtonPanel:setColor(color)
     for buttonNum = 1, self.rows * self.cols do
         local sw = self.switches[buttonNum]
         sw.color = color
-        if self.pager then self.pager.color = color end
+        self.pager.color = color
         sw:redraw()
     end
 end
@@ -179,7 +177,7 @@ end
 ------------------------------------
 -------- Window settings -----------
 ------------------------------------
---[[
+----
 
 local window = GUI.createWindow({
   name = "BUTTON switches TEST",
