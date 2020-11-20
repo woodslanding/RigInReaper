@@ -69,6 +69,7 @@ local backdropLayer = GUI.createLayer({name = "backdropLayer", z = 20})
 
 local ChannelCount = 10
 Channels = {}
+Controls = {}
 Current = 1
 
 local ifl = IMAGE_FOLDER  --from MoonUtilities

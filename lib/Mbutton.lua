@@ -218,6 +218,21 @@ function MButton:m(text)
     M.Msg(self.name..': '..text)
 end
 
+function MButton:__tostring()
+    return self.name..' = '..self:val()
+end
+
+function MButton:SaveState(path)
+
+end
+
+function MButton:LoadState(path)
+    local f = assert(loadfile('c:\\lua\\'..filename..'.lua'))
+    local data = f()
+    
+    return self
+end
+
 --return MButton
 GUI.elementClasses.MButton = MButton
 ------------Test---------------
