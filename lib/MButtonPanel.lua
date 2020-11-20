@@ -36,7 +36,7 @@ local function createButtons(parent,image,layer,rows, columns, x, y, w, h)
                 name = 'button'..index,
                 type = "MButton",
                 image =  image,
-                func = function(self) parent:select(self.max) end,
+                func = function(self) parent:select(self.max) parent:onSelect() end,
                 params = {"a", "b", "c"}
             })
             layer:addElements(switch)
@@ -78,9 +78,10 @@ function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,usePager,pX,pY,pW,pH)
     self.layer = layer
     self.h = h self.w = w self.x = x self.y = y
     self.multi = false
-    self.rows = rows self.cols = cols
+    self.rows = rows   self.cols = cols
     self.color = 'black'
     self.options = {}
+    self.selection = {}
     self.pageCount = 4 self.pageNum = 1
     self.switches = createButtons(self,image,layer,self.rows,self.cols,self.x,self.y,self.w,self.h)
     if usePager then
@@ -103,8 +104,7 @@ function MButtonPanel:getOptionName(idx)  return self:getOption(idx).name or '--
 function MButtonPanel:getOptionVal(idx) return  self:getOption(idx).val or 0 end
 function MButtonPanel:setOptionVal(idx,val)   self:getOption(idx).val = val end
 function MButtonPanel:setOptionName(idx,name) self:getOption(idx).name = name end
-function MButtonPanel:zeroOptions() for _,option in pairs(self.options) do  option.val = 0 end end
-
+function MButtonPanel:zeroOptions() for _,option in pairs(self.options) do  option.val = 0 end self.selection = {} end
 
 function MButtonPanel:MultiSel(set)
     local sw = self.switches[set]
@@ -113,9 +113,11 @@ function MButtonPanel:MultiSel(set)
         if option.val == 0 then
             option.val = 1
             sw.frame = 1
+            table.insert(self.selection,option.name)
         else
             option.val = 0
             sw.frame = 0
+            table.remove(self.selection,option.name)
         end
         sw:redraw()
     end
@@ -131,12 +133,16 @@ function MButtonPanel:select(set)
             if sw.max == set then
                 sw.frame = 1
                 option.val = 1
-                M.Msg('option '..option.name,' enabled')
+                table.insert(self.selection, option.name)
             else sw.frame = 0
             end
             sw:redraw()
         end
     end
+end
+
+function MButtonPanel:onSelect()
+    --override for button actions
 end
 
 function MButtonPanel:setPage(page) --pages start at 1

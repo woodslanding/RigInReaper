@@ -9,22 +9,22 @@
     selecting a bank parses the moonBank file, and creates bank lists for it
     -----------------------
     If we have a 1-button solution to converting vst built-in programs to RPLs,
-    (updating) we can deal exclusively with RPLs.  
+    (updating) we can deal exclusively with RPLs.
 
     for creating the .mbf file we need:
     1.  A means of viewing ALL presets for a vst (rpl list) and assigning each one
         to one or more banks.  This can be a fullscreen window with button arrays
-        on the left for presets, and the right for banks.  The bank buttons are 
-        multi-select, and bank data is written whenever the preset is changed. 
-        they also need some indication of 'last selected', for bank editing. 
-        It should show a lot of (32?) banks, with option for paging  
-        It should be associated with a track so the selected preset can be auditioned.  
+        on the left for presets, and the right for banks.  The bank buttons are
+        multi-select, and bank data is written whenever the preset is changed.
+        they also need some indication of 'last selected', for bank editing.
+        It should show a lot of (32?) banks, with option for paging
+        It should be associated with a track so the selected preset can be auditioned.
     2.  Also needs: Buttons for creating, renaming, reordering, coloring, and deleting banks/tags.
     3.  Need a window for assigning params to widgets, both globally and per bank.  Global could be
         in a page of main window, but bank should probably be accessed from the bank edit page.
 
     We should be able to save the current preset from this page.  When a preset has been edited,
-    we can open this page and 
+    we can open this page and
     1.  Just save the preset under its current name  or
     2.  Select a new name and bank(s) for the preset
 ]]--
@@ -32,27 +32,23 @@
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
 require 'moonUtils'
---move the following to utils eventually.  or maybe have a nativeUtils that doesn't use reaper functions
-
-function CleanComma(s)  return s:sub(1, string.len(s) -2) end
-
---dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
 
 local Bank = {}
 Bank.__index = Bank
 
-function Bank.new(name,hue,sat)
-    local self = setmetatable({}, Bank) 
+function Bank.new(name,hue,sat,image)
+    local self = setmetatable({}, Bank)
     self.name = name
     self.hue = hue or 0
     self.sat = sat or 0
+    self.image = image or ''
     self.params = {}
     self.presets = {}
     return self
 end
 
 function Bank:__tostring()
-    local rtnStr = '    '..self.name..' = { '..'name = '..Esc(self.name)..', hue = '..self.hue..', sat = '..self.sat..',\n            ' 
+    local rtnStr = '    '..self.name..' = { '..'name = '..Esc(self.name)..', hue = '..self.hue..', sat = '..self.sat..',\n            '
     ..GetParamStr(self.params)..'\n'
     ..'            presets = {\"'..table.concat (self.presets,'\", \"')..'\" }\n'
     ..'        }'
@@ -67,7 +63,7 @@ function Bank:setParam(control,name)
     self.params[control]=name
     --don't map encoder push mappings, they are just for soloing (receive only on this track)
     --E1...E8,   --encoder mappings
-    --L1...L8,   --lower button mappings  
+    --L1...L8,   --lower button mappings
     --U1...U8,   --upper button mappings
     --F1...F4,   --footswitch mappings
     --T1...T8,   --organ toggle mappings
@@ -102,13 +98,13 @@ Plugin.__index = Plugin
 
 function Plugin:__tostring()
     local bankT = {}
-    local plugStr = 'return {\n    '..'name = '..Esc(self.name)..', emptyPreset = '..Esc(self.emptyPreset)..','  
+    local plugStr = 'return {\n    '..'name = '..Esc(self.name)..', emptyPreset = '..Esc(self.emptyPreset)..','
     local preStr =  '\n    presets = {'..self:getPresetString()..'}, \n'
     local bankPre = '\n    banks = {\n    '
     for bankName in pairs(self.banks) do
         table.insert(bankT,tostring(self.banks[bankName]))
     end
-    return plugStr..preStr..'    '..GetParamStr(self.params)..bankPre..table.concat(bankT,',\n    ')..'\n    }\n'..'}'  
+    return plugStr..preStr..'    '..GetParamStr(self.params)..bankPre..table.concat(bankT,',\n    ')..'\n    }\n'..'}'
 end
 
 function Plugin:getPresetString()
@@ -138,8 +134,8 @@ function Plugin:addBank(bankName,hue,sat)
     self.banks[bankName] = Bank.new(bankName,hue,sat)
 end
 
-function Plugin:addPreset(preset)  
-    if not self.presets[preset] then 
+function Plugin:addPreset(preset)
+    if not self.presets[preset] then
         self.presets[preset] = preset
     end
 end
@@ -155,7 +151,7 @@ function Plugin:getBank(bank)
 end
 
 function Plugin:setParam(control,name)
-    self.params[control]=name   
+    self.params[control]=name
 end
 
 function Plugin:getParam(control)
@@ -170,7 +166,7 @@ end
 function Plugin.load(filename)
     local f = assert(loadfile('c:\\lua\\'..filename..'.lua'))
     local data = f()
-    local self = setmetatable(data,Plugin)   
+    local self = setmetatable(data,Plugin)
     for bankName,table in pairs(self.banks) do
         self.banks[bankName] = Bank.init(table)
     end
@@ -180,7 +176,7 @@ function Plugin:save()
     local filename = 'c:\\lua\\'..self.name..'.lua'
     local file = io.open(filename,'w')
     file:write(tostring(self))
-    file:close() 
+    file:close()
 end
 
 function Plugin.test(name)
@@ -192,7 +188,7 @@ function Plugin.test(name)
     plug:addBank('pianos',10,.09)
     plug:addPresetToBank('pianos','Grandeur')
     plug:addPresetToBank('favorites','OB pad')
-    plug:addPresetToBank('favorites','Grandeur')    
+    plug:addPresetToBank('favorites','Grandeur')
     plug:addPresetToBank('pianos','Black')
     plug:addPresetToBank('pianos','Death Piano')
     plug:addPresetToBank('pianos','poor naming')

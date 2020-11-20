@@ -17,7 +17,7 @@ local Text = require("public.text")
 local Element = require("gui.element")
 
 local font = {'Calibri', 28,"b"}
-local lenX,lenY
+local lenX,lenY, origW
 
 local MLabel = Element:new()
 MLabel.__index = MLabel
@@ -57,6 +57,7 @@ function MLabel:init()
     Font.set(self.font)
 
     local output = self:formatOutput(self.caption)
+    origW = self.w
     self.w, self.h = gfx.measurestr(output)
 
     local w, h = self.w + 4, self.h + 4
@@ -74,17 +75,10 @@ function MLabel:init()
     gfx.setimgdim(self.buffers[1], -1, -1)
     gfx.setimgdim(self.buffers[1], w, h)
 
-    --Color.set(self.bg)
-    --gfx.rect(0, 0, self.w, self.h)
-
     -- Text + shadow
     gfx.dest = self.buffers[2]
     gfx.setimgdim(self.buffers[2], -1, -1)
     gfx.setimgdim(self.buffers[2], lenX, lenY)
-
-    -- Text needs a background or the antialiasing will look like shit
-    --Color.set(self.bg)
-    --gfx.rect(0, 0, lenX, lenY)
 
     gfx.x, gfx.y = 2, 2
 
@@ -99,47 +93,29 @@ function MLabel:init()
     gfx.dest = dest
 end
 
-
 function MLabel:onDelete()
   Buffer.release(self.buffers)
 end
 
-
 function MLabel:draw()
-
     -- Font stuff doesn't work until we definitely have a gfx window
     if self.w == 0 then self:init() end
-
-    gfx.x, gfx.y = self.x - 2, self.y - 2
-
-    -- Background
-    --gfx.blit(self.buffers[1], 1, 0)
+    if self.vertical then gfx.x, gfx.y = self.x - 2, self.y + origW - self.w
+    else gfx.x, gfx.y = self.x - 2, self.y -2 end
 
     gfx.a = 1
 
     -- Text
     if self.vertical then
             gfx.blit(self.buffers[2], 1, math.rad(-90)
+                --The defaults all work, but how to left-justify???
                 --,0,      (lenX/2)-1, lenX, lenX  -- srcx, srcy, srcw, srch,
                 --,self.x, self.y, lenX, lenX  -- destx, desty, destw, desth,
                 --,0, 0
             )
     else gfx.blit(self.buffers[2], 1, 0)
-    end
-    --gfx.update()
     gfx.a = 1
-
-
-    --[[temp_buf_num = 3
-gfx.dest = temp_buf_num 
-gfx.setimgdim(3, -1, -1)  -- reset buf
-gfx.setimgdim(3, w, h)  -- define buffer size
-
--- draw something here
-
--- then use blit with source = temp_buf_num
--- dont forget to go back to default buffer (buffer you wanna blit to): gfx.dest = -1
-]]
+    end
 
 end
 

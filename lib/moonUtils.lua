@@ -109,6 +109,8 @@ local previousNotesourceSetting = 0
 
 function Esc(str) return ("%q"):format(str) end
 
+function CleanComma(s)  return s:sub(1, string.len(s) -2) end
+
 function Fullscreen(windowTitle)
     local win = reaper.JS_Window_Find(windowTitle, true)
     local style = reaper.JS_Window_GetLong(win, 'STYLE')

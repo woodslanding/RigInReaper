@@ -12,5 +12,9 @@
 		{
 			"path": "..\\ReaTeam Scripts\\Development\\Scythe library v3"
 		}
-	]
+	],
+	"settings": {
+		"Lua.diagnostics.enable": false,
+		"Lua.awakened.cat": false
+	}
 }

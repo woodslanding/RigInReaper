@@ -23,8 +23,8 @@ local GFX = require("public.gfx")
 
 local Element = require("gui.element")
 --[[
-    for a momentary switch set stateless = true.  On and off values are min and max
-    for a multi-position switch set stateless false.  A spinner increments and decrements
+    for a momentary switch set momentary = true.  On and off values are min and max
+    for a multi-position switch set momentary false.  A spinner increments and decrements
     depending on which side is clicked.  Top/bottom vs left/right is set with 'horizontal'
     only vertical frames are supported by my version of 'vSprite'
 ]]
@@ -33,7 +33,7 @@ MButton.__index = MButton
 MButton.defaultProps = {
     name = "mbutton", type = "MButton",
     displayOnly = false,
-    stateless = false, loop = true,
+    momentary = false, loop = true,
     wrap = true, spinner = false, vertical = true,
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,
@@ -110,7 +110,7 @@ function MButton:increment(incVal,wrapping)
     if self.vals and (#self.vals ~= self.frames) then M.Msg('#vals must = frames')
     elseif not wrapping then
         if (self.vals and self.value == self.vals[1] and incVal < 0)
-            or (self.vals and self.value == self.vals[#self.vals] and incVal > 0)
+            or (self.vals and self.value < self.vals[#self.vals] and incVal > 0)
             or (usingRange and self.value == self.min and incVal < 0)
             or (usingRange and self.value == self.max and incVal > 0)
         then return 0
@@ -123,7 +123,7 @@ function MButton:increment(incVal,wrapping)
             self.value = #self.vals
             self:setFrame(self.frames - 1)
             self:m('setting frame to'..self.frames - 1)
-        elseif self.value == self.vals[#self.vals] and incVal > 0 then
+        elseif self.value > self.vals[#self.vals] and incVal > 0 then
             self.value = 1
             self.frame = 0
         elseif incVal < 0 then
@@ -150,8 +150,8 @@ function MButton:increment(incVal,wrapping)
 end
 
 function MButton:onMouseUp(state)
-    if self.stateless then self.value = self.min or self.vals[1] or 0
-        --M.Msg('stateless at '..self.name)
+    if self.momentary then self.value = self.min or self.vals[1] or 0
+        --M.Msg('momentary at '..self.name)
         self.frame = 0
     elseif self.spinner then
         --M.Msg('spinner at '..self.name)
@@ -169,7 +169,7 @@ function MButton:onMouseUp(state)
 end
 
 function MButton:onMouseDown(state)
-    if self.stateless then
+    if self.momentary then
         self.value = self.max or 1
         self.frame = 1
     end
@@ -227,7 +227,7 @@ local imageFolder = reaper.GetResourcePath().."/Scripts/Images/"
 switches = {}
 function createSwitch(i)
     local switch = GUI.createElement({
-        stateless = false,
+        momentary = false,
         w = 80,h = 40,
         x = i * 80,y = 0,
         color = 'blue',

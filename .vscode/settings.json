@@ -6,10 +6,12 @@
         "GetRGB",
         "GetRGB",
         "RandomColor",
-        "RandomColor"
+        "RandomColor",
+        "MButtonPanel"
     ],
     "Lua.diagnostics.disable": [
         "unused-function",
+        "undefined-global",
         "undefined-global",
         "undefined-global"
     ]
