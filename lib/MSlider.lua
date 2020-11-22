@@ -17,6 +17,7 @@ local Color = require("public.color")
 local Math = require("public.math")
 local Table = require("public.table")
 local Sprite = require("public.sprite")
+local GFX = require("public.gfx")
 local T = Table.T
 local Element = require("gui.element")
 
@@ -55,6 +56,7 @@ function MSlider:init()
         self.sprite:setImage(self.image)
         self.sprite.frame = { w = self.w, h = self.h }
     end
+    self:val(self.value)
     --well, I could imagine implementing an invisible slider someday....
     --if not self.sprite.image then error("MSlider: The specified image was not found") end
 end
@@ -71,6 +73,12 @@ function MSlider:draw()
 
     local x, y, w, h = self.x, self.y, self.w, self.h
     gfx.mode = 0
+
+    if self.color then
+        Color.set(self.color)
+        local round = self.round or 0
+        GFX.roundRect(self.x, self.y, self.w-1, self.h-1, round, true, true)
+    end
 
     self.sprite:draw(x, y, w, h, self.frame, self.frames, self.vertFrames)
       -- Draw the caption
@@ -119,6 +127,11 @@ function MSlider:onDrag(state)
     --M.Msg('newVal - '..newVal)
     self:val(newVal)  
     self:func(table.unpack(self.params))
+end
+
+function MSlider:setColor(color)  
+    self.color = color
+    self:redraw()
 end
 
 function MSlider:getRange() return self.max - self.min end

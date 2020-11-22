@@ -179,7 +179,7 @@ function Plugin:save()
     file:close()
 end
 
-function Plugin.test(name)
+--[[function Plugin.test(name)
     local plug = Plugin.new(name)
     plug.emptyPreset = 'not found'
     plug:setParam('A1','Reverb')
@@ -206,5 +206,5 @@ local plug2 = Plugin.load(plugName)
 print(plug2)
 --print(table.concat(plug:getPresetList(),', '))
 plug2.name = 'test2'
-plug2:save()
+plug2:save()--]]
 

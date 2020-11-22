@@ -179,6 +179,11 @@ end
 function MButton:onDrag()
 end
 
+function MButton:setColor(color)  
+    self.color = color
+    self:redraw()
+end
+
 --[[
     When setting value externally, we will want to use the value in the table
     But internally we will be using the table index.  If it is a one-frame vSprite

@@ -36,7 +36,8 @@ local function createButtons(parent,image,layer,rows, columns, x, y, w, h)
                 name = 'button'..index,
                 type = "MButton",
                 image =  image,
-                func = function(self) parent:select(self.max) parent:onSelect() end,
+                --call the parent function with the updated selection
+                func = function(self) parent:func(parent:select(self.max)) end,
                 params = {"a", "b", "c"}
             })
             layer:addElements(switch)
@@ -94,55 +95,69 @@ function MButtonPanel:getOption(idx)
     if not self.options[idx] then self.options[idx] = {} end
     return self.options[idx]
 end
-function MButtonPanel:setOption(idx,name,val)
+function MButtonPanel:setOption(idx,name,state,func)
     local option = self:getOption(idx)
     option.name = name
-    option.val = val
+    option.state = state
+    option.func = func or nil
 end
+--If there is a function per option, return that. Otherwise use the global function override
+function MButtonPanel:getOptionFunc(idx)  return self:getOption(idx).func or MButtonPanel:func() end
+function MButtonPanel:setOptionFunc(idx,func)   self:getOption(idx).func = func end
 
 function MButtonPanel:getOptionName(idx)  return self:getOption(idx).name or '---' end
-function MButtonPanel:getOptionVal(idx) return  self:getOption(idx).val or 0 end
-function MButtonPanel:setOptionVal(idx,val)   self:getOption(idx).val = val end
 function MButtonPanel:setOptionName(idx,name) self:getOption(idx).name = name end
-function MButtonPanel:zeroOptions() for _,option in pairs(self.options) do  option.val = 0 end self.selection = {} end
 
-function MButtonPanel:MultiSel(set)
-    local sw = self.switches[set]
-    local option,_ = self:getOptionForButton(set)
-    if option.val then --some buttons on the last page may not have an option
-        if option.val == 0 then
-            option.val = 1
-            sw.frame = 1
-            table.insert(self.selection,option.name)
-        else
-            option.val = 0
-            sw.frame = 0
-            table.remove(self.selection,option.name)
-        end
-        sw:redraw()
-    end
-end
+--basically just whether the button is pressed or not...
+function MButtonPanel:getOptionState(idx) return  self:getOption(idx).state or 0 end
+function MButtonPanel:setOptionState(idx,state)   self:getOption(idx).state = state end
 
+--deselect all buttons
+function MButtonPanel:clearSelection() for _,option in pairs(self.options) do  option.state = 0 end self.selection = {} end
+
+--returns a table of functions or option indices
 function MButtonPanel:select(set)
-    if self.multi then self:MultiSel(set)
+    results = {}
+    if self.multi then
+        local sw = self.switches[set]
+        local option,idx = self:getOptionForButton(set)
+        if option.state then --some buttons on the last page may not have an option
+            if option.state == 0 then
+                option.state = 1
+                sw.frame = 1
+                table.insert(self.selection,idx)
+            else
+                option.state = 0
+                sw.frame = 0
+                table.remove(self.selection,idx)
+            end
+            sw:redraw()
+        end
     else
-        self:zeroOptions()
+        self:clearSelection()
         for button = 1,self.rows * self.cols do
-            local option, _ = self:getOptionForButton(button)
+            local option, idx = self:getOptionForButton(button)
             local sw = self.switches[button]
             if sw.max == set then
                 sw.frame = 1
-                option.val = 1
-                table.insert(self.selection, option.name)
+                option.state = 1
+                table.insert(self.selection, idx)
             else sw.frame = 0
             end
             sw:redraw()
         end
     end
+    for _,idx in pairs(self.selection) do
+        local option = self:getOption(idx)
+        table.insert(results,option.func or idx)
+    end
+    return results
 end
 
-function MButtonPanel:onSelect()
-    --override for button actions
+
+function MButtonPanel:func(selectionTable)
+    --do something with the selection table or just return it
+    return selectionTable
 end
 
 function MButtonPanel:setPage(page) --pages start at 1
@@ -155,7 +170,7 @@ function MButtonPanel:setPage(page) --pages start at 1
         local option = self:getOptionForButton(buttonNum)
         sw.caption = option.name or '---'
         if self.pager then self.pager.caption = self.pageNum end
-        if option.val and option.val > 0 then
+        if option.state and option.state > 0 then
             --M.Msg('setting button '..buttonNum..' on')
             sw.frame = 1
         else sw.frame = 0 end
@@ -173,11 +188,10 @@ function MButtonPanel:setColor(color)
     end
 end
 
-
 function MButtonPanel:getOptionForButton(buttonNum)
-    local num = (self.rows * self.cols * (self.pageNum - 1)) + buttonNum
-    local option = self:getOption(num)
-    return option, num
+    local idx = (self.rows * self.cols * (self.pageNum - 1)) + buttonNum
+    local option = self:getOption(idx)
+    return option, idx
 end
 
 --return MButtonPanel

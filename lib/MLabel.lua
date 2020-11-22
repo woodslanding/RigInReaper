@@ -27,14 +27,15 @@ MLabel.defaultProps = {
     shadow = true,
     x = 0,
     y = 0,
-    -- Placeholders; we'll get these at runtime
-    w = 0,
-    h = 0,
-
+    w = 100,
+    h = 40,
+    textW = 0,
+    textH = 0,
     caption = "MLabel",
     font = font,
     color =   "text",
     bg =      "cyan",
+    justify = 0  -- 0 for left, 1 for right
 }
 
 function MLabel:new(props)
@@ -57,14 +58,14 @@ function MLabel:init()
     Font.set(self.font)
 
     local output = self:formatOutput(self.caption)
-    origW = self.w
-    self.w, self.h = gfx.measurestr(output)
+    --self.origW = self.w
+    self.textW, self.textH = gfx.measurestr(output)
 
-    local w, h = self.w + 4, self.h + 4
+    local w, h = self.textW + 4, self.textH + 4
     lenX,lenY = w,h
     if self.vertical then 
-        lenX = math.max(w,h)
-        lenY = lenX
+        self.lenX = math.max(w,h)
+        self.lenY = lenX
     end
 
     -- Because we might be doing this mid-Draw,
@@ -78,7 +79,7 @@ function MLabel:init()
     -- Text + shadow
     gfx.dest = self.buffers[2]
     gfx.setimgdim(self.buffers[2], -1, -1)
-    gfx.setimgdim(self.buffers[2], lenX, lenY)
+    gfx.setimgdim(self.buffers[2], self.lenX, self.lenY)
 
     gfx.x, gfx.y = 2, 2
 
@@ -100,7 +101,10 @@ end
 function MLabel:draw()
     -- Font stuff doesn't work until we definitely have a gfx window
     if self.w == 0 then self:init() end
-    if self.vertical then gfx.x, gfx.y = self.x - 2, self.y + origW - self.w
+
+    --subtract text width to left-justify
+    local just = self.textW * (1 - self.justify)
+    if self.vertical then gfx.x, gfx.y = self.x - 2, self.y + self.w - just
     else gfx.x, gfx.y = self.x - 2, self.y -2 end
 
     gfx.a = 1
@@ -108,15 +112,10 @@ function MLabel:draw()
     -- Text
     if self.vertical then
             gfx.blit(self.buffers[2], 1, math.rad(-90)
-                --The defaults all work, but how to left-justify???
-                --,0,      (lenX/2)-1, lenX, lenX  -- srcx, srcy, srcw, srch,
-                --,self.x, self.y, lenX, lenX  -- destx, desty, destw, desth,
-                --,0, 0
             )
     else gfx.blit(self.buffers[2], 1, 0)
-    gfx.a = 1
+        gfx.a = 1
     end
-
 end
 
 function MLabel:val(newval)
