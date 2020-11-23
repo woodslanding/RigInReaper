@@ -62,7 +62,15 @@ local Element = require("gui.element")
 
 local controlLayer = GUI.createLayer({name = "ctlLayer", z = 2})
 local titleLayer = GUI.createLayer({name = "titleLayer", z = 4})
-local sliderLayer = GUI.createLayer({name = "sliderLayer", z = 6})
+local sliderLayer = GUI.createLayer({name = "sliderLayer", z = 8})
+--button panel layers
+local paramLayer = GUI.createLayer({name = "paramLayer", z = 10})
+local presetLayer = GUI.createLayer({name = "presetLayer", z = 11})
+local bankLayer = GUI.createLayer({name = "bankLayer", z = 12})
+local mapLayer = GUI.createLayer({name = "mapLayer", z = 13})
+local fxSelLayer = GUI.createLayer({name = "fxSelLayer", z = 14})
+local paramTabLayer = GUI.createLayer({name = "paramTabLayer", z = 15})
+
 local fxbkgdLayer = GUI.createLayer({name = "fxbkgdLayer", z = 16})
 local bkgdLayer = GUI.createLayer({name = "bkgdLayer", z = 18})
 local backdropLayer = GUI.createLayer({name = "backdropLayer", z = 20})
@@ -133,7 +141,7 @@ end
 --Store preset as actual text of label...
 function CreatePresets()
     local rows, cols = 5,8
-    local presets = MButtonPanel.new(imageFolder.."Combo.png",sliderLayer,rows,cols,
+    local presets = MButtonPanel.new(imageFolder.."Combo.png",presetLayer,rows,cols,
                                 leftPad,presetY,chanW,comboH,       --button
                                 true, (chanW * cols) + leftPad,presetY,44,72) --spinner
     fakeOptions(presets, 'preset')
@@ -143,15 +151,13 @@ function CreatePresets()
 end
 PresetPanel = CreatePresets()
 function PresetPanel:func() 
-    local name = self:getOptionName(self.selection[1])
-    M.Msg('name = '..name)
+    local name = self:getOptionName(self:getSelection(1))
     IChan().presetName:val(name)
-        --self.opself.selection[1].name) 
 end
 
 function CreateBanks()
     local rows, cols = 5,3
-    local banks = MButtonPanel.new(imageFolder.."Combo.png",titleLayer,rows,cols,
+    local banks = MButtonPanel.new(imageFolder.."Combo.png",bankLayer,rows,cols,
                                 leftPad + (chanW * 8) + 48, presetY,chanW,comboH,       --button
                                 true,4 + (chanW * 8) + leftPad,comboH * 3 + presetY,44,72) --spinner
     fakeOptions(banks,'bank')
@@ -163,10 +169,17 @@ BankPanel = CreateBanks()
 for _,switch in pairs(BankPanel.switches) do
     switch.color = RandomColor()
 end
-function BankPanel:onSelect() 
+function BankPanel:func()
+    local switch = self:getButtonForOption(self:getSelection()[1])
+    PresetPanel:setColor(switch.color)
+    ParamPanel:setColor(switch.color)
+    setChannelColor(switch.color)
+    SetInspectorColor(switch.color)
 end
 ----------------------------------------------------------------------------------------------------------
 ----------------------------------------------PARAMS LAYER------------------------------------------------
+fxColor = RandomColor()
+
 FxLevel = GUI.createElement({
     frames = 72,horizontal = false,
     name = "IfxLevel",
@@ -177,6 +190,7 @@ FxLevel = GUI.createElement({
     func = function(self, a, b, c) end,
 })
 sliderLayer:addElements(FxLevel)
+FxLevel:setColor(fxColor)
 
 Pan = GUI.createElement({
     frames = 97, horizontal = true,
@@ -188,20 +202,18 @@ Pan = GUI.createElement({
     func = function(self) IChan().meterCtls[MTR.PAN]:val(self:val()) end
 
 })
+function Pan:onMouseUp(state)
+    if not self.hasBeenDragging then 
+        self:val(0)                                     
+        IChan().meterCtls[MTR.PAN]:val(0)                                    
+    end   
+    self.hasBeenDragging = false
+end
 sliderLayer:addElements(Pan)
-local fxBgColor = RandomColor()
-local fxBg = GUI.createElement({
-    type = "Frame",
-    name = 'Ifxbg',
-    x = leftPad, y = paramsY - comboH, w = faderW, h = comboH * 5,
-    bg = fxBgColor,
-    color = fxBgColor,
-})
-bkgdLayer:addElements(fxBg)
 
 function CreateFxSel()
     local rows, cols = 4, 1
-    local fxSel = MButtonPanel.new(imageFolder.."Combo.png",controlLayer,rows,cols,
+    local fxSel = MButtonPanel.new(imageFolder.."Combo.png",fxSelLayer,rows,cols,
                                 faderW + leftPad, paramsY, chanW, comboH,     --button
                                 true,faderW + leftPad, paramsY - comboH, chanW, comboH)
     fakeOptions(fxSel,'effect')
@@ -209,17 +221,16 @@ function CreateFxSel()
     fxSel.pager.horizontal = true
     fxSel.pager.image = imageFolder.."HorizSpin.png"
     fxSel:setPage(1)
-    fxSel:setColor(RandomColor(40))
     return fxSel
 end 
+FxSelPanel = CreateFxSel()
+FxSelPanel:setColor(fxColor)
 --------------------------------------------------INSPECTOR----------------------------------
 Inspector = {}
-
 Inspector.icons =  {'ICue', 'ISolo', 'IMuteFX', 'INsSolo',
                     'IHands','Sharp','Natural','Flat',
                     'IEncoders','ISwitches1','ISwitches2','IDrawbars',
                     }
-
 Inspector.ind =    {IND.CUE,IND.SOLO,IND.MUTEFX,IND.NSSOLO,
                     IND.HANDS,IND.SHARP,IND.NATURAL,IND.FLAT,
                     IND.ENCODERS,IND.SW1,IND.SW2,IND.DRAWBARS}
@@ -229,7 +240,7 @@ function CreateInspectorSwitch(xpos,ypos,w,h,index)
     local dest = Inspector.ind[index]  --the channel indicator index for this switch
     --M.Msg('create switch: ',xpos,ypos,w,h,index)
     local switch = GUI.createElement({
-        w = w,h = h, x = xpos, y = ypos,
+        w = w, h = h, x = xpos, y = ypos,
         type = "MButton",
         name = Inspector.icons[index],
         image = imageFolder..Inspector.icons[index]..'.png',
@@ -269,7 +280,7 @@ function CreateInspector()
     return
 end
 CreateInspector()
-function setInspectorColor(color) 
+function SetInspectorColor(color) 
     for i,switch in pairs(Inspector.switches) do
         switch.color = color
         switch:redraw()
@@ -277,10 +288,35 @@ function setInspectorColor(color)
 end
 
 ----------------------------------------------PARAMS----------------------------------------------
+function CreateChannelTitle()
+    local title = GUI.createElement ({
+        type = "MButton",
+        image = imageFolder..'Combo.png',
+        momentary = true,
+        caption = '',
+        name = 'channelTitle',
+        font = {'Calibri', 26,"b"},
+        w = chanW * 3, h = comboH,
+        x = leftPad + (chanW * 4), y = paramsY-comboH,
+        func = function(self) end --show vst
+    })
+    return title
+end
+function CreateParamTabs()
+    local rows, cols = 1,2
+    local tabs = MButtonPanel.new(imageFolder.."Combo.png",paramTabLayer,rows,cols,
+                                    (chanW * 10) + leftPad ,paramsY - comboH ,chanW,comboH)
+                                    
+    tabs:setOption(1, 'PARAMS')
+    tabs:setOption(2, 'CONTROLS')
+    tabs:setColor(GetRGB(0,0,75))
+    tabs:setPage(1)
+    return tabs
+end
 function CreateParams()
     local rows, cols, x, y, w, h = 4, 8
-    local params = MButtonPanel.new(imageFolder.."Combo.png",controlLayer,rows,cols,
-                                (chanW * 3) + leftPad, paramsY, chanW , comboH )     --no spinner
+    local params = MButtonPanel.new(imageFolder.."Combo.png",paramLayer,rows,cols,
+                                (chanW * 4) + leftPad, paramsY, chanW , comboH )     --no spinner
     fakeOptions(params, 'parameter')
     params.multi = true
     --params.pager.image = imageFolder.."Combo.png"
@@ -288,8 +324,60 @@ function CreateParams()
     return params
 end
 
+function CreateControlMap()
+    local rows, cols, x, y, w, h = 4, 8
+    local ctlMap = MButtonPanel.new(imageFolder.."Combo.png",mapLayer,rows,cols,
+                                (chanW * 4) + leftPad, paramsY, chanW , comboH )     --no spinner
+    ctlMap.multi = true
+    ctlMap:setMomentary(true)
+    ctlMap:setPage(1)
+    return ctlMap
+end
+ChannelTitle = CreateChannelTitle()
+sliderLayer:addElements(ChannelTitle)
+ParamTabs = CreateParamTabs()
 ParamPanel = CreateParams()
-FxSelPanel = CreateFxSel()
+ControlMap = CreateControlMap()
+ChanControlMap = {
+    'Select Track','Enable Track','Cue Track','Show VST',
+    'Volume','Expression',' Ped2',' BC',
+    'Notesource','Encoders','Switches1','Switches2',
+    'Pan','Center Pan',' NS Solo',' Ignore Sus',
+    'Octave',' Reset Pitch',' Semi +','Semi-',
+    'Inst Scroll',' Inst Select',' Hands',' Hold',
+    'Preset Scroll',' Preset Select',' Bank +',' Bank -',
+    'FX Volume','Mute FX','FX Chan +','FX Chan -'
+}
+ChanControlHues = {
+    HUES.VIOLET,HUES.VIOLET,HUES.VIOLET,HUES.VIOLET,
+    HUES.AQUA,HUES.AQUA,HUES.AQUA,HUES.AQUA,
+    HUES.FUSCHIA,HUES.LEMON,HUES.PUMPKIN,HUES.YELLOW,
+    HUES.BLUE,HUES.BLUE,HUES.YELLOW,HUES.PUMPKIN,
+    HUES.TEAL,HUES.TEAL,HUES.AQUA,HUES.AQUA,
+    HUES.GREEN,HUES.GREEN,HUES.PURPLE,HUES.VIOLET,
+    HUES.GRASS,HUES.GRASS,HUES.GRASS,HUES.GRASS,
+    HUES.RUST,HUES.RUST,HUES.RUST,HUES.RUST,
+}
+function setChanControl()   
+    ControlMap.options = {}
+    for i = 1,32 do
+        name = ChanControlMap[i]
+        ControlMap:setOption(i,name,0)
+        --M.Msg('option name is '..ControlMap:getOptionName(i))
+        ControlMap.switches[i].color = GetRGB(ChanControlHues[i],100,50)
+    end
+    ControlMap:setPage(1)
+end
+setChanControl()
+function setParamTab(tabNum)
+    M.Msg('tab number = '..tabNum)
+    if tabNum == 1 then paramLayer:show() mapLayer:hide() 
+    else paramLayer:hide() mapLayer:show()
+    end
+end
+function ParamTabs:func() 
+    setParamTab(self:getSelection()[1])
+end
 
 -----------------------------------------------------------------------------------------------------------------------------------
                                           --    CREATE   --
@@ -468,7 +556,7 @@ function CreateChannel(chanNum,color,fxColor)
     })
     sliderLayer:addElements(channel.volume)
     ------------------------------------------------------------------------------------------------------------------
-    ----------------------------------------------------------------BUTTONS-------------------------------------------
+    ---------------------------------------------------------MIXER CONTROLS-------------------------------------------
 
     channel.mixIcons = {'NoSus','Hold','Breath','Ped2','Exp','Enable','Select','NoteSource'}
     channel.mixFuncs = {} 
@@ -504,16 +592,20 @@ function CreateChannel(chanNum,color,fxColor)
 
     return channel
 end
+------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------
 --if no channel specified use the inspector channel
 function setChannelColor(color, chanNum)
     local chan
     if ch then chan = Channels[chanNum] else chan = IChan() end
+    Pan:setColor(color)
     chan.semi:setColor(color)
     chan.octave:setColor(color)
     chan.mixSpinners[1]:setColor(color)
     chan.mixSpinners[2]:setColor(color)
-    chan.meterCtls[1]:setColor(color)
     chan.meterCtls[2]:setColor(color)
+    chan.meterCtls[3]:setColor(color)
     chan.volume:setColor(color)
     for _,ctl in pairs(chan.mixCtls) do
         ctl:setColor(color)
@@ -524,6 +616,8 @@ function setDetailChannel(chanNum)
     Current = chanNum
      M.Msg("IN SET DETAIL,SLOT: "..chanNum)
     local chan = IChan()
+    ChannelTitle.caption = chan.presetName.caption
+    ChannelTitle:redraw()
     for i = 1,ChannelCount do
         Channels[i].mixCtls[MIX.SELECT]:val(0)
         Channels[i].mixCtls[MIX.SELECT]:setColor('black')
@@ -538,7 +632,8 @@ function setDetailChannel(chanNum)
     PresetPanel:setColor(chan.color)
     ParamPanel:setColor(chan.color)
     Pan:setColor(chan.color)
-    setInspectorColor(chan.color)
+    Pan:val(chan.meterCtls[1]:val())
+    SetInspectorColor(chan.color)
     for index,switch in pairs(Inspector.switches) do
         if not switch.momentary then  --don't update momentary switches!
             M.Msg('index = '..index)
@@ -570,6 +665,7 @@ local window = GUI.createWindow({
   ------------------------------------
 
     window:addLayers(sliderLayer,titleLayer,bkgdLayer,fxbkgdLayer,controlLayer,backdropLayer)
+    window:addLayers(bankLayer,presetLayer,paramLayer,mapLayer,fxSelLayer,paramTabLayer)
     window:open()
     setDetailChannel(10)
     GUI.Main()

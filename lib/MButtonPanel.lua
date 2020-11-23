@@ -31,13 +31,14 @@ local function createButtons(parent,image,layer,rows, columns, x, y, w, h)
                 loop = true,
                 frames = 2,
                 caption = '',
-                min = 0, max = index,
+                min = 0, max = 1,
                 value = 0,
                 name = 'button'..index,
                 type = "MButton",
                 image =  image,
+                index = index,
                 --call the parent function with the updated selection
-                func = function(self) parent:func(parent:select(self.max)) end,
+                func = function(self) parent:select(self.index) parent:func() end,
                 params = {"a", "b", "c"}
             })
             layer:addElements(switch)
@@ -82,13 +83,20 @@ function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,usePager,pX,pY,pW,pH)
     self.rows = rows   self.cols = cols
     self.color = 'black'
     self.options = {}
-    self.selection = {}
     self.pageCount = 4 self.pageNum = 1
     self.switches = createButtons(self,image,layer,self.rows,self.cols,self.x,self.y,self.w,self.h)
     if usePager then
         self.pager = createPager(self,layer,pX,pY,pW,pH)
     end
     return self
+end
+
+function MButtonPanel:setMomentary(val)
+    for buttonNum = 1, self.rows * self.cols do
+        local sw = self.switches[buttonNum]
+        sw.momentary = val
+    end
+
 end
 
 function MButtonPanel:getOption(idx)
@@ -113,11 +121,10 @@ function MButtonPanel:getOptionState(idx) return  self:getOption(idx).state or 0
 function MButtonPanel:setOptionState(idx,state)   self:getOption(idx).state = state end
 
 --deselect all buttons
-function MButtonPanel:clearSelection() for _,option in pairs(self.options) do  option.state = 0 end self.selection = {} end
+function MButtonPanel:clearSelection() for _,option in pairs(self.options) do  option.state = 0 end end
 
 --returns a table of functions or option indices
 function MButtonPanel:select(set)
-    results = {}
     if self.multi then
         local sw = self.switches[set]
         local option,idx = self:getOptionForButton(set)
@@ -125,11 +132,9 @@ function MButtonPanel:select(set)
             if option.state == 0 then
                 option.state = 1
                 sw.frame = 1
-                table.insert(self.selection,idx)
             else
                 option.state = 0
-                sw.frame = 0
-                table.remove(self.selection,idx)
+                sw.frame = 0                         
             end
             sw:redraw()
         end
@@ -138,30 +143,32 @@ function MButtonPanel:select(set)
         for button = 1,self.rows * self.cols do
             local option, idx = self:getOptionForButton(button)
             local sw = self.switches[button]
-            if sw.max == set then
+            if sw.index == set then
                 sw.frame = 1
                 option.state = 1
-                table.insert(self.selection, idx)
             else sw.frame = 0
             end
             sw:redraw()
         end
     end
-    for _,idx in pairs(self.selection) do
-        local option = self:getOption(idx)
-        table.insert(results,option.func or idx)
-    end
-    return results
+    return self:getSelection()
 end
-
-
-function MButtonPanel:func(selectionTable)
+--if you don't select an index you get a table of indices
+function MButtonPanel:getSelection(index)
+    local indices = {}
+    for idx,option in pairs(self.options) do
+        if option.state and option.state > 0 then table.insert(indices,idx) end       
+    end
+    if index then return indices[index] else return indices end
+end
+function MButtonPanel:func()
     --do something with the selection table or just return it
-    return selectionTable
+    return self:getSelection()
 end
 
 function MButtonPanel:setPage(page) --pages start at 1
     self.pageCount = math.ceil(#self.options/(self.rows * self.cols))
+    M.Msg('option count = '..#self.options)
     M.Msg('pageCount = '..self.pageCount)
     if self.pager then self.pager.max = self.pageCount end
     if page > self.pageCount then self.pageNum = self.pageCount else self.pageNum = page end
@@ -187,6 +194,12 @@ function MButtonPanel:setColor(color)
         sw:redraw()
     end
 end
+--breaks for the last button!
+function MButtonPanel:getButtonForOption(idx)
+    local btnCount = self.rows*self.cols
+    return self.switches[idx % (btnCount-1)]
+end
+
 
 function MButtonPanel:getOptionForButton(buttonNum)
     local idx = (self.rows * self.cols * (self.pageNum - 1)) + buttonNum

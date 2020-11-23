@@ -21,11 +21,6 @@ local GFX = require("public.gfx")
 local T = Table.T
 local Element = require("gui.element")
 
-
-local hasBeenDragging = false
-local dragStartX, dragStartY
-local origVal = 0
-
 local MSlider = Element:new()
 MSlider.__index = MSlider
 MSlider.defaultProps = {
@@ -57,6 +52,10 @@ function MSlider:init()
         self.sprite.frame = { w = self.w, h = self.h }
     end
     self:val(self.value)
+    self.hasBeenDragging = false
+    self.dragStartX = 0
+    self.dragStartY = 0
+    self.origVal = 0
     --well, I could imagine implementing an invisible slider someday....
     --if not self.sprite.image then error("MSlider: The specified image was not found") end
 end
@@ -97,14 +96,14 @@ function MSlider:draw()
 end
 
 function MSlider:onMouseDown(state)
-    dragStartX = state.mouse.x
-    dragStartY = state.mouse.y
-    origVal = self.value
+    self.dragStartX = state.mouse.x
+    self.dragStartY = state.mouse.y
+    self.origVal = self.value
 end
 --A drag works normally, but you can touch the fader to immediately go to a specific value
 --Todo:  fade to new value?
 function MSlider:onMouseUp(state)
-    if  not hasBeenDragging  then
+    if  not self.hasBeenDragging  then
         --move slider to mouse position
         local pct
         if self.horizontal then
@@ -114,16 +113,16 @@ function MSlider:onMouseUp(state)
         self:val(self.min + (pct * self:getRange()))
         self:func(table.unpack(self.params))
     end
-    hasBeenDragging = false
+    self.hasBeenDragging = false
 end
 
 -- Will continue being called even if you drag outside the element
 function MSlider:onDrag(state)
-    hasBeenDragging = true
+    self.hasBeenDragging = true
     local pixval = self:getRange()/self:throw()
     local delta
-    if self.horizontal then delta = state.mouse.x - dragStartX else delta = dragStartY - state.mouse.y end
-    local newVal = (delta * pixval) + origVal
+    if self.horizontal then delta = state.mouse.x - self.dragStartX else delta = self.dragStartY - state.mouse.y end
+    local newVal = (delta * pixval) + self.origVal
     --M.Msg('newVal - '..newVal)
     self:val(newVal)  
     self:func(table.unpack(self.params))
