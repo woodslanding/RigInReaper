@@ -114,10 +114,10 @@ function Bank:getParam(control)
 end
 
 function GetPresetStr(presets)
-    M.Msg('PRESETS UNSORTED = \n'..Table.stringify(presets))
+    --M.Msg('PRESETS UNSORTED = '..Table.stringify(presets))
     local retStr = '            presets = {'
     local sorted = TableSort(Table.invert(presets))
-    M.Msg('PRESETS SORTED = \n'..Table.stringify(sorted))
+    --M.Msg('PRESETS SORTED = '..Table.stringify(sorted))
     for index,val in pairs(sorted) do
         retStr = retStr..Esc(val)..', '
     end
@@ -161,12 +161,12 @@ end
 
 function Plugin:getPresetString()
     local retStr = ''
-    M.Msg('GETTING MASTER PRESET LIST: presets unsorted'..Table.stringify(self.presets))
+    --M.Msg('GETTING MASTER PRESET LIST: presets unsorted'..Table.stringify(self.presets))
     local sorted = TableSort(Table.invert(self.presets))
     for i,val in ipairs(sorted) do
         retStr = retStr..Esc(val)..', '
     end
-    M.Msg('MASTER:Presets sorted = '..retStr)
+    --M.Msg('MASTER:Presets sorted = '..retStr)
     return CleanComma(retStr)
 end
 
@@ -182,7 +182,7 @@ end
 
 function Plugin:getPresetList()
     local sorted = ArraySort(self.presets)
-    M.Msg('PLUGIN GETTING PRESETS = \n'..Table.stringify(sorted))
+    --M.Msg('PLUGIN GETTING PRESETS = \n'..Table.stringify(sorted))
     return sorted
 end
 
@@ -197,10 +197,13 @@ function Plugin:addPreset(preset)
     end
 end
 
-function Plugin:setPresetsForBank(bankName,presetList)
+function Plugin:setPresetsForBank(bankName,presets)
+    M.Msg('bank name = '..bankName)
     self.banks[bankName].presets = {}
-    for i,name in ipairs(presetList) do
-        self.banks[bankName]:addPreset(name)
+    M.Msg('setting presets for bank:'..Table.stringify(presets))
+    for i,option in pairs(presets) do
+        self.banks[bankName]:addPreset(self.presets[i])
+        M.Msg('adding preset: '..self.presets[i])
     end
 end
 

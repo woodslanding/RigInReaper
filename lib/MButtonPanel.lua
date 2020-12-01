@@ -160,12 +160,12 @@ function MButtonPanel:getOption(idx)
     if self.options[idx] then return self.options[idx] else return nil end
 end
 
-function MButtonPanel:getSelectedOption()
+--[[function MButtonPanel:getSelectedOption()
     if type(self:getSelection()) ~= 'table' then
         return self:getOption(self:getSelection())
     else M.Msg("can't get selected option in multi mode")
     end
-end
+end--]]
 
 
 function MButtonPanel:clearSelection()
@@ -176,26 +176,37 @@ function MButtonPanel:clearSelection()
         self.controls[i]:val(0)
     end
 end
+--defaults to getting the names, but can get any option field
+function MButtonPanel:getSelectionData(field)
+    M.Msg('selection = '..TStr(self.selection))
+    local data = {}
+    for i,option in pairs(self.selection) do
+        if not field then data[i] = option.name
+        else data[i] = option[field] end
+        M.Msg('getting selection data '..data[i])
+    end
+    return data
+end--]]
 
---returns a table of functions or option indices
-function MButtonPanel:select(set)
+--returns a table of options
+function MButtonPanel:select(set,doNotRun)
     if set then
         local sw = self:getButtonForOption(set)
         --M.Msg('found button '..sw.name)
         local option = self.options[set]
         if option then   --some buttons may not have options...
-            --in multi mode we just add or subtract from the selection.  Doing something with the selection is separate
+            --in multi mode we generally just add or subtract from the selection.  If we want to do something, set 'run' to true
             if self.multi then   --in multimode we ignore everything in options except state
                 if option.state == 0 then
                     option.state = 1
                     sw:val(option.state)
-                    option:func()
-                    self.selection[set] = set
+                    self.selection[set] = option
+                    if not doNotRun then option:func() end
                 else
                     option.state = 0
                     sw:val(option.state)
-                    option:func()
                     self.selection[set] = nil
+                    if not doNotRun then option:func() end
                 end
 
             elseif not self.multi then --in single-select mode, we can run the action here...
@@ -206,7 +217,7 @@ function MButtonPanel:select(set)
                     if option and set and sw.option.index == set then
                         sw.frame = 1
                         option.state = 1
-                        self.selection = set
+                        self.selection = option
                         --M.Msg(self.name..': options: \n:'..Table.stringify(self.options))
                         option:func()
                     else sw.frame = 0

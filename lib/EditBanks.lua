@@ -72,14 +72,16 @@ Options = {
         {name = 'presets',rows = 8, cols = 4, icon = 'ComboRev',func = function(self)
             --M.Msg('self = \n'..Table.stringify(self))
             if MODE.BANK then
-                Bank.presets = {}
-                for i in ipairs(PresetPanel:getSelection()) do
-                    Bank:addPreset(PresetPanel.options[i].name)
-                    M.Msg('adding preset:'..options[i].name)
-                end
-
-                --Plug:setPresetsForBank(PresetPanel:getSelection())
-                Plug:save()
+                --Bank.presets = {}
+                --for i in ipairs(PresetPanel:getSelection()) do
+                    --Bank:addPreset(PresetPanel.options[i].name)
+                    --M.Msg('adding preset:'..options[i].name)
+               -- end
+               local presetNums = PresetPanel:getSelection()
+               M.Msg('selection names = '..Table.stringify(presetNums))
+                Plug:setPresetsForBank(Bank.name,presetNums)
+                --Plug:save()
+                M.Msg('SAVE Plug = \n',Plug)
             end
 
 
@@ -94,9 +96,9 @@ Options = {
                 for i, option in ipairs(PresetPanel.options) do
                     for _, name in ipairs(Bank.presets) do
                         if name == option.name then
-                            --M.Msg('adding preset '..name..' for option: '..i)
+                            M.Msg('adding preset '..name..' for option: '..i)
                             local button = PresetPanel:getButtonForOption(i)
-                            PresetPanel:select(button.index)
+                            PresetPanel:select(button.index,true)
                         end
                     end
                 end--]]--
@@ -104,7 +106,7 @@ Options = {
         end },
         {name = 'VSTs',rows = 8, cols = 2, icon = 'ComboRev',func = function()
              --self is a button, not a panel.
-            Plug = Plugin.load(VSTPanel:getSelectedOption().name)
+            Plug = Plugin.load(VSTPanel:getSelection().name)
             Banks = Plug:getBankList()
             BankPanel.options = {}
             BankPanel:setColor('gray',true)
@@ -261,12 +263,12 @@ for i = 1, filecount do
 end
 Options.panels[3].panel:setPage(1)
 
---window:open()
+window:open()
 
---GUI.Main()
+GUI.Main()
 
 
-function Plugin.test(name)
+--[[function Plugin.test(name)
     local plug = Plugin.new(name)
     plug.emptyPreset = 'not found'
     plug:setParam('A1','Reverb')
@@ -286,7 +288,7 @@ function Plugin.test(name)
     return plug
 end
 
-local plugName ='test'
+local plugName =''
 local plug = Plugin.test(plugName)
 M.Msg(tostring(plug))
 plug:save()

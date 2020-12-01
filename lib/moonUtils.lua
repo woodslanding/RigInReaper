@@ -4,9 +4,9 @@ local hsluv = require "hsluv"
 
 DBG = false
 
---local M = require("public.message")
---local Table = require("public.table")
---local T = Table.T
+local M = require("public.message")
+local Table = require("public.table")
+local T = Table.T
 
 IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
 BANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Banks/"
@@ -114,6 +114,8 @@ local previousNotesourceSetting = 0
 function Esc(str) return ("%q"):format(str) end
 
 function CleanComma(s)  return s:sub(1, string.len(s) -2) end
+
+function TStr(table) return '\n'..Table.stringify(table) end
 
 function GetFilename(file)
     local file_name = file:match("[^/]*.lua$")
