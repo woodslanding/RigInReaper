@@ -4,7 +4,12 @@ local hsluv = require "hsluv"
 
 DBG = false
 
+--local M = require("public.message")
+--local Table = require("public.table")
+--local T = Table.T
+
 IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
+BANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Banks/"
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
@@ -58,7 +63,6 @@ TRACKS = {  OUT_MASTER = 1,
 FIRST_INST_TRACK = 22
 
 INPUT_DEVICE_NAME = 'HD Audio Mic input 1'
-FX_PREFIX = 'MT-'
 --midi vol Settings
 MIDIVOL = {}
     MIDIVOL.NAME = "JS: Volume Adjustment"
@@ -111,6 +115,11 @@ function Esc(str) return ("%q"):format(str) end
 
 function CleanComma(s)  return s:sub(1, string.len(s) -2) end
 
+function GetFilename(file)
+    local file_name = file:match("[^/]*.lua$")
+    return file_name:sub(0, #file_name - 4)
+end
+
 function Fullscreen(windowTitle)
     local win = reaper.JS_Window_Find(windowTitle, true)
     local style = reaper.JS_Window_GetLong(win, 'STYLE')
@@ -121,12 +130,29 @@ function Fullscreen(windowTitle)
     reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 end
 
+function ArraySort(t)
+    local sorted = {}
+    for i in ipairs(t) do table.insert(sorted,t[i]) end
+    table.sort(sorted)
+    return sorted
+end
+
 function TableSort(t)
     local sorted = {}
     for n in pairs(t) do table.insert(sorted, n) end
     table.sort(sorted)
     return sorted
 end
+
+function TableContains(table, element)
+    for _, value in pairs(table) do
+      if value == element then
+        return true
+      end
+    end
+    return false
+  end
+
 
 function Msg(string)
     return reaper.ShowConsoleMsg(string..'\n')
@@ -274,7 +300,13 @@ function GetNumberOfTrack(mediatrack)
     end
 end
 
-function RemoveFX(tracknum)
+function GetFXName(tracknum,slot)
+    local mediatrack = GetTrack(tracknum)
+    local _,name = reaper.BR_TrackFX_GetFXModuleName(mediatrack,slot)
+    return name
+end
+
+function ClearFX(tracknum)
     local trk = GetTrack(tracknum)
     local count = reaper.TrackFX_GetCount(trk)
     if count > 0 then
@@ -881,20 +913,18 @@ function SetRPLBank(tracknum,bankname) end --filter the lIst of presets for thos
     ------#######################################################################################################
     ------------------------------------------------ FXCHAIN LOADING ---------------------------------------------
 
-function LoadInstrument(tracknum,chainname)
-    --need to give these chains the exact same name as in the reabank file, minus the fx prefix.
-    --then we can use '//*' data in that file to e.g. Set the param numbers for all the BH controls
-    --also to Set the track color
+function LoadInstrument(tracknum,vstname)
+    --all needs to be reworked for mbf format
     reaper.PreventUIRefresh(1)
-    local path = FX_PREFIX..chainname..'.RfxChain'
-        --reaper.GetResourcePath('')..'/FXChains/'..chainname..'.RfxChain'
+    local path = BANK_FOLDER..vstname..'.lua'
     Dbg('loadInstrument: path=',path)
-    RemoveFX(tracknum)
+    ClearFX(tracknum)
     local trk = GetTrack(tracknum)
     reaper.TrackFX_AddByName(trk, path, false, -1)
     ConfigureTrack(tracknum)
-    Dbg('tracknum=',tracknum,'chain=',chainname)
-    TrackName(tracknum,chainname)
+    Dbg('tracknum=',tracknum,'chain=',vstname)
+    --should actually be bank name
+    TrackName(tracknum,vstname)
     reaper.PreventUIRefresh(-1)
 end
 
@@ -902,7 +932,7 @@ function SaveInstrument(tracknum)
     ClearRouting(tracknum)
     local name = GetInstName(tracknum)
     Dbg('saveInstrument: name=',name)
-    
+
 end
 
 function GetInstName()

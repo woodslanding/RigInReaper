@@ -56,12 +56,13 @@ function MButton:new(props)
 end
 
 function MButton:init()
+    --M.Msg('Calling init for button '..self.name)
     self.sprite = Sprite:new({})
     if self.image then
         self.sprite:setImage(self.image,self.vertFrames)
         self.sprite.frame = { w = self.w, h = self.h }
     end
-    --if not self.vSprite.image then error("Mspinner: The specified image was not found") end
+    --if not self.vSprite.image then error("The specified image was not found") end
     self:val(self.value)
 end
 --this keeps the component from responding to the mouse
@@ -104,11 +105,13 @@ function MButton:setFrame(frame)
     self:redraw()
 end
 
-function MButton:increment(incVal,wrapping)
+
+function MButton:increment(incVal)
+    if incVal == 0 then return end
     local usingRange = self.min ~= nil and self.max ~= nil
-    self:m('calling inc =,'..incVal..' using range = '..tostring(usingRange))
+    --self:m('calling inc =,'..incVal..' using range = '..tostring(usingRange))
     if self.vals and (#self.vals ~= self.frames) then M.Msg('#vals must = frames')
-    elseif not wrapping then
+    elseif not self.wrap then
         if (self.vals and self.value == self.vals[1] and incVal < 0)
             or (self.vals and self.value < self.vals[#self.vals] and incVal > 0)
             or (usingRange and self.value == self.min and incVal < 0)
@@ -127,7 +130,7 @@ function MButton:increment(incVal,wrapping)
             self.value = 1
             self.frame = 0
         elseif incVal < 0 then
-            self.value = self.value - 1     self:setFrame(self.frame - 1) 
+            self.value = self.value - 1     self:setFrame(self.frame - 1)
             self:m('setting frame to'..self.frame - 1)
         else self.value = self.value + 1    self:setFrame(self.frame + 1)
             self:m('setting frame to'..self.frame + 1)
@@ -150,17 +153,14 @@ function MButton:increment(incVal,wrapping)
 end
 
 function MButton:onMouseUp(state)
-    if self.momentary then self.value = self.min or self.vals[1] or 0
-        --M.Msg('momentary at '..self.name)
+    if self.momentary and not self.spinner then self.value = self.min or self.vals[1] or 0
         self.frame = 0
     elseif self.spinner then
-        --M.Msg('spinner at '..self.name)
-        local midX = self.x + (self.w/2)
-        local midY = self.y + (self.h/2)
-        local up = ( self.horizontal and state.mouse.x > midX ) or ( not self.horizontal and state.mouse.y < midY )
-        if up then self:increment(self.inc or 1, self.wrap) else self:increment(0 - self.inc or -1, self.wrap) end
-    elseif not self.spinner then self:increment(self.inc, true)
-    else M.Msg('onMouseup confusion at: '..self.name)  --should not happen
+        if self.momentary then self.frame = 0
+        elseif self:spinUp() then self:increment(self.inc or 1)
+        else self:increment(0 - self.inc or -1)
+        end
+    else self:increment(self.inc, true)
     end
     if self:containsPoint(state.mouse.x, state.mouse.y) then
         self:func(table.unpack(self.params))
@@ -170,16 +170,26 @@ end
 
 function MButton:onMouseDown(state)
     if self.momentary then
-        self.value = self.max or 1
-        self.frame = 1
+        if self.spinner then
+            if self:spinUp(state) then self:val(1) else self:val(-1) end
+            self.frame = self.frames - 1
+        else
+            self.value = self.max or 1
+            self.frame = self.frames - 1
+        end
     end
 end
 
+function MButton:spinUp(state)
+    local midX = self.x + (self.w/2)
+    local midY = self.y + (self.h/2)
+    return (self.horizontal and state.mouse.x > midX ) or ( not self.horizontal and state.mouse.y < midY)
+end
 -- Not used
 function MButton:onDrag()
 end
 
-function MButton:setColor(color)  
+function MButton:setColor(color)
     self.color = color
     self:redraw()
 end
@@ -193,7 +203,7 @@ end
 ]]
 
 function MButton:val(set)
-    --if set then M.Msg('calling val of '..set..' for '..self.name)end
+    --if set then M.Msg('setting val to '..set..' for '..self.name)end
     if not set and self.vals then return self.vals[self.value]
     elseif not set and self.min and self.max then return self.value
     elseif self.vals then
@@ -205,8 +215,8 @@ function MButton:val(set)
                      self.caption = self.captions[self.frame]
                 end
                 return true
-            end           
-        end      
+            end
+        end
         M.Msg("can't set value of control to: "..set)
     elseif self.min and self.max then
         if set >= self.min and set <= self.max then
@@ -220,11 +230,16 @@ function MButton:val(set)
 end
 
 function MButton:m(text)
-    M.Msg(self.name..': '..text)
+    --M.Msg(self.name..': '..text)
 end
 
 function MButton:__tostring()
     return self.name..' = '..self:val()
+end
+
+function MButton:setCaption(text)
+    self.caption = text
+    self:redraw()
 end
 
 function MButton:SaveState(path)
@@ -234,7 +249,7 @@ end
 function MButton:LoadState(path)
     local f = assert(loadfile('c:\\lua\\'..filename..'.lua'))
     local data = f()
-    
+
     return self
 end
 

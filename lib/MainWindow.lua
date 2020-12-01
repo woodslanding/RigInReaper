@@ -86,19 +86,20 @@ local imageFolder = IMAGE_FOLDER  --from MoonUtilities
 
 local leftPad = 4
 
+local comboH = 36
 local btnH = 36
 local meterH = 12
 local chanH = (btnH * 6)
-local comboH = 36
+
 
 local chanW = 96
 local faderW = 52
 local leftW = 52
 local rightW = 44
 
-local presetY = 16
-local paramsY = 240
-local fxSendY = 390
+local presetY = 40
+local paramsY = 224 + presetY
+local fxSendY = paramsY + 150
 local volumeY = fxSendY + (btnH * 4) + meterH
 local insX = faderW + leftPad + chanW + 8
 local insW = (chanW + faderW) / 2
@@ -108,7 +109,7 @@ INS = {EMPTY = 1,SOLO = 2,MUTEFX = 3,HANDS = 4, SHARP = 6, NATURAL = 7, FLAT = 8
 MTR = {PAN = 1, L_METER = 2, R_METER = 3}
 IND = {CUE = 1, SOLO = 2, MUTEFX = 3, NSSOLO = 4, EMPTY = 5, HANDS = 6, ENCODERS = 8, SW1 = 9, SW2 = 10, DRAWBARS = 11}
 MIX = {NOSUS = 1, HOLD = 2, BREATH = 3, PED2 = 4, EXP = 5, ENABLE = 6, SELECT = 7, SOURCE = 8}
-  
+
 function IChan() return Channels[Current] end
 
 local function fakeOptions(panel, string)
@@ -137,6 +138,14 @@ function SetBackdrop()
     backdropLayer:addElements(bkdp)
 end
 ---------------------------------------------------------------------------------------------------------
+--------------------------------------------TITLE LAYER--------------------------------------------------
+function createLeftButtons()   --presets,controlPanel,bankEdit,
+end
+function createTitle()
+end
+function createRightButtons()  --memory?  cpu?
+end
+---------------------------------------------------------------------------------------------------------
 --------------------------------------------PRESET LAYER ------------------------------------------------
 --Store preset as actual text of label...
 function CreatePresets()
@@ -150,8 +159,8 @@ function CreatePresets()
     return presets
 end
 PresetPanel = CreatePresets()
-function PresetPanel:func() 
-    local name = self:getOptionName(self:getSelection(1))
+function PresetPanel:func()
+    local name = self:getOptionName(self:getSelection())
     IChan().presetName:val(name)
 end
 
@@ -162,6 +171,7 @@ function CreateBanks()
                                 true,4 + (chanW * 8) + leftPad,comboH * 3 + presetY,44,72) --spinner
     fakeOptions(banks,'bank')
     banks.pager.image = imageFolder.."Spinner.png"
+    banks.pager.color = GetRGB(0,0,60)
     banks:setPage(1)
     return banks
 end
@@ -170,7 +180,7 @@ for _,switch in pairs(BankPanel.switches) do
     switch.color = RandomColor()
 end
 function BankPanel:func()
-    local switch = self:getButtonForOption(self:getSelection()[1])
+    local switch = self:getButtonForOption(self:getSelection())
     PresetPanel:setColor(switch.color)
     ParamPanel:setColor(switch.color)
     setChannelColor(switch.color)
@@ -203,10 +213,10 @@ Pan = GUI.createElement({
 
 })
 function Pan:onMouseUp(state)
-    if not self.hasBeenDragging then 
-        self:val(0)                                     
-        IChan().meterCtls[MTR.PAN]:val(0)                                    
-    end   
+    if not self.hasBeenDragging then
+        self:val(0)
+        IChan().meterCtls[MTR.PAN]:val(0)
+    end
     self.hasBeenDragging = false
 end
 sliderLayer:addElements(Pan)
@@ -222,7 +232,7 @@ function CreateFxSel()
     fxSel.pager.image = imageFolder.."HorizSpin.png"
     fxSel:setPage(1)
     return fxSel
-end 
+end
 FxSelPanel = CreateFxSel()
 FxSelPanel:setColor(fxColor)
 --------------------------------------------------INSPECTOR----------------------------------
@@ -255,7 +265,7 @@ function CreateInspectorSwitch(xpos,ypos,w,h,index)
     Inspector.switches[index] = switch
 end
 
-function CreateInspector() 
+function CreateInspector()
     local x,y,w,h = insX, paramsY, insW, comboH
     local rows,columns =  4,3
     local xpos, ypos
@@ -270,17 +280,17 @@ function CreateInspector()
     end
     Inspector.switches[INS.FLAT].momentary = true
     Inspector.switches[INS.FLAT].func = function(self) IChan().semi:increment(-1,false)  end
-    Inspector.switches[INS.SHARP].momentary = true  
+    Inspector.switches[INS.SHARP].momentary = true
     Inspector.switches[INS.SHARP].func = function(self) IChan().semi:increment(1,false)  end
     Inspector.switches[INS.NATURAL].momentary = true
-    Inspector.switches[INS.NATURAL].func = function(self) IChan().semi:val(0)  
+    Inspector.switches[INS.NATURAL].func = function(self) IChan().semi:val(0)
                                                           IChan().octave:val(0)
                                                           IChan().mixSpinners[2]:val(0)
                                                           IChan().mixSpinners[2].caption = '' end
     return
 end
 CreateInspector()
-function SetInspectorColor(color) 
+function SetInspectorColor(color)
     for i,switch in pairs(Inspector.switches) do
         switch.color = color
         switch:redraw()
@@ -291,11 +301,11 @@ end
 function CreateChannelTitle()
     local title = GUI.createElement ({
         type = "MButton",
-        image = imageFolder..'Combo.png',
         momentary = true,
         caption = '',
         name = 'channelTitle',
-        font = {'Calibri', 26,"b"},
+        textColor = 'black',
+        font = {'Calibri', 32,"b"},
         w = chanW * 3, h = comboH,
         x = leftPad + (chanW * 4), y = paramsY-comboH,
         func = function(self) end --show vst
@@ -306,7 +316,7 @@ function CreateParamTabs()
     local rows, cols = 1,2
     local tabs = MButtonPanel.new(imageFolder.."Combo.png",paramTabLayer,rows,cols,
                                     (chanW * 10) + leftPad ,paramsY - comboH ,chanW,comboH)
-                                    
+
     tabs:setOption(1, 'PARAMS')
     tabs:setOption(2, 'CONTROLS')
     tabs:setColor(GetRGB(0,0,75))
@@ -358,7 +368,7 @@ ChanControlHues = {
     HUES.GRASS,HUES.GRASS,HUES.GRASS,HUES.GRASS,
     HUES.RUST,HUES.RUST,HUES.RUST,HUES.RUST,
 }
-function setChanControl()   
+function setChanControl()
     ControlMap.options = {}
     for i = 1,32 do
         name = ChanControlMap[i]
@@ -371,11 +381,11 @@ end
 setChanControl()
 function setParamTab(tabNum)
     M.Msg('tab number = '..tabNum)
-    if tabNum == 1 then paramLayer:show() mapLayer:hide() 
+    if tabNum == 1 then paramLayer:show() mapLayer:hide()
     else paramLayer:hide() mapLayer:show()
     end
 end
-function ParamTabs:func() 
+function ParamTabs:func()
     setParamTab(self:getSelection()[1])
 end
 
@@ -434,7 +444,7 @@ function CreateChannel(chanNum,color,fxColor)
         color = color
     })
     controlLayer:addElements(channel.semi)
-    
+
 
     channel.octave = GUI.createElement({
         name = 'oct'..chanNum,
@@ -457,22 +467,22 @@ function CreateChannel(chanNum,color,fxColor)
     channel.mixSpinIcons = {'Spinner','Spinner'}
     channel.spinFuncs = {}
     channel.spinFuncs[2] = function(self)
-                                channel.octave:val(self:val())
-                                if self.value ~= 0 then self.caption = self.value else self.caption = '' end
+        M.Msg('increment = '..self:val())
+                                channel.octave:increment(self:val())
+                                if channel.octave:val() ~= 0 then self.caption = channel.octave:val() else self.caption = '' end
                             end
     channel.mixSpinners = {}
     for slotNum,icon in pairs(channel.mixSpinIcons) do
         channel.mixSpinners[slotNum] = GUI.createElement({
             name = slotNum..icon..chanNum,
             type = "MButton",
+            momentary = true,
             spinner = true, wrap = false,
             labelY = -.02,
             w = 44, h = 72,
             x = xpos + leftW, y = (btnH * (slotNum - 1) * 2) + fxSendY,
-            color = nil,
             frames = 1,
-            min = -5,max = 5,
-            value= 0,
+            min = -1,max = 1,inc = 1, --for now need all these for stateless spinner...
             image = imageFolder..icon..'.png',
             func = channel.spinFuncs[slotNum],
             color = color
@@ -520,7 +530,7 @@ function CreateChannel(chanNum,color,fxColor)
             channel.indicators[slotNum] = GUI.createElement({
                 type = "MButton", name = slotNum..icon..chanNum,
                 x = xpos + indX, y = (indH * (slotNum - 1)) + volumeY + 10, w = indW, h = indH,
-                displayOnly = false, image = imageFolder..icon..'.png',
+                displayOnly = true, image = imageFolder..icon..'.png',
                 min = 0, max = 1, value = 0, frames = 2,
             })
             controlLayer:addElements(channel.indicators[slotNum])
@@ -536,7 +546,7 @@ function CreateChannel(chanNum,color,fxColor)
         caption = testNames[chanNum],
         name = 'instLabel'..chanNum,
         w = Scale(150), h = Scale(30),
-        x = xpos + 4, y = volumeY + 72,
+        x = xpos + 2, y = volumeY + 72,
     })
     titleLayer:addElements(channel.presetName)
 
@@ -559,7 +569,7 @@ function CreateChannel(chanNum,color,fxColor)
     ---------------------------------------------------------MIXER CONTROLS-------------------------------------------
 
     channel.mixIcons = {'NoSus','Hold','Breath','Ped2','Exp','Enable','Select','NoteSource'}
-    channel.mixFuncs = {} 
+    channel.mixFuncs = {}
     --Channel select
     channel.mixFuncs[MIX.SELECT] = function(self) setDetailChannel(self.chan) end
     channel.mixCtls = {}
@@ -600,12 +610,13 @@ function setChannelColor(color, chanNum)
     local chan
     if ch then chan = Channels[chanNum] else chan = IChan() end
     Pan:setColor(color)
+    ChannelTitle:setColor(color)
     chan.semi:setColor(color)
     chan.octave:setColor(color)
     chan.mixSpinners[1]:setColor(color)
     chan.mixSpinners[2]:setColor(color)
-    chan.meterCtls[2]:setColor(color)
-    chan.meterCtls[3]:setColor(color)
+    chan.meterCtls[MTR.L_METER]:setColor(color)
+    chan.meterCtls[MTR.R_METER]:setColor(color)
     chan.volume:setColor(color)
     for _,ctl in pairs(chan.mixCtls) do
         ctl:setColor(color)
@@ -614,26 +625,24 @@ end
 
 function setDetailChannel(chanNum)
     Current = chanNum
-     M.Msg("IN SET DETAIL,SLOT: "..chanNum)
     local chan = IChan()
+    local color = chan.color
     ChannelTitle.caption = chan.presetName.caption
     ChannelTitle:redraw()
     for i = 1,ChannelCount do
         Channels[i].mixCtls[MIX.SELECT]:val(0)
         Channels[i].mixCtls[MIX.SELECT]:setColor('black')
         Channels[i].mixCtls[MIX.SOURCE]:setColor('black')
-        --Channels[i].bkgd:redraw()
     end
     chan.mixCtls[MIX.SELECT]:val(1)
-    chan.mixCtls[MIX.SELECT]:setColor(chan.color)
-    chan.mixCtls[MIX.SOURCE]:setColor(chan.color)
-    --chan.bkgd.h = chanH + meterH + (btnH * 8)
-    --lchan.bkgd:redraw()
-    PresetPanel:setColor(chan.color)
-    ParamPanel:setColor(chan.color)
-    Pan:setColor(chan.color)
+    chan.mixCtls[MIX.SELECT]:setColor(color)
+    chan.mixCtls[MIX.SOURCE]:setColor(color)
+    PresetPanel:setColor(color)
+    ParamPanel:setColor(color)
+    ChannelTitle:setColor(color)
+    Pan:setColor(color)
     Pan:val(chan.meterCtls[1]:val())
-    SetInspectorColor(chan.color)
+    SetInspectorColor(color)
     for index,switch in pairs(Inspector.switches) do
         if not switch.momentary then  --don't update momentary switches!
             M.Msg('index = '..index)

@@ -33,8 +33,8 @@ MLabel.defaultProps = {
     textH = 0,
     caption = "MLabel",
     font = font,
-    color =   "text",
-    bg =      "cyan",
+    textColor =   "text",
+    color =      "cyan",
     justify = 0  -- 0 for left, 1 for right
 }
 
@@ -63,7 +63,7 @@ function MLabel:init()
 
     local w, h = self.textW + 4, self.textH + 4
     lenX,lenY = w,h
-    if self.vertical then 
+    if self.vertical then
         self.lenX = math.max(w,h)
         self.lenY = lenX
     end
@@ -71,7 +71,7 @@ function MLabel:init()
     -- Because we might be doing this mid-Draw,
     -- make sure we put this back the way we found it
     local dest = gfx.dest
-    
+
     gfx.dest = self.buffers[1]
     gfx.setimgdim(self.buffers[1], -1, -1)
     gfx.setimgdim(self.buffers[1], w, h)
@@ -83,15 +83,20 @@ function MLabel:init()
 
     gfx.x, gfx.y = 2, 2
 
-    Color.set(self.color)
+    Color.set(self.textColor)
 
     if self.shadow then
-        Text.drawWithShadow(output, self.color, "black")
+        Text.drawWithShadow(output, self.textColor, "black")
     else
         gfx.drawstr(output)
     end
 
     gfx.dest = dest
+end
+
+function MLabel:setColor(color)
+    self.color = color
+    self:redraw()
 end
 
 function MLabel:onDelete()

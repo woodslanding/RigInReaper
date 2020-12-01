@@ -27,14 +27,52 @@
     we can open this page and
     1.  Just save the preset under its current name  or
     2.  Select a new name and bank(s) for the preset
+
+    CONTROL LIST:
+    1.  Select VST--this will load all banks for this VST
+    2.  Bank Mode:  presets are multi-select, so you select a bank and create a preset list.  Params are for selected BANK.
+    3.  Preset Mode: banks are multi-select, so you can assign a preset to several banks.  Params are GLOBAL
+    3.  Switch to edit global params, vs bank params--[done above!]
+    4.  Switch to show all presets, vs. just those in the chosen bank.  Bank mode only!
+    5.  Maybe Someday--drag and drop for preset/bank position vs. alphabetized (toggle) d&d does seem possible... for now just alphabetize
+    6.  Params should be at side of screen, to allow for VST window to be open.  Window should also not be full screen.
+    7.  Half-learn, where you wiggle a vst control and then press a widget button to assign it.
+    8.  Widgets: Encoder, sw1, sw2, drawbars, organ toggles, 4 footswitches,Pedal2, BC, MOD,
+            maybe also Exp and Sustain (defeat normal assignment)
+    9.  Use the Inspector channel when opening...
+    10. Create New Bank.  Delete Bank.  Rename Bank.  Set Bank Hue and Sat.  Write All Banks.  Save Preset.
+    11. Other banks settings?  NS Solo.  Key Range!?  Exp,Ped2 Curve, IS FX, Ext Audio IN, Fake Sus, Midi Input,
 ]]--
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
+local M = require("public.message")
+local Table = require("public.table")
+local T = Table.T
+
 require 'moonUtils'
+--from moonUtils:
+--[[function Esc(str) return ("%q"):format(str) end
+function CleanComma(s)  return s:sub(1, string.len(s) -2) end
+function TableSort(t)
+    local sorted = {}
+    for n in pairs(t) do table.insert(sorted, n) end
+
+    table.sort(sorted)
+    return sorted
+end
+
+function ArraySort(t)
+    local sorted = {}
+    for i in ipairs(t) do table.insert(sorted,t[i]) end
+    table.sort(sorted)
+    return sorted
+end--]]
 
 local Bank = {}
 Bank.__index = Bank
+
+local PATH = 'C:\\Users\\moon\\Documents\\_REAPER\\Scripts\\_RigInReaper\\Banks\\'  --for testing
 
 function Bank.new(name,hue,sat,image)
     local self = setmetatable({}, Bank)
@@ -50,13 +88,14 @@ end
 function Bank:__tostring()
     local rtnStr = '    '..self.name..' = { '..'name = '..Esc(self.name)..', hue = '..self.hue..', sat = '..self.sat..',\n            '
     ..GetParamStr(self.params)..'\n'
-    ..'            presets = {\"'..table.concat (self.presets,'\", \"')..'\" }\n'
+    ..GetPresetStr(self.presets)..'\n'
     ..'        }'
     return rtnStr
 end
 
 function Bank:addPreset(name)
-    table.insert(self.presets,name)
+        self.presets[name] = name
+        M.Msg('Added preset '..name..', presets = '..Table.stringify(self.presets))
 end
 
 function Bank:setParam(control,name)
@@ -74,6 +113,17 @@ function Bank:getParam(control)
     return self.params.name
 end
 
+function GetPresetStr(presets)
+    M.Msg('PRESETS UNSORTED = \n'..Table.stringify(presets))
+    local retStr = '            presets = {'
+    local sorted = TableSort(Table.invert(presets))
+    M.Msg('PRESETS SORTED = \n'..Table.stringify(sorted))
+    for index,val in pairs(sorted) do
+        retStr = retStr..Esc(val)..', '
+    end
+    return CleanComma(retStr)..'}'
+end
+--used by both Banks and Plugs
 function GetParamStr(params)
     local paramT= {}
     local paramStr = 'params = {'
@@ -85,15 +135,17 @@ function GetParamStr(params)
 end
 
 function Bank:getPresets()
-    local presets = {}
-    for preset in pairs(self.presets) do
+
+    return ArraySort(self.presets)
+    --[[for preset in pairs(self.presets) do
         table.insert(presets,tostring(self.presets[preset]))
     end
-    table.sort(presets)
-    return presets
+    ArraySort(presets)
+    return presets--]]
 end
+
 ---------------------------PLUGIN METHODS --------------------------
-local   Plugin = {}
+Plugin = {}
 Plugin.__index = Plugin
 
 function Plugin:__tostring()
@@ -109,9 +161,12 @@ end
 
 function Plugin:getPresetString()
     local retStr = ''
-    for _,name in pairs(self.presets) do
-        retStr = retStr..Esc(name)..', '
+    M.Msg('GETTING MASTER PRESET LIST: presets unsorted'..Table.stringify(self.presets))
+    local sorted = TableSort(Table.invert(self.presets))
+    for i,val in ipairs(sorted) do
+        retStr = retStr..Esc(val)..', '
     end
+    M.Msg('MASTER:Presets sorted = '..retStr)
     return CleanComma(retStr)
 end
 
@@ -126,7 +181,9 @@ function Plugin.new(vstName)
 end
 
 function Plugin:getPresetList()
-    return TableSort(self.presets)
+    local sorted = ArraySort(self.presets)
+    M.Msg('PLUGIN GETTING PRESETS = \n'..Table.stringify(sorted))
+    return sorted
 end
 
 function Plugin:addBank(bankName,hue,sat)
@@ -140,12 +197,22 @@ function Plugin:addPreset(preset)
     end
 end
 
-function Plugin:addPresetToBank(bankName,preset)
-    if not self.banks[bankName] then print('non-existent bank: '..bankName) return end
-    self.banks[bankName]:addPreset(preset)
-    self:addPreset(preset)
+function Plugin:setPresetsForBank(bankName,presetList)
+    self.banks[bankName].presets = {}
+    for i,name in ipairs(presetList) do
+        self.banks[bankName]:addPreset(name)
+    end
 end
 
+function Plugin:setBankPreset(bankName,presetName)
+    if not self.banks[bankName] then print('non-existent bank: '..bankName) return end
+    M.Msg('setting bank preset '..presetName..', remove = ',remove)
+    self:addPreset(presetName)
+    self.banks[bankName]:addPreset(presetName)
+end
+function Plugin:getBankList()
+    return TableSort(self.banks)
+end
 function Plugin:getBank(bank)
     return self.banks[bank]
 end
@@ -164,16 +231,19 @@ function Bank.init(data)
 end
 
 function Plugin.load(filename)
-    local f = assert(loadfile('c:\\lua\\'..filename..'.lua'))
+    M.Msg('loading file: '..PATH..filename)
+    local f = assert(loadfile(PATH..filename..'.lua'))
     local data = f()
     local self = setmetatable(data,Plugin)
+    --M.Msg('initializing banks')
     for bankName,table in pairs(self.banks) do
         self.banks[bankName] = Bank.init(table)
+        M.Msg('init bank'..Table.stringify(self.banks[bankName]))
     end
     return self
 end
 function Plugin:save()
-    local filename = 'c:\\lua\\'..self.name..'.lua'
+    local filename = PATH..self.name..'.lua'
     local file = io.open(filename,'w')
     file:write(tostring(self))
     file:close()
@@ -184,27 +254,27 @@ end
     plug.emptyPreset = 'not found'
     plug:setParam('A1','Reverb')
     plug:setParam('A2','Chorus')
-    plug:addBank('favorites',120,.05)
-    plug:addBank('pianos',10,.09)
-    plug:addPresetToBank('pianos','Grandeur')
-    plug:addPresetToBank('favorites','OB pad')
-    plug:addPresetToBank('favorites','Grandeur')
-    plug:addPresetToBank('pianos','Black')
-    plug:addPresetToBank('pianos','Death Piano')
-    plug:addPresetToBank('pianos','poor naming')
+    plug:addBank('favorites',120,50)
+    plug:addBank('pianos',10,.90)
+    plug:setBankPreset('pianos','Grandeur')
+    plug:setBankPreset('favorites','OB pad')
+    plug:setBankPreset('favorites','Grandeur')
+    plug:setBankPreset('pianos','Black')
+    plug:setBankPreset('pianos','Death Piano')
+    plug:setBankPreset('pianos','poor naming')
     local curBank = plug:getBank('favorites')
     curBank:setParam('A5','Wah')
     plug:getBank('pianos'):setParam('A1','Reverb')
     --plug:getPresetList()
     return plug
 end
-
-local plugName = 'test'
+--[[
+local plugName = 'Test'
 local plug = Plugin.test(plugName)
 plug:save()
 local plug2 = Plugin.load(plugName)
 print(plug2)
---print(table.concat(plug:getPresetList(),', '))
+print(table.concat(plug:getPresetList(),', '))
 plug2.name = 'test2'
 plug2:save()--]]
 

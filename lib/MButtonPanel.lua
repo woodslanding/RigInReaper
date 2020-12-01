@@ -17,208 +17,285 @@ local M = require("public.message")
 local Table = require("public.table")
 local T = Table.T
 
-local function createButtons(parent,image,layer,rows, columns, x, y, w, h)
-    local switches = {}
+local function createPager(parent)
+    --M.Msg('pager image = '..parent.pagerImage)
+    local pager = GUI.createElement({
+        name = parent.name..'_pager',
+        type = "MButton",
+        color = 'gray',
+        image = parent.pagerImage,
+        spinner = true,
+        momentary = true,
+        horizontal = true,
+        w = parent.pagerw or parent.w,
+        h = parent.pagerH or parent.h,
+        x = parent.pagerX or ((parent.cols - 1) * parent.w) + parent.x ,
+        y = parent.pagerY or (parent.rows * parent.h) + parent.y,
+        loop = true,
+        inc = 1,min = -1, max = 1,
+        frames = 1,
+        caption = '',
+        font = 2,
+        value = 1,
+        func = function(self) parent:incPage(self.value)  end
+    })
+    parent.layer:addElements(pager)
+    --M.Msg('adding pager')
+    return pager
+end
+local function createControls(parent)
+    --M.Msg(Table.stringify(parent))
+    local controls = {}
     local xpos, ypos
     local index = 1
-    for i = 1, columns do
-        xpos = x + ((i - 1) * w)
-        for j = 1, rows do
-            ypos = y + ((j - 1) * h)
+    for i = 1, parent.cols do
+        xpos = parent.x + ((i - 1) * parent.w)
+        for j = 1, parent.rows do
+            ypos = parent.y + ((j - 1) * parent.h)
             local switch = GUI.createElement({
-                w = w,h = h, x = xpos, y = ypos,
-                color = 'black',
+                w = parent.w,h = parent.h, x = xpos, y = ypos,
+                color = 'gray',
                 loop = true,
                 frames = 2,
                 caption = '',
                 min = 0, max = 1,
                 value = 0,
-                name = 'button'..index,
-                type = "MButton",
-                image =  image,
+                name = parent.name..'_control_'..index,
+                type = parent.type or "MButton",
+                image =  parent.image,
                 index = index,
-                --call the parent function with the updated selection
-                func = function(self) parent:select(self.index) parent:func() end,
+                option = {},
+                --call the self function with the updated selection
+                func = function(self) parent:select(self.option.index) end,
                 params = {"a", "b", "c"}
             })
-            layer:addElements(switch)
-            switches[index] = switch
+            controls[index] = switch
+            --M.Msg('adding switch:'..index)
             index = index + 1
+            parent.layer:addElements(switch)
         end
     end
-    return switches
+    return controls
 end
-
-local function createPager(parent,layer,x,y,w,h)
-    local pager
-    pager = GUI.createElement({
-        name = 'pager',
-        spinner = true,
-        horizontal = true,
-        w = w, h = h,
-        x = x, y = y,
-        loop = true, min = 1,
-        max = 1, --just a placeholder
-        inc = 1,
-        frames = 1,
-        caption = '',
-        font = 2,
-        value = 1,
-        type = "MButton",
-        image =  "",
-        func = function(self) parent:setPage(self.value)  end
-    })
-    layer:addElements(pager)
-    return pager
-end
-
 MButtonPanel = {}
 MButtonPanel.__index = MButtonPanel
 
-function MButtonPanel.new(image,layer,rows,cols,x,y,w,h,usePager,pX,pY,pW,pH)
+local defaults = {
+    name = 'ButtonPanel'..math.random(),
+    --type = 'MButton',
+    layer = nil,
+    window = nil,
+    image = nil,
+    rows = 4, cols = 4,
+    h = 36, w = 96, x = 0, y = 0, z = 40,
+    usePager = true,
+    pager = nil,
+    pagerImage = nil,
+    multi = false,
+    color = 'gray',
+    options = {},
+    controls = {},
+    selection = {},
+    pageCount = 1,
+    pageNum = 1,
+}
+
+function MButtonPanel.new(props)
     local self = setmetatable({}, MButtonPanel)
-    self.layer = layer
-    self.h = h self.w = w self.x = x self.y = y
-    self.multi = false
-    self.rows = rows   self.cols = cols
-    self.color = 'black'
-    self.options = {}
-    self.pageCount = 4 self.pageNum = 1
-    self.switches = createButtons(self,image,layer,self.rows,self.cols,self.x,self.y,self.w,self.h)
-    if usePager then
-        self.pager = createPager(self,layer,pX,pY,pW,pH)
+    for prop,val in pairs(defaults) do
+        self[prop] = val  --add defaults
     end
+    for prop,val in pairs(props) do
+        self[prop] = val  --add props from method call
+    end
+    self.layer = GUI.createLayer({name = self.name..'_layer', z = self.z})
+    self.controls = createControls(self)
+    if self.usePager then
+        self.pager = createPager(self)
+    end
+
+    self.window:addLayers(self.layer)
+    --M.Msg(Table.stringify(self))
+    --self:setPage(1)  --don't set without options!!
     return self
 end
 
-function MButtonPanel:setMomentary(val)
-    for buttonNum = 1, self.rows * self.cols do
-        local sw = self.switches[buttonNum]
-        sw.momentary = val
-    end
+function MButtonPanel:func()
+    M.Msg("Calling default func on button panel")
+end
 
+
+function MButtonPanel:setMulti(multi)
+    M.Msg('setting multi ')
+    self.multi = multi
+    self:clearSelection()
+end
+
+function MButtonPanel:setMomentary(momentary, optionIDX)
+    if optionIDX then self.options[optionIDX].momentary = momentary
+    else self.momentary = momentary
+    end
+    self:setPage(1)
+end
+
+function MButtonPanel:setOption(idx,parameters)
+    --M.Msg('Adding option for '..self.name..' at index '..idx)
+    if not self.options[idx] then
+        local params = parameters or {}
+        --M.Msg('adding option'..params.name)
+        self.options[idx] = {
+            index = idx,
+            state = params.state or 0,
+            color = params.color or self.color or 'gray',
+            momentary = params.momentary or self.momentary,
+            type = params.type or 'MButton',
+            name = params.name or '???',
+            func = params.func or self.func
+        }
+    end
+    return self.options[idx]
 end
 
 function MButtonPanel:getOption(idx)
-    if not self.options[idx] then self.options[idx] = {} end
-    return self.options[idx]
+    if self.options[idx] then return self.options[idx] else return nil end
 end
-function MButtonPanel:setOption(idx,name,state,func)
-    local option = self:getOption(idx)
-    option.name = name
-    option.state = state
-    option.func = func or nil
+
+function MButtonPanel:getSelectedOption()
+    if type(self:getSelection()) ~= 'table' then
+        return self:getOption(self:getSelection())
+    else M.Msg("can't get selected option in multi mode")
+    end
 end
---If there is a function per option, return that. Otherwise use the global function override
-function MButtonPanel:getOptionFunc(idx)  return self:getOption(idx).func or MButtonPanel:func() end
-function MButtonPanel:setOptionFunc(idx,func)   self:getOption(idx).func = func end
 
-function MButtonPanel:getOptionName(idx)  return self:getOption(idx).name or '---' end
-function MButtonPanel:setOptionName(idx,name) self:getOption(idx).name = name end
 
---basically just whether the button is pressed or not...
-function MButtonPanel:getOptionState(idx) return  self:getOption(idx).state or 0 end
-function MButtonPanel:setOptionState(idx,state)   self:getOption(idx).state = state end
-
---deselect all buttons
-function MButtonPanel:clearSelection() for _,option in pairs(self.options) do  option.state = 0 end end
+function MButtonPanel:clearSelection()
+    M.Msg(self.name..': resetting switches')
+    for i,option in ipairs(self.options) do option.state = 0 end
+    if self.multi then self.selection = {} else self.selection = nil end
+    for i = 1, self.rows * self.cols do
+        self.controls[i]:val(0)
+    end
+end
 
 --returns a table of functions or option indices
 function MButtonPanel:select(set)
-    if self.multi then
-        local sw = self.switches[set]
-        local option,idx = self:getOptionForButton(set)
-        if option.state then --some buttons on the last page may not have an option
-            if option.state == 0 then
-                option.state = 1
-                sw.frame = 1
-            else
-                option.state = 0
-                sw.frame = 0                         
+    if set then
+        local sw = self:getButtonForOption(set)
+        --M.Msg('found button '..sw.name)
+        local option = self.options[set]
+        if option then   --some buttons may not have options...
+            --in multi mode we just add or subtract from the selection.  Doing something with the selection is separate
+            if self.multi then   --in multimode we ignore everything in options except state
+                if option.state == 0 then
+                    option.state = 1
+                    sw:val(option.state)
+                    option:func()
+                    self.selection[set] = set
+                else
+                    option.state = 0
+                    sw:val(option.state)
+                    option:func()
+                    self.selection[set] = nil
+                end
+
+            elseif not self.multi then --in single-select mode, we can run the action here...
+                self:clearSelection()
+                for button = 1,self.rows * self.cols do
+                    local sw = self.controls[button]
+                    local option = sw.option
+                    if option and set and sw.option.index == set then
+                        sw.frame = 1
+                        option.state = 1
+                        self.selection = set
+                        --M.Msg(self.name..': options: \n:'..Table.stringify(self.options))
+                        option:func()
+                    else sw.frame = 0
+                    end
+                    sw:redraw()
+                end
             end
-            sw:redraw()
+            return self.selection
         end
-    else
-        self:clearSelection()
-        for button = 1,self.rows * self.cols do
-            local option, idx = self:getOptionForButton(button)
-            local sw = self.switches[button]
-            if sw.index == set then
-                sw.frame = 1
-                option.state = 1
-            else sw.frame = 0
-            end
-            sw:redraw()
-        end
-    end
-    return self:getSelection()
+    else M.Msg(self.name..': set is nil') end
 end
---if you don't select an index you get a table of indices
+--for single select this is an integer.  for multi, you can select an index, or else get a table of indices
 function MButtonPanel:getSelection(index)
-    local indices = {}
-    for idx,option in pairs(self.options) do
-        if option.state and option.state > 0 then table.insert(indices,idx) end       
-    end
-    if index then return indices[index] else return indices end
-end
-function MButtonPanel:func()
-    --do something with the selection table or just return it
-    return self:getSelection()
+    if index and type(self.selection) == 'table' then return self.selection[index]
+    else return self.selection end
 end
 
+
+function MButtonPanel:incPage(val) self:setPage(self.pageNum + val) end
+
 function MButtonPanel:setPage(page) --pages start at 1
+    local btnCount = self.rows * self.cols
     self.pageCount = math.ceil(#self.options/(self.rows * self.cols))
-    M.Msg('option count = '..#self.options)
-    M.Msg('pageCount = '..self.pageCount)
-    if self.pager then self.pager.max = self.pageCount end
-    if page > self.pageCount then self.pageNum = self.pageCount else self.pageNum = page end
-    for buttonNum = 1, self.rows * self.cols do
-        local sw = self.switches[buttonNum]
-        local option = self:getOptionForButton(buttonNum)
-        sw.caption = option.name or '---'
-        if self.pager then self.pager.caption = self.pageNum end
-        if option.state and option.state > 0 then
-            --M.Msg('setting button '..buttonNum..' on')
-            sw.frame = 1
-        else sw.frame = 0 end
-        sw:redraw()
+    if page > self.pageCount then self.pageNum = self.pageCount
+    elseif page < 1 then self.pageNum = 1
+    else self.pageNum = page end
+    for buttonNum = 1, btnCount do
+        local sw = self.controls[buttonNum]
+        local optionIdx = (btnCount * (self.pageNum - 1)) + buttonNum
+        --don't use setOption,as that will automatically create an option...
+        local option = self.options[optionIdx]
+        --M.Msg('option = '..Table.stringify(option))
+        if not option then sw.caption = '---'
+        else
+            sw.option = option
+            sw.caption = option.name --shouldn't have an option without a name
+            sw.type = option.type or self.type or 'MButton'
+            sw.momentary = option.momentary or self.momentary
+            sw.color = option.color or self.color
+            sw.image = option.image or self.image
+            if self.pager then self.pager:setCaption(self.pageNum) end
+            if option.state and option.state > 0 then
+                --todo: support for sliders?
+                sw.frame = option.state - 1
+            else sw.frame = 0 end
+            sw:redraw()
+        end
     end
     --M.Msg('PAGE SET')
 end
 
-function MButtonPanel:setColor(color)
+function MButtonPanel:setColor(color, resetAll)
     for buttonNum = 1, self.rows * self.cols do
-        local sw = self.switches[buttonNum]
-        sw.color = color
+        local sw = self.controls[buttonNum]
+        if sw.option then
+            if resetAll then sw.color = color  --if we are resetting, change all the colors
+            elseif sw.option and sw.option.color  then  --otherwise, if we have an option and it has a color then leave it be
+            else sw.color = color
+            end
+        end
         if self.pager then self.pager.color = color end
         sw:redraw()
     end
 end
---breaks for the last button!
+--breaks when option index is a string...
 function MButtonPanel:getButtonForOption(idx)
-    local btnCount = self.rows*self.cols
-    return self.switches[idx % (btnCount-1)]
+    local count = self.rows * self.cols
+    for i = 1,count  do
+        local control = self.controls[i]
+        if control.option.index == idx then
+             return control end
+    end
+    --local btnCount = self.rows*self.cols
+    --return self.controls[idx % (btnCount-1)]
 end
 
-
-function MButtonPanel:getOptionForButton(buttonNum)
-    local idx = (self.rows * self.cols * (self.pageNum - 1)) + buttonNum
-    local option = self:getOption(idx)
-    return option, idx
-end
 
 --return MButtonPanel
 
 ------------------------------------
 -------- Window settings -----------
 ------------------------------------
---[[
+--[[--
 
 local window = GUI.createWindow({
-  name = "BUTTON switches TEST",
-  w = 1000,
+  name = "BUTTON controls TEST",
+  w = 800,
   h = 300,
-  x = 100, y = 0,
+  x = 0, y = 0,
 })
 ------------------------------------
 -------- GUI Elements --------------
@@ -226,21 +303,29 @@ local window = GUI.createWindow({
 local imageFolder = reaper.GetResourcePath().."\\scripts\\_RigInReaper\\Images\\"
 local layer = GUI.createLayer({name = "Layer1", z = 1})
 
---create 250 options
-local cols, w = 8, 96
-local panel = MButtonPanel.new(imageFolder.."Combo.png",layer,5,cols,
-                            0,0,w,32,       --button
-                            w*cols,0,36,72) --spinner
+local panel = MButtonPanel.new({
+    layer = layer,
+    rows = 5, cols = 8,
+    name = 'PanelTest',
+    image = imageFolder..'Combo.png',
+    pagerImage = imageFolder..'HorizSpin.png',
+    usePager = true,
+    multi = false,
+})
+
 for i = 1,250 do
-    panel.options[i] = {
-        name = i,
-        val = 0
-    }
+    local color = GetRGB(i,60,40)
+    panel:setOption(i, {
+        name = 'option '..i,
+        color = color
+    })
 end
-panel.pager.image = imageFolder.."EffectSpin.png"
-panel:setColor(GetRGB(120,100,60))
 panel:setPage(1)
-window:addLayers(panel.layer)
+
+
+
+window:addLayers(layer)
 window:open()
+
 
 GUI.Main()--]]
