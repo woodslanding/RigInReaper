@@ -60,6 +60,7 @@ local function createControls(parent)
                 caption = '',
                 min = 0, max = 1,
                 value = 0,
+                font = 3,
                 name = parent.name..'_control_'..index,
                 type = parent.type or "MButton",
                 image =  parent.image,
@@ -81,7 +82,7 @@ MButtonPanel = {}
 MButtonPanel.__index = MButtonPanel
 
 local defaults = {
-    name = 'ButtonPanel'..math.random(),
+    name = 'ButtonPanel_'..math.random(),
     --type = 'MButton',
     layer = nil,
     window = nil,
@@ -178,7 +179,11 @@ function MButtonPanel:clearSelection()
 end
 --defaults to getting the names, but can get any option field
 function MButtonPanel:getSelectionData(field)
-    M.Msg('selection = '..TStr(self.selection))
+    if not self.selection then return nil end
+    if not self.multi then
+        if not field then return self.selection.name else return self.selection[field] end
+    end
+    --M.Msg('selection = '..TStr(self.selection))
     local data = {}
     for i,option in pairs(self.selection) do
         if not field then data[i] = option.name
@@ -215,7 +220,7 @@ function MButtonPanel:select(set,doNotRun)
                     local sw = self.controls[button]
                     local option = sw.option
                     if option and set and sw.option.index == set then
-                        sw.frame = 1
+                        if not self.momentary then sw.frame = 1 end
                         option.state = 1
                         self.selection = option
                         --M.Msg(self.name..': options: \n:'..Table.stringify(self.options))
@@ -245,6 +250,7 @@ function MButtonPanel:setPage(page) --pages start at 1
     elseif page < 1 then self.pageNum = 1
     else self.pageNum = page end
     for buttonNum = 1, btnCount do
+        --M.Msg('Setting options for button: '..buttonNum)
         local sw = self.controls[buttonNum]
         local optionIdx = (btnCount * (self.pageNum - 1)) + buttonNum
         --don't use setOption,as that will automatically create an option...
@@ -256,10 +262,11 @@ function MButtonPanel:setPage(page) --pages start at 1
             sw.caption = option.name --shouldn't have an option without a name
             sw.type = option.type or self.type or 'MButton'
             sw.momentary = option.momentary or self.momentary
+            --M.Msg('setting sw:'..sw.name..' to momentary = ',sw.momentary)
             sw.color = option.color or self.color
             sw.image = option.image or self.image
             if self.pager then self.pager:setCaption(self.pageNum) end
-            if option.state and option.state > 0 then
+            if option.state and option.state > 0 and not option.momentary then
                 --todo: support for sliders?
                 sw.frame = option.state - 1
             else sw.frame = 0 end

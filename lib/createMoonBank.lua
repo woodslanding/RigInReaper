@@ -16,7 +16,6 @@
         to one or more banks.  This can be a fullscreen window with button arrays
         on the left for presets, and the right for banks.  The bank buttons are
         multi-select, and bank data is written whenever the preset is changed.
-        they also need some indication of 'last selected', for bank editing.
         It should show a lot of (32?) banks, with option for paging
         It should be associated with a track so the selected preset can be auditioned.
     2.  Also needs: Buttons for creating, renaming, reordering, coloring, and deleting banks/tags.
@@ -194,6 +193,27 @@ end
 function Plugin:addPreset(preset)
     if not self.presets[preset] then
         self.presets[preset] = preset
+    end
+end
+
+function Plugin:bankContainsPreset(bankName,presetName)
+    local bank = self.banks[bankName]
+    for i,name in pairs(bank.presets) do
+        if name == presetName then return true end
+    end
+    return false
+end
+
+
+function Plugin:getBanksContaining(presetName)
+    local list = self.getBankList()
+    M.Msg('bank list = '..TStr(list))
+end
+
+function Plugin:addPresetToBanks(presetName,banks)
+    M.Msg('adding preset '..presetName, 'to banks: '..TStr(banks))
+    for i,option in pairs(banks) do
+        self.banks[option.name]:addPreset(presetName)
     end
 end
 

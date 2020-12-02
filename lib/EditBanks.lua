@@ -14,6 +14,8 @@ require 'Mbutton'
 require "moonUtils"
 require 'createMoonBank'
 require 'MButtonPanel'
+require 'MText'
+require 'Save_VST_Preset'
 
 BRIGHTNESS = 60
 
@@ -22,17 +24,18 @@ local M = require("public.message")
 local Table = require("public.table")
 local T = Table.T
 
-
+Keyboard = {}
 Plug = {}
 Bank = {}
 Banks = {}
 Presets = {}
+Preset = nil
 PresetPanel = {}
 BankPanel = {}
 VSTPanel = {}
 
-
-MODE = {BANK = 'Bank Mode', PRESET = 'Preset Mode'}
+Mode = nil
+MODES = {BANK = 'Bank Mode', PRESET = 'Preset Mode'}
 
 
 -------------------------------------------------------------------------------------------------------
@@ -41,17 +44,30 @@ Options = {
     menu = {
         {
             {name = 'Save Preset', func = function(self) end   },  --from x-raym
-            {name = 'Save As',func = function(self) end   },
+            {name = 'Save As',func = function(self)
+                Keyboard:visible(true)
+                Keyboard.func = function(self)
+                    local track, fxnum, Preset_Name = Get_LastTouch_FX()
+                    Save_VST_Preset(track,fxnum,self.text)
+                end
+            end
+
+        },
             {name = 'Delete Preset',func = function(self) end   },
             {name = 'Rename Preset',func = function(self) end   },
         },
         {
             {name = 'Preset Mode', func = function(self)
+                M.Msg('setting preset Mode')
+                Mode = MODES.PRESET
                 PresetPanel:setMulti(false)    BankPanel:setMulti(true)
+                PresetPanel:setColor('gray',true)
                 --set mappings to global
                 PresetPanel:setPage(1)       BankPanel:setPage(1)
             end  },
             {name = 'Bank Mode', func = function(self)
+                M.Msg('setting Bank Mode')
+                Mode = MODES.BANK
                 PresetPanel:setMulti(true)     BankPanel:setMulti(false)
                 --set mappings to BANK
                 PresetPanel:setPage(1)       BankPanel:setPage(1)
@@ -69,39 +85,52 @@ Options = {
         },
     },
     panels = {
-        {name = 'presets',rows = 8, cols = 4, icon = 'ComboRev',func = function(self)
+        {name = 'presets',rows = 8, cols = 5, icon = 'ComboRev',func = function(self)
             --M.Msg('self = \n'..Table.stringify(self))
-            if MODE.BANK then
-                --Bank.presets = {}
-                --for i in ipairs(PresetPanel:getSelection()) do
-                    --Bank:addPreset(PresetPanel.options[i].name)
-                    --M.Msg('adding preset:'..options[i].name)
-               -- end
+            if Mode == MODES.BANK then
                local presetNums = PresetPanel:getSelection()
-               M.Msg('selection names = '..Table.stringify(presetNums))
+               M.Msg('selection names = '..TStr(presetNums))
                 Plug:setPresetsForBank(Bank.name,presetNums)
-                --Plug:save()
+                Plug:save()
                 M.Msg('SAVE Plug = \n',Plug)
+            elseif Mode == MODES.PRESET then
+                --select a single preset, and add it to multiple banks
+                --first set the bank buttons to the selected preset
+                Preset = self.name
+                BankPanel:clearSelection()
+                --go through all the bankpanel's options
+                --for each one, get the bank name, and query the plug to determine if the preset is in it
+                for i,option in ipairs(BankPanel.options) do
+                    M.Msg('found option'..TStr(option))
+                    if Plug:bankContainsPreset(option.name,Preset) then
+                        local button = BankPanel:getButtonForOption(i)
+                        BankPanel:select(button.index,true)
+                    end
+                end
             end
-
-
         end },
         {name = 'banks',rows = 8, cols = 4, icon = 'ComboRev',func = function(self)
-            if MODE.BANK then
+            if Mode == MODES.BANK then
                 Bank = Plug:getBank(self.name)
                 PresetPanel:clearSelection()
                 local color = GetRGB(Bank.hue,Bank.sat,BRIGHTNESS)
                 PresetPanel:setColor(color,true)
                 --M.Msg('PRESETS = \n'..Table.stringify(Bank.presets))
+                --might be able to streamline this, now options are indexed....
                 for i, option in ipairs(PresetPanel.options) do
                     for _, name in ipairs(Bank.presets) do
                         if name == option.name then
-                            M.Msg('adding preset '..name..' for option: '..i)
+                            --M.Msg('adding preset '..name..' for option: '..i)
                             local button = PresetPanel:getButtonForOption(i)
                             PresetPanel:select(button.index,true)
                         end
                     end
                 end--]]--
+            elseif Mode == MODES.PRESET then
+                local bankNums = BankPanel:getSelectionData()
+                local preset = PresetPanel:getSelectionData()
+                --M.Msg('in presetmode:  ',TStr(bankNums),preset)
+                if bankNums and preset then Plug:addPresetToBanks(preset,bankNums) Plug:save() end
             end
         end },
         {name = 'VSTs',rows = 8, cols = 2, icon = 'ComboRev',func = function()
@@ -220,6 +249,7 @@ for i,submenu in ipairs(Options.menu) do
         newOption.func = option.func
     end
     if i == 2 then menu:setMomentary(false) end
+    M.Msg('setting menu ')
     menu:setPage(1)
     Options.menu[i].panel = menu
 end--]]
@@ -252,7 +282,9 @@ end--]]
 PresetPanel = Options.panels[1].panel
 BankPanel = Options.panels[2].panel
 VSTPanel = Options.panels[3].panel
-PresetPanel:setMulti(true)
+--PresetPanel:setMulti(true)
+--set bank mode
+Options.menu[2].panel:select(2)
 
 local filecount,files = ultraschall.GetAllFilenamesInPath(BANK_FOLDER)
 for i = 1, filecount do
@@ -262,6 +294,11 @@ for i = 1, filecount do
     })
 end
 Options.panels[3].panel:setPage(1)
+
+Keyboard = MText.new({
+    x = 100, y = 100, window = window
+})
+
 
 window:open()
 

@@ -115,7 +115,7 @@ function Esc(str) return ("%q"):format(str) end
 
 function CleanComma(s)  return s:sub(1, string.len(s) -2) end
 
-function TStr(table) return '\n'..Table.stringify(table) end
+function TStr(table) return '\n---------------\n'..Table.stringify(table)..'\n---------------' end
 
 function GetFilename(file)
     local file_name = file:match("[^/]*.lua$")
