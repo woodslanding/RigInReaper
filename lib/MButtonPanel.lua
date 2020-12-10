@@ -207,8 +207,9 @@ end
 function MButtonPanel:select(set,doNotRun)
     if set then
         local sw = self:getButtonForOption(set)
-        --M.Msg('found button '..sw.name)
+        M.Msg('found button '..sw.name)
         local option = self.options[set]
+        TStr(option,'selected option')
         if option then   --some buttons may not have options...
             --in multi mode we generally just add or subtract from the selection.  If we want to do something, set 'run' to true
             if self.multi then   --in multimode we ignore everything in options except state
@@ -280,7 +281,7 @@ function MButtonPanel:setPage(page) --pages start at 1
         --don't use setOption,as that will automatically create an option...
         local option = self.options[optionIdx]
         --M.Msg('option = '..Table.stringify(option))
-        if not option then sw.caption = '---'
+        if not option then sw.caption = '---' sw.state = 0
         else
             sw.option = option
             sw.caption = option.name --shouldn't have an option without a name
@@ -292,7 +293,7 @@ function MButtonPanel:setPage(page) --pages start at 1
             if self.pager then self.pager:setCaption(self.pageNum) end
             if option.state and option.state > 0 and not option.momentary then
                 --todo: support for sliders?
-                sw.frame = option.state - 1
+                sw.frame = option.state
             else sw.frame = 0 end
             sw:redraw()
         end
@@ -315,6 +316,7 @@ function MButtonPanel:setColor(color, resetAll)
 end
 --breaks when option index is a string...
 function MButtonPanel:getButtonForOption(idx)
+
     local count = self.rows * self.cols
     for i = 1,count  do
         local control = self.controls[i]
@@ -324,7 +326,7 @@ function MButtonPanel:getButtonForOption(idx)
     return self.controls[1]
     --local btnCount = self.rows*self.cols
     --return self.controls[idx % (btnCount-1)]
-end
+end  --]]
 
 
 --return MButtonPanel

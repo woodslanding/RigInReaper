@@ -133,6 +133,10 @@ function GetParamStr(params)
     return paramStr
 end
 
+function Bank:getColor()
+    return GetRGB(self.hue,self.sat, BRIGHTNESS)
+end
+
 function Bank:getPresets()
 
     return ArraySort(self.presets)

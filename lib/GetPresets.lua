@@ -1,6 +1,17 @@
---commands to consider: create RPLs from vst presets
+-- The core library must be loaded prior to anything else
+local libPath = reaper.GetExtState("Scythe v3", "libPath")
+if not libPath or libPath == "" then
+    reaper.MB("Couldn't load the Scythe library. Please install 'Scythe library v3' from ReaPack, then run 'Script: Scythe_Set v3 library path.lua' in your Action List.", "Whoops!", 0)
+    return
+end
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
+loadfile(libPath .. "scythe.lua")()
+
+local GUI = require("gui.core")
+local M = require("public.message")
+local Table = require("public.table")
+local T = Table.T
 
 require 'moonUtils'
 
@@ -9,7 +20,7 @@ dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
 local vstText = '----  VST built-in programs  ----'
 local userText = '----  User Presets (.rpl)  ----'
 
-function GetPresetList(tracknum, factory, ignoreName, fxnum )
+local function GetPresetList(tracknum, factory, ignoreName, fxnum )
     if not fxnum then fxnum = INSTRUMENT_SLOT end
     if not ignoreName then ignoreName = '' end
     if not tracknum then tracknum = 1 end
@@ -19,10 +30,11 @@ function GetPresetList(tracknum, factory, ignoreName, fxnum )
     OpenPlugin(tracknum,fxnum)
     local focused
     focused,tracknum,_,fxnum = reaper.GetFocusedFX()
+    local track = GetTrack(tracknum)
     local fx_name
     if focused then
         --M.Msg('track num ='..tracknum, 'fx num '..fxnum)
-        local track = GetTrack(tracknum)
+
         _,fx_name = reaper.TrackFX_GetFXName(track, fxnum,"")
         --M.Msg('fx name = '..fx_name)
     end
@@ -45,15 +57,6 @@ function GetPresetList(tracknum, factory, ignoreName, fxnum )
             end
         elseif name ==vstText then list_start = i + 1
         end
-        --[[if factory then startText = vstText; endText = nil else startText = 0; endText = vstText end
-        if name == startText then  list_start = i + 1  end
-        if name == endText then list_end = i + 1 end--]]
-    end
-    -- check if user presets found
-    --M.Msg('item count = '..itemCount)
-    if  itemCount - list_start == 0 then
-        reaper.MB( "No Presets Found: ","Not found", 0)
-        return
     end
     -- add user preset names --
     local presets = {}
@@ -68,23 +71,18 @@ function GetPresetList(tracknum, factory, ignoreName, fxnum )
             presets[num] = presetname
             presetsByName[presetname] = num
             presetcount = presetcount + 1
-            --M.Msg('added preset '..presetname)
+            --reaper.ShowConsoleMsg('added preset '..presetname)
         end
     end
     -- restore preset index
     reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", cur_index, 0,0,0)
-    -- str = str..'\n' .. tostring(i-list_start) ..' '..reaper.JS_Window_GetTitle(presetWindow,"")
-
-    --Sort presetWindow, if needed --------------------------------------------------------
-    presets = {} --clear presets by num
-    local presetTemp = {}
-    for n in pairs(presetsByName) do
-        table.insert(presetTemp, n)
-    end
-    table.sort(presetTemp) -- sort
-    for i,n in ipairs(presetTemp) do --transfer to array
-        table.insert(presets,n)
-    end
+    --TStr(presets,'presets unsorted')
+    for i,name in ipairs(presets) do reaper.ShowConsoleMsg('PRESET: '..name..'\n') end
+    presets =  ArraySort(presets)
+    --TStr(presets,'sorted presets')
+    presets = RemoveDuplicates(presets)
+    --TStr(presets,'duplicates removed')
+    reaper.TrackFX_Show(track, INSTRUMENT_SLOT, 2) --close the fx float
     return presets
 end
 

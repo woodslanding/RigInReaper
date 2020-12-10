@@ -16,7 +16,6 @@ require "moonUtils"
 require 'createMoonBank'
 require 'MButtonPanel'
 require 'MText'
---require 'Save_VST_Preset'
 
 BRIGHTNESS = 60
 
@@ -132,11 +131,10 @@ Options = {
     panels = {
         {name = 'presets',rows = 8, cols = 5, icon = 'ComboRev',func = function(self)
             if Mode == MODES.BANK then
-                local presetNums = PresetPanel:getSelection()
+                local presetNums = PresetPanel:getSelectionData('index')
                 TStr(presetNums,'preset nums')
                 Plug:setPresetsForBank(Bank.name,presetNums)
                 SavePlug()
-                M.Msg('SAVE Plug = \n',Plug)
             elseif Mode == MODES.PRESET then
                 --select a single preset, and add it to multiple banks
                 --first set the bank buttons to the selected preset
@@ -146,11 +144,13 @@ Options = {
                 --for each one, get the bank name, and query the plug to determine if the preset is in it
                 for i,option in ipairs(BankPanel.options) do
                     TStr(option,'add option')
-                    if Plug:bankContainsPreset(option.name,Preset) then
+                    BankPanel:select(i,true)
+                    --[[if Plug:bankContainsPreset(option.name,Preset) then
                         local button = BankPanel:getButtonForOption(i)
                         BankPanel:select(button.index,true)
-                    end
+                    end--]]
                 end
+                BankPanel:setPage(1)
             end
         end },
         {name = 'banks',rows = 8, cols = 4, icon = 'ComboRev',func = function(self)
@@ -158,18 +158,20 @@ Options = {
                 Bank = Plug:getBank(self.name)
                 PresetPanel:clearSelection()
                 SetBankInfo()
-                --PresetPanel:setColor(color,true)
+                --PresetPanel:setPage(1)
+                --PresetPanel:setColor(color,true)  --don't do this manually.  set the option and then set the page!
                 --M.Msg('PRESETS = \n'..Table.stringify(Bank.presets))
                 --might be able to streamline this, now options are indexed....
                 for i, option in ipairs(PresetPanel.options) do
+                    option.color = Bank:getColor()
                     for _, name in ipairs(Bank.presets) do
                         if name == option.name then
-                            --M.Msg('adding preset '..name..' for option: '..i)
-                            local button = PresetPanel:getButtonForOption(i)
-                            PresetPanel:select(button.index,true)
-                        end
+                            M.Msg('adding preset '..name..' for option: '..i)
+                            PresetPanel:select(i,true)
+                        end--]]
                     end
                 end--]]--
+                PresetPanel:setPage(1)
             elseif Mode == MODES.PRESET then
                 local bankNums = BankPanel:getSelectionData()
                 local preset = PresetPanel:getSelectionData()
@@ -253,6 +255,7 @@ function RefreshBanks()
         if vstFile == plugName then VSTPanel:select(i) end
         i = i + 1
     end
+
 end
 function LoadPlug()
     Banks = Plug:getBankList()
@@ -265,11 +268,23 @@ function LoadPlug()
     end
     BankPanel:setPage(1)
     LoadInstrument(CurrentTrack, Plug.vstName)
-    --M.Msg(Plug)
-    --Presets = Plug.presets
+    --this should be some sort of option... normally use
+    local sourcePresets = GetRplPresets(CurrentTrack)
     Presets = Plug:getPresetList()
+    for i,preset in ipairs(sourcePresets) do
+        --M.Msg('checking preset '..preset)
+        if not TableContains(Presets,preset) then
+            table.insert(Presets,preset)
+        end
+    end
+    Presets = ArraySort(Presets)
+    Plug.presets = Presets
+    TStr(Plug,'plug')
+    Plug:save()
+    --TStr(Presets,'presets: ')
     PresetPanel.options = {}
-    for i in ipairs(Presets) do PresetPanel:setOption(i,{name = Presets[i]}) end
+    for i,preset in ipairs(Presets) do
+        PresetPanel:setOption(i,{name = preset}) end
     PresetPanel:setPage(1)
 end
 
@@ -522,6 +537,7 @@ PresetPanel = Options.panels[1]
 table.insert(ColorByBanks,PresetPanel)
 BankPanel = Options.panels[2]
 VSTPanel = Options.panels[3]
+--we should startup in preset mode...
 Options.menu[2].panel:select(2)
 
 --set the vst options.  if one of the options matches the last touched vst, then select it
