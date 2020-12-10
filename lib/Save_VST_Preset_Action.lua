@@ -191,7 +191,7 @@ function Get_FX_Data(track, fxnum)
     -- extract FX_Chunk --------------
     local FX_Chunk = Track_Chunk:match("%b<>", s)      -- FX_Chunk(simple var)
     ----------------------------------
-    --reaper.ShowConsoleMsg("\n\n"..fxnum.."\n"..FX_Chunk.."\n")
+    reaper.ShowConsoleMsg("\n\n"..fxnum.."\n"..FX_Chunk.."\n")
 
   ------------------------------------
   -- Get UserPresetFile --------------
@@ -250,6 +250,7 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local track, fxnum, Preset_Name = Get_LastTouch_FX()                  -- any function can be used
+reaper.ShowConsoleMsg('fxnum = '..fxnum..',name = '..Preset_Name)
 Save_VST_Preset(track, fxnum, Preset_Name)                            -- RUN
 
 x, y = reaper.GetMousePosition()

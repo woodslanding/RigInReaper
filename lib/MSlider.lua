@@ -8,6 +8,7 @@ end
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 loadfile(libPath .. "scythe.lua")()
 
+require 'MoonUtils'
 
 local GUI = require("gui.core")
 local M = require("public.message")
@@ -36,7 +37,8 @@ MSlider.defaultProps = {
     sens = 1,
     value = 0,
     frame = 5,
-    vertFrames = true
+    vertFrames = true,
+    waitToSet = false  --if true, don't actually run the func() until the mouse is released..
 }
 
 function MSlider:new(props)
@@ -62,7 +64,7 @@ end
 
 --this keeps the component from responding to the mouse
 function MSlider:containsPoint (x, y)
-    if self.displayOnly then return false 
+    if self.displayOnly then return false
     else return  ( x >= (self.x or 0) and x < ((self.x or 0) + (self.w or 0)) and
                    y >= (self.y or 0) and y < ((self.y or 0) + (self.h or 0)) )
     end
@@ -85,6 +87,7 @@ function MSlider:draw()
     Font.set(self.font)
 
     local str = self:formatOutput(self.caption)
+    --M.Msg('caption = '..self.caption)
     str = str:gsub([[\n]],"\n")
 
     local strWidth, strHeight = gfx.measurestr(str)
@@ -93,6 +96,7 @@ function MSlider:draw()
 
     gfx.x = x + (playX / 2) + (self.labelX * playX)
     gfx.y = y + (playY / 2) + (self.labelY * playY)
+    gfx.drawstr(str)
 end
 
 function MSlider:onMouseDown(state)
@@ -110,8 +114,10 @@ function MSlider:onMouseUp(state)
             pct = (state.mouse.x - self.x)/self:throw()
         else  pct = 1 - ((state.mouse.y - self.y)/self:throw()) --y measured from top!
         end
-        self:val(self.min + (pct * self:getRange()))
+        local v =
+        self:val()
         self:func(table.unpack(self.params))
+    elseif self.waitToSet then self:func(table.unpack(self.params))
     end
     self.hasBeenDragging = false
 end
@@ -123,13 +129,20 @@ function MSlider:onDrag(state)
     local delta
     if self.horizontal then delta = state.mouse.x - self.dragStartX else delta = self.dragStartY - state.mouse.y end
     local newVal = (delta * pixval) + self.origVal
+    local v = Math.clamp(newVal,self.min,self.max)
     --M.Msg('newVal - '..newVal)
-    self:val(newVal)  
-    self:func(table.unpack(self.params))
+    self:val(v)
+    if not self.waitToSet then self:func(table.unpack(self.params)) end
+
 end
 
-function MSlider:setColor(color)  
+function MSlider:setColor(color)
     self.color = color
+    self:redraw()
+end
+
+function MSlider:setCaption(caption)
+    self.caption= caption
     self:redraw()
 end
 
@@ -156,18 +169,20 @@ end
 GUI.elementClasses.MSlider = MSlider
 --[[
 local slider = GUI.createElement({
-    frames = 11, frame = 5,
-    vertText = true,
+    frames = 49, frame = 5,
+    horizontal = true,
+    caption = 'TESTING',
     name = "slider",
     min = -5,
     max = 5,
     value = 0,
     type = "MSlider",
+    color = 'red',
     w = 180,h = 48,x = 0,y = 0,
     labelX = 0,labelY = 0,
     --image =  "meterL.png",
-    image = "oct.png",
-    func = function(self, a, b, c) Msg(self.name, self:val()) end,
+    image = IMAGE_FOLDER.."SimpleFader.png",
+    func = function(self, a, b, c) M.Msg(self.name, self:val()) end,
     params = {"a", "b", "c"}
   })
 
@@ -179,10 +194,11 @@ local slider = GUI.createElement({
     min = 0,
     max = 99,
     value = 0,
+    color = 'red',
     type = "MSlider",
     w = 64,h = 288,x = 200,y = 10,
     labelX = 0,labelY = 0,
-    image =  "VolVert.png",
+    image =  IMAGE_FOLDER.."Volume.png",
     func = function(self, a, b, c) self.caption = self.value end,
     params = {"a", "b", "c"}
   })
@@ -202,7 +218,7 @@ local window = GUI.createWindow({
 
 local layer = GUI.createLayer({name = "Layer1", z = 1})
 
-layer:addElements(vSlider, label,vLabel)
+layer:addElements(vSlider, slider)
 window:addLayers(layer)
 window:open()
 

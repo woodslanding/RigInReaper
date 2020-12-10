@@ -31,7 +31,7 @@ local Element = require("gui.element")
 local MButton = Element:new()
 MButton.__index = MButton
 MButton.defaultProps = {
-    name = "mbutton", type = "MButton",
+    name = "mbutton_"..math.random(), type = "MButton",
     displayOnly = false,
     momentary = false, loop = true,
     wrap = true, spinner = false, vertical = true,

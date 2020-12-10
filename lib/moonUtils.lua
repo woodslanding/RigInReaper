@@ -4,12 +4,24 @@ local hsluv = require "hsluv"
 
 DBG = false
 
+-- The core library must be loaded prior to anything else
+local libPath = reaper.GetExtState("Scythe v3", "libPath")
+if not libPath or libPath == "" then
+    reaper.MB("Couldn't load the Scythe library. Please install 'Scythe library v3' from ReaPack, then run 'Script: Scythe_Set v3 library path.lua' in your Action List.", "Whoops!", 0)
+    return
+end
+loadfile(libPath .. "scythe.lua")({printErrors = true})
+
 local M = require("public.message")
 local Table = require("public.table")
 local T = Table.T
 
+--require 'Save_VST_Preset'
+
 IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
 BANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Banks/"
+
+BRIGHTNESS = 50
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
@@ -66,14 +78,14 @@ INPUT_DEVICE_NAME = 'HD Audio Mic input 1'
 --midi vol Settings
 MIDIVOL = {}
     MIDIVOL.NAME = "JS: Volume Adjustment"
-    MIDIVOL.SLOT = 3
+    MIDIVOL.SLOT = 2
 
-INSTRUMENT_SLOT = 2
+INSTRUMENT_SLOT = 1
 
 --MIDI ch strip Settings
 MCS = {
     NAME = "JS: midiChStrip",
-    SLOT = 1,
+    SLOT = 0,
     MIDI_ON = 0,
     OCTAVE = 1,
     SEMI = 2,
@@ -111,15 +123,151 @@ REAPER = {SEND = 0, RCV = -1, STEREO = 1024, MONO = 0 }
 
 local previousNotesourceSetting = 0
 
-function Esc(str) return ("%q"):format(str) end
+NOTES = {'C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'}
 
-function CleanComma(s)  return s:sub(1, string.len(s) -2) end
+function GetNoteName(noteNum)
+    noteNum = math.floor(noteNum)
+    local octave = math.floor(noteNum/12) - 2
+    local note = noteNum % 12
+    return NOTES[note + 1]..octave
+end
+-----------------------------------------------------------------------------------------------------------
+---------------------------------------------BASIC UTILITIES-----------------------------------------------
 
-function TStr(table) return '\n---------------\n'..Table.stringify(table)..'\n---------------' end
+function Dbg(...)
+    if DBG then
+        --call M.Msg with args.... how?
+    end
+end
 
+function IncrementValue(value,min,max,wrap,inc)
+    inc = inc or 1
+    --Dbg('value = '..value)
+    if inc < 0 then return DecrementValue(value,min,max,wrap,0 - inc)
+    else
+        wrap = wrap or true
+        if value == false then return true
+        elseif value == true and wrap then return false
+        elseif value == true then return true
+        else
+            --Dbg('incrementValue:  val=',value,'max=',max)
+            if value < min or value > max then
+                M.Msg('incrementValue: value must be between min and max')
+            elseif value < max then
+                return value + inc
+            elseif wrap then
+                return min
+            else return max
+            end
+        end
+    end
+end
+
+function DecrementValue(value,min,max,wrap,inc)
+    inc = inc or 1
+    wrap = wrap or true
+    if value == true then return false
+    elseif value == false and wrap then return true
+    elseif value == false then return false
+    else
+        if value < min or value > max then
+            M.Msg('decrementValue: value must be between min and max')
+        elseif value > min then
+            return value - inc
+        elseif wrap then
+            return max
+        else return min
+        end
+    end
+end
+
+function GetRGB(hue,sat,level)
+    if not level then level = BRIGHTNESS end
+    local color = { hue, sat, level }
+    local rgb = hsluv.hpluv_to_rgb(color)
+    return rgb
+end
+
+function RandomColor(brightness)
+    return GetRGB(math.random(360),100-(math.random(10) * math.random(10)),brightness or BRIGHTNESS)
+end
+
+function BoolToInt(val)
+    if val == true then return 1
+    elseif val == false then return 0
+    else return val
+    end
+end
+
+function IntToBool(val)
+    if val == true then return true
+    elseif val == false then return false
+    elseif val >= 1 then return true
+    elseif val <= 0 then return false
+    end
+end
+
+function GetLastTouchedFX()
+    local _, _, tracknum, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
+    return tracknum, fxnum, paramnum
+end
+---------------------------------------------------------------------------------------------------------
+-------------------------------------------FILE UTILITIES-----------------------------------------------
+function GetFileList(path)
+    local names = {}
+    local filecount,files = ultraschall.GetAllFilenamesInPath(path)
+    for i, file in pairs(files) do
+        --TStr(files,'files')
+        names[i] = GetFilename(file)
+    end
+    return names
+end
+
+--returns just the name portion, no path or extension
 function GetFilename(file)
-    local file_name = file:match("[^/]*.lua$")
-    return file_name:sub(0, #file_name - 4)
+    local path, filename = ultraschall.GetPath(file)
+    return filename:sub(0, #filename - 4)
+end
+
+function GetFileContaining(str,path)
+    if not path then path = BANK_FOLDER end
+    local filecount,files = ultraschall.GetAllFilenamesInPath(path)
+    for _,fileName in pairs(files) do
+        if string.find(fileName,str) then return fileName end
+    end
+    M.Msg("ERROR:  No file found containing: "..str)
+end
+
+function GetFileStartingWith(startsWith,path)
+    if not path then path = BANK_FOLDER end
+    for _,fileName in pairs(GetFileList(path)) do
+        if string.starts(fileName,startsWith) then return fileName
+        end
+    end
+    M.Msg('No file found starting with: '..startsWith)
+end
+
+--parses bank folder and returns a table with displayName = vstName
+function GetBankFileTable(path)
+    if not path then path = BANK_FOLDER end
+    local table = {}
+    for i,name in pairs(GetFileList(path)) do
+        --M.Msg('file = '..name)
+        local parts = StringSplit(name,'.')
+        --TStr(parts,'parts')
+        table[parts[1]] = parts[2]
+        --M.Msg('part 1 = '..parts[1]..',part 2 = '..parts[2])
+    end
+    --TStr(table,'bank folder')
+    return table
+end
+
+---------------------------------------------------------------------------------------------------
+----------------------------------------------------WINDOW UTILITIES-------------------------------
+
+function CloseWindow(windowTitle)
+    local hWnd = reaper.JS_Window_Find(BankWindow.name, true) -- find window by title bar text
+    if hWnd ~=nil then reaper.JS_WindowMessage_Post(hWnd, "WM_CLOSE", 0,0,0,0) end
 end
 
 function Fullscreen(windowTitle)
@@ -131,6 +279,43 @@ function Fullscreen(windowTitle)
     end
     reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 end
+
+function GetLayoutXandY(i,x,y,w,h,rows)
+    local xadj = math.floor((i - 1)/rows)
+    local yadj = (i-1) % rows
+    local xpos = x + (xadj * w)
+    local ypos = y + (yadj * h)
+    return xpos,ypos
+end
+
+--------------------------------------OPEN FX WINDOWS------------------------------------------
+function OpenPlugin(tracknum,fxnum)
+    local tr = GetTrack(tracknum)
+    reaper.TrackFX_Show( GetTrack(tracknum), fxnum, 3 )  --fx zero-based again...
+end
+
+function OpenVST(tracknum)
+    OpenPlugin(tracknum, INSTRUMENT_SLOT)
+end
+
+function OpenMidiChStrip(tracknum,open)
+    OpenPlugin(tracknum, MCS.SLOT)
+end
+
+function OpenMidiVol(tracknum,open)
+    OpenPlugin(tracknum, MIDIVOL.SLOT)
+end
+
+----------------------------------------------------------------------------------------------------------
+------------------------------------------------------TABLE UTILITIES-------------------------------------
+function TStr(table,str)
+    if not table then return nil end
+    local val = nil
+    if not str then str = table.name or 'TABLE' end
+    if type(table) ~= 'table' then val = 'not a table' else val = Table.stringify(table) end
+    return M.Msg('\nT:------['..str..']-----\n'..val..'\n---------------------------')
+end
+
 
 function ArraySort(t)
     local sorted = {}
@@ -155,50 +340,42 @@ function TableContains(table, element)
     return false
   end
 
+-------------------------------------------------------------------------------------------------------------
+---------------------------------------------------STRING UTILITIES------------------------------------------
 
-function Msg(string)
-    return reaper.ShowConsoleMsg(string..'\n')
+function string.starts(sourceString, start)
+    return sourceString:sub(1, string.len(start)) == start
+ end
+
+ local function splitByPlainSeparator(str, sep, max)
+    local z = #sep; sep = '^.-'..sep:gsub('[$%%()*+%-.?%[%]^]', '%%%0')
+    local t,n,p, q,r = {},1,1, str:find(sep)
+    while q and n~=max do
+        t[n],n,p = str:sub(q,r-z),n+1,r+1
+        q,r = str:find(sep,p)
+    end
+    t[n] = str:sub(p)
+    return t
 end
 
-function Dbg(...)
-    if DBG then
-        local out = {}
-        for _, v in ipairs({...}) do
-        out[#out+1] = tostring(v)
-        end
-        reaper.ShowConsoleMsg(table.concat(out, ", ").."\n")
+function StringSplit(str,sep)
+    return splitByPlainSeparator(str,sep,1000)
+end
+
+function Pad_zeros(str, places)
+    if string.len(str) < places then
+        return string.rep('0', places - string.len(str))..str
+    else
+        return str
     end
 end
 
-function GetRGB(hue,sat,level)
-    local color = { hue, sat, level }
-    local rgb = hsluv.hpluv_to_rgb(color)
-    --Dbg('GetRGB: r:',rgb[1],'g:',rgb[2])
-    --Dbg('b:',rgb[3])
-    return rgb
-end
+function Esc(str) return ("%q"):format(str) end
 
-function RandomColor(brightness)
-    return GetRGB(math.random(360),100-(math.random(10) * math.random(10)),brightness or 50)
-end
+function CleanComma(s)  return s:sub(1, string.len(s) -2) end
 
-function BoolToInt(val)
-    if val == true then return 1
-    elseif val == false then return 0
-    else return val
-    end
-end
-
-function IntToBool(val)
-    if val == true then return true
-    elseif val == false then return false
-    elseif val >= 1 then return true
-    elseif val <= 0 then return false
-    end
-end
-
-
-
+---------------------------------------------------------------------
+---------------------------------MOON PARAMS-------------------------
 function GetMoonParam(tracknum,param)
     local track = GetTrack(tracknum)
     local val,_,_ = reaper.TrackFX_GetParam( track, MCS.SLOT, param)
@@ -216,58 +393,6 @@ function SetVolParam(tracknum,param,val)
     _ = reaper.TrackFX_SetParam(track,MIDIVOL.SLOT,param,val)
 end
 
-function string.starts(s, start)
-    return s:sub(1, string.len(start)) == start
- end
-
-function Pad_zeros(str, places)
-    if string.len(str) < places then
-        return string.rep('0', places - string.len(str))..str
-    else
-        return str
-    end
-end
-
-function IncrementValue(value,min,max,wrap,inc)
-    inc = inc or 1
-    --Dbg('value = '..value)
-    if inc < 0 then return DecrementValue(value,min,max,wrap,0 - inc)
-    else
-        wrap = wrap or true
-        if value == false then return true
-        elseif value == true and wrap then return false
-        elseif value == true then return true
-        else
-            --Dbg('incrementValue:  val=',value,'max=',max)
-            if value < min or value > max then
-                Msg('incrementValue: value must be between min and max')
-            elseif value < max then
-                return value + inc
-            elseif wrap then
-                return min
-            else return max
-            end
-        end
-    end
-end
-
-function DecrementValue(value,min,max,wrap,inc)
-    inc = inc or 1
-    wrap = wrap or true
-    if value == true then return false
-    elseif value == false and wrap then return true
-    elseif value == false then return false
-    else
-        if value < min or value > max then
-            Msg('decrementValue: value must be between min and max')
-        elseif value > min then
-            return value - inc
-        elseif wrap then
-            return max
-        else return min
-        end
-    end
-end
 -------------------------------------------------------------------------------------------------
 -------------------------------------TRACK METHODS-----------------------------------------------
 
@@ -297,22 +422,26 @@ end
 function GetNumberOfTrack(mediatrack)
     --(returns zero if not found, -1 for master track) (read-only, returns the int directly)
     local num = reaper.GetMediaTrackInfo_Value( mediatrack,'IP_TRACKNUMBER')
-    if num == 0 then Msg('GetSelectedTrackNumber: Track Not Found')
+    if num == 0 then M.Msg('GetSelectedTrackNumber: Track Not Found')
     else return num
     end
 end
 
 function GetFXName(tracknum,slot)
-    local mediatrack = GetTrack(tracknum)
-    local _,name = reaper.BR_TrackFX_GetFXModuleName(mediatrack,slot)
-    return name
+    local track = GetTrack(tracknum)
+    --reaper.BR_TrackFX_GetFXModuleName(track, 0, "", 0)
+    local done,name = reaper.BR_TrackFX_GetFXModuleName(track,slot,"",128)--NOT SHOWN IN API DOCS!
+    if done then M.Msg('getting fx name: '..name)
+    elseif track then M.Msg('fx name failed at track,slot: '..track,slot)
+    end
+    return GetFilename(name)  --strip off .dll
 end
 
 function ClearFX(tracknum)
     local trk = GetTrack(tracknum)
     local count = reaper.TrackFX_GetCount(trk)
     if count > 0 then
-        for idx = reaper.TrackFX_GetCount(trk)-1, 0, -1 do
+        for idx = reaper.TrackFX_GetCount(trk) - 1, 0, -1 do
             reaper.TrackFX_Delete(trk, idx)
         end
     end
@@ -502,22 +631,6 @@ function BypassExpression(tracknum,byp)
 end
 
 -----------------------------------------------------------------------------------------------
---------------------------------------OPEN FX WINDOWS------------------------------------------
-
-function OpenVST(tracknum,open)
-    local tr = GetTrack(tracknum)
-    reaper.TrackFX_SetOpen(tr, INSTRUMENT_SLOT, open)
-end
-
-function OpenMidiChStrip(tracknum,open)
-    local tr = GetTrack(tracknum)
-    reaper.TrackFX_SetOpen(tr, MCS.SLOT, open)
-end
-
-function OpenMidiVol(tracknum,open)
-    local tr = GetTrack(tracknum)
-    reaper.TrackFX_SetOpen(tr, MIDIVOL.SLOT, open)
-end
 --###########################################################################################--
 ----------------------------------------EFFECT SWITCHING-------------------------------------
 --Need to look at thIs code again
@@ -903,30 +1016,57 @@ end
 ---------------------------------------------------------------------------------------------------------------
 --#############################################################################################################
 -------------------------------------------------PRESET SELECTION-----------------------------------------------
-function SelectRPL(tracknum,presetname)  end
-function SelectPresetByName(tracknum,presetname) end --for VSTs that support names
-function SavePreset(tracknum,presetname) end
-function OpenVSTBank(tracknum,bankname) end --for VSTs that support loading banks
-function SetRPLBank(tracknum,bankname) end --filter the lIst of presets for those that start with the bank name
---alternatively, make it easy to take a bank of vst presets and convert to RPL
---thIs means removing presets with the same name from the RPL INI and replacing.
---Not sure how reaper handles thIs.
 
-    ------#######################################################################################################
-    ------------------------------------------------ FXCHAIN LOADING ---------------------------------------------
+function incFxPreset(tracknum, fx)
+    local track = GetTrack(tracknum)
+    local presetmove = 1
+    reaper.TrackFX_NavigatePresets( track, fx, presetmove )
+end
+function decFxPreset(tracknum, fx)
+    local track = GetTrack(tracknum)
+    local presetmove = -1
+    reaper.TrackFX_NavigatePresets( track, fx, presetmove )
+end
+function SelectPreset(tracknum,fxnum, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
+    local track = GetTrack(tracknum)
+    reaper.TrackFX_SetPreset( track, INSTRUMENT_SLOT, presetname )
+end
+
+function SavePreset(tracknum,presetname)
+    if not presetname then presetname = 'test' end  --get current preset name...
+    local found, trackstatechunk = ultraschall.GetTrackStateChunk_Tracknumber(tracknum)
+    --M.Msg('TRACK_CHUNK\n'..trackstatechunk)
+    local fxStateChunk = ultraschall.GetFXStateChunk(trackstatechunk)
+    --M.Msg("FX_CHUNK\n"..fxStateChunk)
+    local fx_lines, startoffset, endoffset = ultraschall.GetFXFromFXStateChunk(fxStateChunk, 2)
+    local fx_statestring_base64, fx_statestring = ultraschall.GetFXSettingsString_FXLines(fx_lines)
+    M.Msg('State String'..fx_lines)
+    --ultraschall.SaveFXStateChunkAsRFXChainfile( string filename, string FXStateChunk)
+end
+
+function GetParamName(tracknum,fxnum, paramnum)
+    --M.Msg('getting param name for ',tracknum,fxnum,paramnum)
+    local track = GetTrack(tracknum)
+    local _, name = reaper.TrackFX_GetParamName( track, fxnum, paramnum - 1, "" )--wtf? here the fx are zero based!  so are params.
+    --M.Msg('param name is'..name)
+    return name
+end
+--------------------------------------------------------------------------------------------------------------
+------#######################################################################################################
+------------------------------------------------ FX LOADING ---------------------------------------------
 
 function LoadInstrument(tracknum,vstname)
-    --all needs to be reworked for mbf format
+    local track = GetTrack(tracknum)
     reaper.PreventUIRefresh(1)
-    local path = BANK_FOLDER..vstname..'.lua'
-    Dbg('loadInstrument: path=',path)
-    ClearFX(tracknum)
-    local trk = GetTrack(tracknum)
-    reaper.TrackFX_AddByName(trk, path, false, -1)
-    ConfigureTrack(tracknum)
-    Dbg('tracknum=',tracknum,'chain=',vstname)
-    --should actually be bank name
-    TrackName(tracknum,vstname)
+    M.Msg('tracknum = '..tracknum)
+    local oldName = GetFXName(tracknum, INSTRUMENT_SLOT)
+    M.Msg('new fx name = '..vstname, 'old name = '..oldName)
+    if vstname ~= oldName then
+        reaper.TrackFX_Delete( track, INSTRUMENT_SLOT )
+        reaper.TrackFX_AddByName(track, vstname, false, -1)
+        reaper.TrackFX_CopyToTrack( track, reaper.TrackFX_GetCount(track) - 1, track, 1, true )
+        M.Msg('adding vst:'..vstname)
+    end
     reaper.PreventUIRefresh(-1)
 end
 
@@ -947,6 +1087,8 @@ end
 -------------------------------------------------TESTING METHODS-----------------------------------------------
 
 function Test()
+    M.Msg('testing')
+    --SavePreset(1,2,'TEST')
     --Dbg('test: Setting wet level',20)
     --SetWetDryLevels(20,.3)
     --ConfigureTrack(GetSelectedTrackNumber())
@@ -969,6 +1111,7 @@ function Test()
     --SetTrackEffectMuted(21,false)
     --GetRGB()
     --GetMeter(22,1)
+
 end
 
 --Test()

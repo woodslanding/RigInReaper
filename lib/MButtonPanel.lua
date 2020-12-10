@@ -60,7 +60,7 @@ local function createControls(parent)
                 caption = '',
                 min = 0, max = 1,
                 value = 0,
-                font = 3,
+                font = parent.font,
                 name = parent.name..'_control_'..index,
                 type = parent.type or "MButton",
                 image =  parent.image,
@@ -99,6 +99,7 @@ local defaults = {
     selection = {},
     pageCount = 1,
     pageNum = 1,
+    font = 3,
 }
 
 function MButtonPanel.new(props)
@@ -183,7 +184,7 @@ function MButtonPanel:getSelectionData(field)
     if not self.multi then
         if not field then return self.selection.name else return self.selection[field] end
     end
-    --M.Msg('selection = '..TStr(self.selection))
+    --TStr('selection',self.selection))
     local data = {}
     for i,option in pairs(self.selection) do
         if not field then data[i] = option.name
@@ -191,8 +192,17 @@ function MButtonPanel:getSelectionData(field)
         M.Msg('getting selection data '..data[i])
     end
     return data
-end--]]
+end
 
+function MButtonPanel:selectByName(name)
+    --options really shouldn't have duplicate names... but if they do, this returns the first one.
+    for i, option in pairs(self.options) do
+        if option.name == name then
+            self:select(option.index)
+            self:setPageToSelected()
+        end
+    end
+end
 --returns a table of options
 function MButtonPanel:select(set,doNotRun)
     if set then
@@ -223,7 +233,7 @@ function MButtonPanel:select(set,doNotRun)
                         if not self.momentary then sw.frame = 1 end
                         option.state = 1
                         self.selection = option
-                        --M.Msg(self.name..': options: \n:'..Table.stringify(self.options))
+                        TStr(option,'selected option')
                         option:func()
                     else sw.frame = 0
                     end
@@ -234,14 +244,28 @@ function MButtonPanel:select(set,doNotRun)
         end
     else M.Msg(self.name..': set is nil') end
 end
---for single select this is an integer.  for multi, you can select an index, or else get a table of indices
+--returns a single option.  In multimode it defaults to option 1
 function MButtonPanel:getSelection(index)
-    if index and type(self.selection) == 'table' then return self.selection[index]
-    else return self.selection end
+    if self.multi then
+        if not index then index = 1 end
+        return self.selection[index]
+    else return self.selection
+    end
 end
 
 
 function MButtonPanel:incPage(val) self:setPage(self.pageNum + val) end
+
+function MButtonPanel:pageToSelection(set)
+    local option = self:getSelection()
+
+    TStr(option,'option')
+    if not option then return 1 end
+    local idx = option.index
+    local page = math.floor(idx / (self.rows * self.cols))
+    M.Msg('PAGE = '..page)
+    if set then self:setPage(page) else return page end
+end
 
 function MButtonPanel:setPage(page) --pages start at 1
     local btnCount = self.rows * self.cols
@@ -297,6 +321,7 @@ function MButtonPanel:getButtonForOption(idx)
         if control.option.index == idx then
              return control end
     end
+    return self.controls[1]
     --local btnCount = self.rows*self.cols
     --return self.controls[idx % (btnCount-1)]
 end

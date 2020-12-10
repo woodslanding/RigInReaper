@@ -2,57 +2,75 @@
 
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 
-require 'lib.moonUtils'
+require 'moonUtils'
 
 dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
 
-function GetPresetList(emptyName)
+local vstText = '----  VST built-in programs  ----'
+local userText = '----  User Presets (.rpl)  ----'
+
+--[[function Msg(...) --reaper.ShowConsoleMsg(arg)
+    local out = {}
+    for _, v in ipairs({...}) do
+        out[#out+1] = tostring(v)
+    end
+    reaper.ShowConsoleMsg(table.concat(out, ", ").."\n")
+end--]]
+
+function GetPresetList(tracknum, factory, ignoreName, fxnum )
+    if not fxnum then fxnum = INSTRUMENT_SLOT end
+    if not ignoreName then ignoreName = '' end
+    if not tracknum then tracknum = 1 end
+    if not factory then factory = false end
     local writeFile = true  --true:write, false, write to console
     --Check that fx window is focused----------------------------------------------------
-    local focused,tracknum,_,fx_num = reaper.GetFocusedFX()
+    OpenPlugin(tracknum,fxnum)
+    local focused
+    focused,tracknum,_,fxnum = reaper.GetFocusedFX()
     local fx_name
-    --msg('tracknum = '..tracknum)
     if focused then
-        Dbg('track num =',tracknum)
+        --Msg('track num ='..tracknum, 'fx num '..fxnum)
         local track = GetTrack(tracknum)
-        _,fx_name = reaper.TrackFX_GetFXName(track, fx_num,"")
-        --msg('fx name = '..fx_name)
+        _,fx_name = reaper.TrackFX_GetFXName(track, fxnum,"")
+        --Msg('fx name = '..fx_name)
     end
-    local vstWindowTitle = reaper.JS_Localize(fx_name, "common") 
-    local hwnd = reaper.JS_Window_Find(vstWindowTitle, false)   
-    -- check if window found
-    if not hwnd then
-        reaper.MB("Please open FX in a floating plugin window!", "Window not found", 0)
-        return nil
-    end
+    local vstWindowTitle = reaper.JS_Localize(fx_name, "common")
+    local hwnd = reaper.JS_Window_Find(vstWindowTitle, false)
     local container = reaper.JS_Window_FindChildByID(hwnd, 0)
     local presetWindow = reaper.JS_Window_FindChildByID(container, 1000)
     local itemCount = reaper.JS_WindowMessage_Send(presetWindow, "CB_GETCOUNT", 0,0,0,0)
     -- save current index
-    local cur_index = reaper.JS_WindowMessage_Send(presetWindow, "CB_GETCURSEL", 0,0,0,0) 
+    local cur_index = reaper.JS_WindowMessage_Send(presetWindow, "CB_GETCURSEL", 0,0,0,0)
     -- get indexes for start/end of user preset names --
     local list_start = -1
     local list_end = itemCount
     for i = 0, itemCount-1 do
         reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", i, 0,0,0)
         local name = reaper.JS_Window_GetTitle(presetWindow,"")
-        if name == '----  VST built-in programs  ----' then   --'----  User Presets (.rpl)  ----'
-                list_start = i+1 
+        if not factory then
+            if name == userText then list_start = i + 1
+            elseif name == vstText then list_end = i
+            end
+        elseif name ==vstText then list_start = i + 1
         end
+        --[[if factory then startText = vstText; endText = nil else startText = 0; endText = vstText end
+        if name == startText then  list_start = i + 1  end
+        if name == endText then list_end = i + 1 end--]]
     end
     -- check if user presets found
-    if itemCount - list_start == 0 then  
-        reaper.MB( "No User Presets Found: ","Not found", 0)
+    --Msg('item count = '..itemCount)
+    if  itemCount - list_start == 0 then
+        reaper.MB( "No Presets Found: ","Not found", 0)
         return
-    end 
-    -- add user preset names --    
+    end
+    -- add user preset names --
     local presets = {}
     local presetcount = 0
     local presetsByName = {} --for sorting later
     for i = list_start, list_end-1 do
         reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", i, 0,0,0)
-        local presetname = reaper.JS_Window_GetTitle(presetWindow,"")      
-        if presetname == emptyName then --don't add preset
+        local presetname = reaper.JS_Window_GetTitle(presetWindow,"")
+        if presetname == ignoreName then --don't add preset
         else
             local num = i-list_start
             presets[num] = presetname
@@ -64,31 +82,35 @@ function GetPresetList(emptyName)
     -- restore preset index
     reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", cur_index, 0,0,0)
     -- str = str..'\n' .. tostring(i-list_start) ..' '..reaper.JS_Window_GetTitle(presetWindow,"")
-    
+
     --Sort presetWindow, if needed --------------------------------------------------------
     presets = {} --clear presets by num
     local presetTemp = {}
-    for n in pairs(presetsByName) do 
-        table.insert(presetTemp, n) 
+    for n in pairs(presetsByName) do
+        table.insert(presetTemp, n)
     end
-    table.sort(presetTemp) -- sort 
+    table.sort(presetTemp) -- sort
     for i,n in ipairs(presetTemp) do --transfer to array
-        table.insert(presets,n) 
-    end       
+        table.insert(presets,n)
+    end
     return presets
 end
 
-function Main()
+function GetVstPresets(tracknum)
+    return GetPresetList(tracknum,true,'<empty>')
+end
 
+function GetRplPresets(tracknum)
+    return GetPresetList(tracknum)
 end
 
 
--- begin
+--begin
 if not reaper.APIExists("JS_Localize") then
   reaper.MB("js_ReaScriptAPI extension is required for this script.", "Missing API", 0)
 else
-  Main()
+  TStr(GetVstPresets(1),'PRESETS')
 end
 
 -- end
-reaper.defer(function () end)
+reaper.defer(function () end)--]]
