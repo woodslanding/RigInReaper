@@ -13,6 +13,8 @@ require 'MoonUtils'
 local GUI = require("gui.core")
 local M = require("public.message")
 local Image = require("public.image")
+
+local Buffer = require("public.buffer")
 local Font = require("public.font")
 local Color = require("public.color")
 local Math = require("public.math")
@@ -21,15 +23,21 @@ local Sprite = require("public.sprite")
 local GFX = require("public.gfx")
 local T = Table.T
 local Element = require("gui.element")
+local Text = require("public.text")
+
+local font = {'Calibri', 28, 'b'}
+local lenX, lenY, origW
 
 local MSlider = Element:new()
 MSlider.__index = MSlider
 MSlider.defaultProps = {
-    name = "mslider", type = "MSLIDER", displayOnly = false,
+    name = "mslider"..math.random(),
+    type = "MSLIDER", displayOnly = false,
     frames = 20, horizontal = false,
     x = 16, y = 32, w = 24, h = 24,
     labelX = 0, labelY = 0,
     caption = "", font = 3, textColor = "text",
+    fontSize = 28,
     func = function () end,
     params = {},
     min = 0,
@@ -38,6 +46,8 @@ MSlider.defaultProps = {
     value = 0,
     frame = 5,
     vertFrames = true,
+    shadow = true,
+    center = true,  -- 0 for left, 1 for right
     waitToSet = false  --if true, don't actually run the func() until the mouse is released..
 }
 
@@ -73,30 +83,85 @@ end
 function MSlider:draw()
 
     local x, y, w, h = self.x, self.y, self.w, self.h
+    local strWidth, strHeight
     gfx.mode = 0
 
-    if self.color then
+    --if self.horizontal then
+
+        if self.color then
+            Color.set(self.color)
+            local round = self.round or 0
+            GFX.roundRect(self.x, self.y, self.w-1, self.h-1, round, true, true)
+        end
+
+        self.sprite:draw(x, y, w, h, self.frame, self.frames, self.vertFrames)
+        -- Draw the caption
+        Color.set(self.textColor)
+        Font.set({'calibri',self.fontSize,'b'})
+
+        local str = self:formatOutput(self.caption)
+        --M.Msg('caption = '..self.caption)
+        str = str:gsub([[\n]],"\n")
+
+        strWidth, strHeight = gfx.measurestr(str)
+        local playX = w - strWidth
+        local playY = h - strHeight
+
+        gfx.x = x + (playX / 2) + (self.labelX * playX)
+        gfx.y = y + (playY / 2) + (self.labelY * playY)
+        gfx.drawstr(str)
+
+    --[[else
+        local dest = gfx.dest
+        gfx.x, gfx.y = 0,0
+
+        Font.set({'calibri',self.fontSize,'b'})
+        local str = self:formatOutput(self.caption)
+        M.Msg('caption = '..self.caption)
+
+        strWidth, strHeight = gfx.measurestr(str)
+        M.Msg('width, height = ',strWidth,strHeight)
+        local playX, playY = (h - strWidth)/2, (w - strHeight)/2
+        local xpos, ypos
+        if self.center then
+            xpos = playX + (playX * self.labelX)
+            ypos = playY + (playY * self.labelY)
+        else
+            xpos = self.labelY
+            ypos = self.labelX
+        end
         Color.set(self.color)
-        local round = self.round or 0
-        GFX.roundRect(self.x, self.y, self.w-1, self.h-1, round, true, true)
-    end
+        local buff = Buffer.get()
+        gfx.dest = buff;                   -- draw to off-screen buffer
+        gfx.setimgdim(buff, -1, -1)      -- clear the buffer
+        gfx.setimgdim(buff, h + 1, w)  -- sets its size.  For some reason it's a pixel small in one direction
+        gfx.rect(0,0, h, w)           -- set the bg colour, for improved anti-aliasing
+        if self.color then
+            Color.set(self.color)
+            local round = self.round or 0
+            GFX.roundRect(0, 0, w, h, round, true, true)
+        end
 
-    self.sprite:draw(x, y, w, h, self.frame, self.frames, self.vertFrames)
-      -- Draw the caption
-    Color.set(self.textColor)
-    Font.set(self.font)
+        gfx.a = 1
 
-    local str = self:formatOutput(self.caption)
-    --M.Msg('caption = '..self.caption)
-    str = str:gsub([[\n]],"\n")
+        self.sprite:draw(x, y, w, h, self.frame, self.frames, self.vertFrames)
 
-    local strWidth, strHeight = gfx.measurestr(str)
-    local playX = w-strWidth
-    local playY = h - strHeight
+        -- Draw the caption
+        --gfx.r = save_gfxr; gfx.g = save_gfxg; gfx.b = save_gfxb -- set the text colour
 
-    gfx.x = x + (playX / 2) + (self.labelX * playX)
-    gfx.y = y + (playY / 2) + (self.labelY * playY)
-    gfx.drawstr(str)
+        Color.set(self.textColor)
+
+        gfx.x = xpos
+        gfx.y = ypos
+
+        gfx.printf("%s", str)
+
+        gfx.dest=-1;                           -- switch back to on-screen
+        gfx.mode = 0 +1-1 + 2 +4               -- blend mode (1) deactivated, disable source alpha (2),
+        gfx.transformblit(buff,  x,y, w, h, 2,2,  { h,0,  h,w,  0,0,  0,w, } )
+
+        gfx.dest = dest
+    end--]]
 end
 
 function MSlider:onMouseDown(state)
@@ -114,8 +179,7 @@ function MSlider:onMouseUp(state)
             pct = (state.mouse.x - self.x)/self:throw()
         else  pct = 1 - ((state.mouse.y - self.y)/self:throw()) --y measured from top!
         end
-        --local v = self:val()  --not sure what I was trying to do here...
-        self:val(self.min + (pct * self:getRange()))
+        local v = self:val()
         self:func(table.unpack(self.params))
     elseif self.waitToSet then self:func(table.unpack(self.params))
     end
@@ -157,8 +221,10 @@ end
 function MSlider:val(incoming)
     if incoming then
         self.value = incoming
+        M.Msg('incoming val: '..incoming)
         local pct = ((self.value - self.min)/self:getRange())
         local frame = Math.round((self.frames-1) * pct)
+        M.Msg("FRAME = "..frame)
         if frame < 0 then frame = 0 elseif frame > self.frames - 1 then frame = self.frames - 1 end
         self.frame = frame
         self:redraw()
@@ -167,34 +233,53 @@ function MSlider:val(incoming)
 end
 
 GUI.elementClasses.MSlider = MSlider
---[[
-local slider = GUI.createElement({
+--
+slider = GUI.createElement({
     frames = 49, frame = 5,
     horizontal = true,
     caption = 'TESTING',
     name = "slider",
-    min = -5,
-    max = 5,
+    min = -.5,
+    max = .5,
     value = 0,
+    fontSize = 36,
     type = "MSlider",
     color = 'red',
     w = 180,h = 48,x = 0,y = 0,
     labelX = 0,labelY = 0,
-    --image =  "meterL.png",
     image = IMAGE_FOLDER.."SimpleFader.png",
-    func = function(self, a, b, c) M.Msg(self.name, self:val()) end,
+    func = function(self) vSlider.labelX = self:val() end,
     params = {"a", "b", "c"}
   })
 
-  local vSlider = GUI.createElement({
-    frames = 144, frame = 0,
+  slider2 = GUI.createElement({
+    frames = 49, frame = 5,
+    horizontal = true,
+    caption = 'TESTING',
+    name = "slider2",
+    min = -.5,
+    max = .5,
+    value = 0,
+    fontSize = 36,
+    type = "MSlider",
+    color = 'red',
+    w = 180,h = 48,x = 0,y = 48,
+    labelX = 0,labelY = 0,
+    image = IMAGE_FOLDER.."SimpleFader.png",
+    func = function(self) vSlider.labelY = self:val() end,
+    params = {"a", "b", "c"}
+  })
+
+  vSlider = GUI.createElement({
+    frames = 108, frame = 0,
     horizontal = false,
-    caption = 'test',
+    caption = 'test caption',
     name = "vslider",
     min = 0,
     max = 99,
+    fontSize = 36,
     value = 0,
-    color = 'red',
+    color = 'blue',
     type = "MSlider",
     w = 64,h = 288,x = 200,y = 10,
     labelX = 0,labelY = 0,
@@ -218,7 +303,7 @@ local window = GUI.createWindow({
 
 local layer = GUI.createLayer({name = "Layer1", z = 1})
 
-layer:addElements(vSlider, slider)
+layer:addElements(vSlider, slider, slider2)
 window:addLayers(layer)
 window:open()
 

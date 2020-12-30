@@ -20,14 +20,13 @@ local T = Table.T
 
 IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
 BANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Banks/"
+PRESET_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Presets/"
 
 BRIGHTNESS = 50
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
-CHANNEL_WIDTH = 120
-BUTTON_WIDTH = 60
-BUTTON_HEIGHT = 48
+TASKBAR_H = 30
 
 HUES = {
     CRIMSON = 0,
@@ -50,27 +49,27 @@ HUES = {
 }
 
 --I/O track numbers   todo: Set controls to different channels on behringer
-TRACKS = {  OUT_MASTER = 1,
+TRACKS = {  OUT_MASTER = 1,  --sum of A,B,C,D ??
             OUT_MON = 2,
             OUT_A = 3,
             OUT_B = 4,
             OUT_C = 5,
             OUT_D = 6,
-            IN_KEYB = 7,
-            IN_ROLI = 8,
-            IN_SUS = 9,
-            IN_PB = 10,
-            IN_MOD = 11,
-            IN_AT = 12,
-            IN_ENC = 13,
-            IN_PUSH = 14,
-            IN_BTN_UP = 15,
-            IN_BTN_DN = 16,
-            IN_FSW = 17,
-            IN_EXP = 18,
-            IN_DRWB = 19,
-            IN_ORG_CTL = 20,
-            IN_BHR2 = 21
+            IN_BHR2 = 7,    --behringer#2 - Reaper Control Unit port
+            IN_ROLI = 8,   --notes and roli controls, I suppose? roli port/ all channels
+            IN_KEYB = 9,   --notes only, yamaha, CH1
+            IN_PB = 10,    --Yamaha Port, CH1
+            IN_MOD = 11,   --Yamaha Port, CH1
+            IN_ENC = 12,   --behringer port CH1
+            IN_PUSH = 13,  --behringer port CH2
+            IN_BTN_UP = 14,--behringer port CH3
+            IN_BTN_DN = 15,--behringer port CH4
+            IN_SUS = 16,   --FC port
+            IN_FSW = 17,   --FC port
+            IN_EXP = 18,   --FC port
+            IN_AT = 19,    --drawbar port
+            IN_DRWB = 20,  --drawbar port
+            IN_ORG_CTL = 21,--drawbar port
 }
 FIRST_INST_TRACK = 22
 
@@ -115,7 +114,7 @@ NS_COUNT = 4
 NS = {KBD = 0, DUAL = 1, ROLI = 2, NONE = 3}
 
 --Audio outputs
-AUDIO_OUT = {A = 0,B = 1,C = 2,D = 3}
+AUDIO_OUT = {A = 0, B = 1, C = 2, D = 3}
 --track numbers
 OUT_OFFSET = 3 --difference between param#s and track# for outputs
 
@@ -133,6 +132,12 @@ function GetNoteName(noteNum)
 end
 -----------------------------------------------------------------------------------------------------------
 ---------------------------------------------BASIC UTILITIES-----------------------------------------------
+function GetTrackChunk(trackNum)
+    dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
+
+    local found, trackstatechunk = ultraschall.GetTrackStateChunk_Tracknumber(trackNum)
+    print(trackstatechunk)
+end
 
 function Dbg(...)
     if DBG then
@@ -207,21 +212,26 @@ function IntToBool(val)
     end
 end
 
-function GetLastTouchedFX()
-    local _, _, tracknum, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
-    return tracknum, fxnum, paramnum
-end
 ---------------------------------------------------------------------------------------------------------
 -------------------------------------------FILE UTILITIES-----------------------------------------------
 function GetFileList(path)
     local names = {}
     local filecount,files = ultraschall.GetAllFilenamesInPath(path)
     for i, file in pairs(files) do
-        --TStr(files,'files')
         names[i] = GetFilename(file)
     end
     return names
 end
+
+function GetSubFolderList(path)
+    local names = {}
+    local count, files = ultraschall.GetAllDirectoriesInPath(path)
+    for i, file in pairs(files) do
+        _, names[i] = ultraschall.GetPath(file)
+    end
+    return names
+end
+
 
 --returns just the name portion, no path or extension
 function GetFilename(file)
@@ -241,7 +251,7 @@ end
 function GetFileStartingWith(startsWith,path)
     if not path then path = BANK_FOLDER end
     for _,fileName in pairs(GetFileList(path)) do
-        if string.starts(fileName,startsWith) then return fileName
+        if StartsWith(fileName,startsWith) then return fileName
         end
     end
     M.Msg('No file found starting with: '..startsWith)
@@ -262,25 +272,44 @@ function GetBankFileTable(path)
     return table
 end
 
+function CreateFolder(path)
+    if EndsWith(path,'/') or EndsWith(path,'\\') then path = CleanComma(path) end
+    return reaper.RecursiveCreateDirectory(path,0) > 0
+end
+
 ---------------------------------------------------------------------------------------------------
 ----------------------------------------------------WINDOW UTILITIES-------------------------------
 
-function CloseWindow(windowTitle)
-    local hWnd = reaper.JS_Window_Find(BankWindow.name, true) -- find window by title bar text
+function CloseWindow(window)
+    local title = window.name
+    M.Msg('window title = '..title)
+    local hWnd = reaper.JS_Window_Find(title, true) -- find window by title bar text
     if hWnd ~=nil then reaper.JS_WindowMessage_Post(hWnd, "WM_CLOSE", 0,0,0,0) end
 end
 
-function Fullscreen(windowTitle)
-    local win = reaper.JS_Window_Find(windowTitle, true)
-    local style = reaper.JS_Window_GetLong(win, 'STYLE')
-    if style then
-        style = style & (0xFFFFFFFF - 0x00C40000) --removes window frame
-        reaper.JS_Window_SetLong(win, "STYLE", style)
+function Fullscreen(window, off)
+    local title = window.name
+    local win = reaper.JS_Window_Find(title, true)
+    if not off then
+        local style = reaper.JS_Window_GetLong(win, 'STYLE')
+        if style then
+            style = style & (0xFFFFFFFF - 0x00C40000) --removes window frame
+            reaper.JS_Window_SetLong(win, "STYLE", style)
+        end
+        reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 200)
+    else window:reopen({})
     end
-    reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+end
+
+function ResizeWindow(window, x, y, w, h)
+    local title = window.name
+    local win = reaper.JS_Window_Find(title, true)
+    reaper.JS_Window_SetPosition(win, x, y, w, h)
+    window:update()
 end
 
 function GetLayoutXandY(i,x,y,w,h,rows)
+    --M.Msg("layout: x = "..x)
     local xadj = math.floor((i - 1)/rows)
     local yadj = (i-1) % rows
     local xpos = x + (xadj * w)
@@ -306,39 +335,32 @@ function OpenMidiVol(tracknum,open)
     OpenPlugin(tracknum, MIDIVOL.SLOT)
 end
 
+function GetLastTouchedFX()
+    local _, _, tracknum, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
+    return tracknum, fxnum, paramnum
+end
 ----------------------------------------------------------------------------------------------------------
 ------------------------------------------------------TABLE UTILITIES-------------------------------------
 function TStr(table,str)
-    if not table then return nil end
+    if not str then local str = 'table unknown' end
+    if not table then return M.Msg('-----------TStr, table is nil: '..str) end
     local val = nil
     if not str then str = table.name or 'TABLE' end
     if type(table) ~= 'table' then val = 'not a table' else val = Table.stringify(table) end
     return M.Msg('\nT:------['..str..']-----\n'..val..'\n---------------------------')
 end
 
-local function sorter(a, b)
-    a = tostring(a.N)
-    b = tostring(b.N)
-    local patt = '^(.-)%s*(%d+)$'
-    local _,_, col1, num1 = a:find(patt)
-    local _,_, col2, num2 = b:find(patt)
-    if (col1 and col2) and col1 == col2 then
-        return tonumber(num1) < tonumber(num2)
-    end
-    return a < b
-end
-
 function ArraySort(t)
     local sorted = {}
     for i in ipairs(t) do table.insert(sorted,t[i]) end
-    table.sort(sorted)
+    table.sort(sorted, function (a,b) return a:lower() < b:lower() end)
     return sorted
 end
 
 function TableSort(t)
     local sorted = {}
     for n in pairs(t) do table.insert(sorted, n) end
-    table.sort(sorted, function (a,b) return a:lower()< b:lower() end)
+    table.sort(sorted, function (a,b) return a:lower() < b:lower() end)
     return sorted
 end
 
@@ -351,7 +373,7 @@ function TableContains(table, element)
     return false
   end
 
-  function RemoveDuplicates(table)
+function RemoveDuplicates(table)
     local hash = {}
     local res = {}
     for _,val in ipairs(table) do
@@ -362,13 +384,27 @@ function TableContains(table, element)
     end
     return res
   end
+--returns the index of a table that has a .name field that matches name, or a string that matches name
+function IForName(array, name)
+    for i,element in ipairs(array) do
+        if type(element) == 'table' and element.name and (element.name == name) then return i end
+        if type(element) == 'string' and element == name then return i end
+    end
+    return nil
+end
 
 -------------------------------------------------------------------------------------------------------------
 ---------------------------------------------------STRING UTILITIES------------------------------------------
 
-function string.starts(sourceString, start)
+function StartsWith(sourceString, start)
     return sourceString:sub(1, string.len(start)) == start
  end
+
+function EndsWith(sourceString, ending)
+    local endString = sourceString:sub(string.len(sourceString) - string.len(ending) + 1, string.len(sourceString))
+    --M.Msg('end string = '..endString..', ending = '..ending)
+    return endString == ending
+end
 
  local function splitByPlainSeparator(str, sep, max)
     local z = #sep; sep = '^.-'..sep:gsub('[$%%()*+%-.?%[%]^]', '%%%0')
@@ -651,6 +687,13 @@ function BypassExpression(tracknum,byp)
     local tr = GetTrack(tracknum)
     reaper.TrackFX_SetOffline(tr, MIDIVOL.SLOT,byp)
     --reaper.TrackFX_SetEnabled( track, fx, enabled )  --what's the difference???
+end
+
+-----------------------------------------------------------------------------------------------
+--#############################################################################################
+---------------------------------------TRANSPORT CONTROLS -------------------------------------
+function setTempo(tempo)
+    reaper.SetCurrentBPM( 0, tempo, 1 )
 end
 
 -----------------------------------------------------------------------------------------------
@@ -1191,6 +1234,12 @@ end
 
 function Test()
     M.Msg('testing')
+    ends = 'test'
+    notend = 'west'
+    string = 'thisisatest'
+    M.Msg('string end test: '..tostring(EndsWith(string,ends)))
+    M.Msg('string end fail: '..tostring(EndsWith(string,notend)))
+    --GetTrackChunk(1)
     --SavePreset(1,2,'TEST')
     --Dbg('test: Setting wet level',20)
     --SetWetDryLevels(20,.3)

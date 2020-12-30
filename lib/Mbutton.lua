@@ -33,7 +33,7 @@ MButton.__index = MButton
 MButton.defaultProps = {
     name = "mbutton_"..math.random(), type = "MButton",
     displayOnly = false,
-    momentary = false, loop = true,
+    momentary = false,
     wrap = true, spinner = false, vertical = true,
     x = 16, y = 32, w = 64, h = 48,
     labelX = 0, labelY = 0,

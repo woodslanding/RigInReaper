@@ -33,7 +33,7 @@ local T = Table.T
 
 local font = {'Calibri', 36,"b"}
 
-imageFolder = IMAGE_FOLDER
+ImageFolder = IMAGE_FOLDER
 
 KeyboardText = {
     '1','q','a','z',
@@ -70,14 +70,14 @@ function MText:createTextfield()
     local textfield = GUI.createElement({
         name = "text_"..math.random(),
         type = "MButton",
-        --image = imageFolder.."Combo.png",
+        --image = ImageFolder.."Combo.png",
         x = self.x + (self.w * 6),
         y = self.y,
         w = self.w * 6,
         h = self.h,
         font = font,
         frames = 2,
-        image = imageFolder..'combo.png',
+        image = ImageFolder..'combo.png',
         momentary = true,
         caption = self.text,
         color = 'black',
@@ -89,13 +89,13 @@ function MText:createTitle()
     local title = GUI.createElement({
         name = "title_"..math.random(),
         type = "MButton",
-        --image = imageFolder.."Combo.png",
+        --image = ImageFolder.."Combo.png",
         x = self.x,
         y = self.y,
         w = self.w * 6,
         h = self.h,
         font = font,
-        image = imageFolder..'combo.png',
+        image = ImageFolder..'combo.png',
         frames = 2,
         momentary = true,
         caption = self.text,
@@ -107,7 +107,7 @@ end
 
 function MText:createKeyboard(parent)
     local keyboard = MButtonPanel.new({
-        image = imageFolder.."Combo.png",
+        image = ImageFolder.."Combo.png",
         z = 2,
         rows = 4,
         cols = 11,
@@ -118,7 +118,7 @@ function MText:createKeyboard(parent)
         lowerCase = self.useLowerCase,
         font = font,
         usePager = true,
-        pagerImage = imageFolder.."Combo.png",
+        pagerImage = ImageFolder.."Combo.png",
         pagerX = self.x, pagerY = self.y + (self.h),
         pagerW = 40, pagerH = self.h * 2,
         momentary = true,

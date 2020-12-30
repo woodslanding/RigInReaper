@@ -59,6 +59,8 @@ function MLabel:init()
 
     local output = self:formatOutput(self.caption)
     --self.origW = self.w
+
+
     self.textW, self.textH = gfx.measurestr(output)
 
     local w, h = self.textW + 4, self.textH + 4
@@ -116,8 +118,10 @@ function MLabel:draw()
 
     -- Text
     if self.vertical then
-            gfx.blit(self.buffers[2], 1, math.rad(-90)
-            )
+        local x,y,w,h = self.x,self.y,self.w,self.h
+            gfx.blit(self.buffers[2], 1, math.rad(-90))
+            gfx.a = 1
+            --gfx.transformblit(self.buffers[2],  x,y, w, h, 2,2,  { h,0,  h,w,  0,0,  0,w, } )
     else gfx.blit(self.buffers[2], 1, 0)
         gfx.a = 1
     end
@@ -133,6 +137,11 @@ function MLabel:val(newval)
         return self.caption
     end
 
+end
+
+function MLabel:setCaption(text)
+    self.caption = text
+    self:redraw()
 end
 
 GUI.elementClasses.MLabel = MLabel

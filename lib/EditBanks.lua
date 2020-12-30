@@ -1,4 +1,54 @@
 --------------------------------------------------------Edit Banks---------------------------------------
+--[[
+   we want to populate the combos with two things:
+    1.  a list of banks for this particular VST
+    2.  a list of presets for the selected bank.
+    so the function would be:  loadPresets(vstName,bankname)
+    this would search the file vstName and return 2 values:
+        1. a list of all the bank names for this vstName
+        2. a list of all the presets in the bank 'bankname'
+    selecting a vst parses the moonBank file, and creates bank lists for it
+    -----------------------
+    If we have a 1-button solution to converting vst built-in programs to RPLs,
+    (updating) we can deal exclusively with RPLs.
+
+    for creating the .mbf file we need:
+    1.  A means of viewing ALL presets for a vst (rpl list) and assigning each one
+        to one or more banks.  This can be a fullscreen window with button arrays
+        on the left for presets, and the right for banks.  The bank buttons are
+        multi-select, and bank data is written whenever the preset is changed.
+        It should show a lot of (32?) banks, with option for paging
+        It should be associated with a track so the selected preset can be auditioned.
+    2.  Also needs: Buttons for creating, renaming, reordering, coloring, and deleting banks/tags.
+    3.  Need a window for assigning params to widgets, both globally and per bank.  Global could be
+        in a page of main window, but bank should probably be accessed from the bank edit page.
+
+    We should be able to save the current preset from this page.  When a preset has been edited,
+    we can open this page and
+    1.  Just save the preset under its current name  or
+    2.  Select a new name and bank(s) for the preset
+
+    CONTROL LIST:
+    1.  Select VST--this will load all banks for this VST
+    2.  Bank Mode:  presets are multi-select, so you select a bank and create a preset list.  Params are for selected BANK.
+    3.  Preset Mode: banks are multi-select, so you can assign a preset to several banks.  Params are GLOBAL
+    3.  Switch to edit global params, vs bank params--[done above!]
+    4.  Switch to show all presets, vs. just those in the chosen bank.  Bank mode only!
+    5.  Maybe Someday--drag and drop for preset/bank position vs. alphabetized (toggle) d&d does seem possible... for now just alphabetize
+    6.  Params should be at side of screen, to allow for VST window to be open.  Window should also not be full screen.
+    7.  Half-learn, where you wiggle a vst control and then press a widget button to assign it.
+    8.  Widgets: Encoder, sw1, sw2, drawbars, organ toggles, 4 footswitches,Pedal2, BC, MOD,
+            maybe also Exp and Sustain (defeat normal assignment)
+    9.  Use the Inspector channel when opening...
+    10. Create New Bank.  Delete Bank.  Rename Bank.  Set Bank Hue and Sat.  Write All Banks.  Save Preset.
+    11. Other banks settings?  NS Solo.  Key Range!?  Exp,Ped2 Curve, IS FX, Ext Audio IN, Fake Sus, Midi Input,
+
+
+    FILE NAMING:
+    1. DisplayName.VstName.lua
+    2. We will concatenate this file name when saving, and use the first part when filling the table for selecting Save_VST_Preset
+    3. When loading, we need to search for a file whose first part matches the name in the table...
+]]--
 
 -- The core library must be loaded prior to anything else
 local libPath = reaper.GetExtState("Scythe v3", "libPath")
@@ -70,26 +120,6 @@ Options = {
             {name = 'Delete Preset',func = function(self) end   },
             {name = 'Rename Preset',func = function(self) end   },
         },
-        {
-            {name = 'Preset Mode', func = function(self)
-                M.Msg('setting preset Mode')
-                Mode = MODES.PRESET
-                PresetPanel:setMulti(false)    BankPanel:setMulti(true)
-                SetBankInfo('gray')
-                --PresetPanel:setColor('gray',true)
-                BankParamLayer:hide()
-                --set mappings to global
-                PresetPanel:setPage(1)       BankPanel:setPage(1)
-            end  },
-            {name = 'Bank Mode', func = function(self)
-                M.Msg('setting Bank Mode')
-                Mode = MODES.BANK
-                BankParamLayer:show()
-                PresetPanel:setMulti(true)     BankPanel:setMulti(false)
-                --set mappings to BANK
-                PresetPanel:setPage(1)       BankPanel:setPage(1)
-            end  },
-          },
         {
             {name = 'New Bank',   func = function(self)
                 Keyboard:setTitle('New Bank Name:')
@@ -222,7 +252,31 @@ Options = {
         {name = 'nsolo',title = 'NS Solo',func = function(self) Bank.nsolo = self:val() SavePlug() end },
         {name = 'fakesus',title = 'Fake Sustain',func = function(self) Bank.fakesus = self:val() SavePlug() end }, --poss. global value?
     },
+    mode = {
+        {name = 'Preset Mode', func = function(self)
+            M.Msg('setting preset Mode')
+            Mode = MODES.PRESET
+            PresetPanel:setMulti(false)    BankPanel:setMulti(true)
+            SetBankInfo('gray')
+            --PresetPanel:setColor('gray',true)
+            BankParamLayer:hide()
+            --set mappings to global
+            PresetPanel:setPage(1)       BankPanel:setPage(1)
+        end  },
+        {name = 'Bank Mode', func = function(self)
+            M.Msg('setting Bank Mode')
+            Mode = MODES.BANK
+            BankParamLayer:show()
+            PresetPanel:setMulti(true)     BankPanel:setMulti(false)
+            --set mappings to BANK
+            PresetPanel:setPage(1)       BankPanel:setPage(1)
+        end  },
+      },
 }
+
+--------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------ FUNCTIONS ---------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------
 
 function setCurrentTrack(track)  CurrentTrack = track end
 
@@ -315,11 +369,13 @@ function SetBankInfo(color)
             end
         end
     end
+    Options.modePanel:select(2)
+    Options.modePanel:setPage(1)
 end
 
----------------------------------------------------------------------------
--------- GUI Elements -----------------------------------------------------
----------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------
+------------------------------------------- GUI Elements -----------------------------------------------------
+--------------------------------------------------------------------------------------------------------------
 local btnH = 36
 local meterH = 12
 local chanH = (btnH * 6)
@@ -399,6 +455,7 @@ for i,b in ipairs(Options.controls) do
 end
 --------------------------------------------------------------------------------------------------------------
 ----------------------------------------------LAYOUT BANK SETTINGS -------------------------------------------
+
 for i,s in ipairs(Options.sliders) do
     local xpos = (9 * w) + (pad * 2)
     local ypos = (i - 1) * h -- ((i + 9) * h) + pad
@@ -494,13 +551,13 @@ for i,submenu in ipairs(Options.menu) do
     --M.Msg(Table.stringify(menu))
     x = x + pad + ((#submenu) *  w)
     --do we need this?  check later...
-    layerZ = layerZ - 1
+    --layerZ = layerZ - 1
     for i,option in ipairs(submenu) do
         --M.Msg('calling set option: '..tostring(menu.name))
         local newOption = menu:setOption(i,option)
         newOption.func = option.func
     end
-    if i == 2 then menu:setMomentary(false) end
+    --if i == 2 then menu:setMomentary(false) end
     M.Msg('setting menu ')
     menu:setPage(1)
     Options.menu[i].panel = menu
@@ -528,7 +585,7 @@ for i,options in ipairs(Options.panels) do
         func = options.func
     })
     x = x + (w * options.cols) + pad
-    layerZ = layerZ - 1
+    --layerZ = layerZ - 1
     panel:setPage(1)
     Options.panels[i] = panel
     --M.Msg('PANEL = '..Table.stringify(Options.panels[i]))
@@ -545,7 +602,31 @@ Options.menu[2].panel:select(2)
 --local vstNum
 RefreshBanks()
 VSTPanel:setPage(1)
-
+-----------------------------------------------------------------------------------------------------
+---------------------------------------------MODE BUTTONS--------------------------------------------
+local modePanel = MButtonPanel.new({
+    name = 'mode',
+    image = imageFolder.."Combo.png",
+    z = layerZ,
+    color = 'blue',
+    font = 2,
+    rows = 1, cols = #Options.mode,
+    x = (5 * w) + pad , y = (h * 16) + (pad*2), w = w, h = h,
+    usePager = false,
+    multi = false,
+    window = BankWindow,
+    options = {},
+})
+Options.modePanel = modePanel
+--do we need this?  check later...
+--layerZ = layerZ - 1
+for i,option in ipairs(Options.mode) do
+    --M.Msg('calling set option: '..tostring(menu.name))
+    local newOption = modePanel:setOption(i,option)
+    --TStr(newOption,'option added')
+end
+Options.modePanel:select(2)
+Options.modePanel:setPage(1)
 
 ------------------------------------------------------------------------------------------------------
 -------------------------------------------WINDOW-----------------------------------------------------
@@ -555,7 +636,9 @@ Keyboard = MText.new({
 Keyboard:visible(false)
 
 BankWindow:addLayers(BankParamLayer,mappingLayer)
-BankWindow:open()
---Fullscreen(BankWindow.name)
 
-GUI.Main()
+--Fullscreen(BankWindow.name)
+function OpenBankEditor()
+    BankWindow:open()
+    GUI.Main()
+end

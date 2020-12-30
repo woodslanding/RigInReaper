@@ -27,7 +27,7 @@ local function createPager(parent)
         spinner = true,
         momentary = true,
         horizontal = true,
-        w = parent.pagerw or parent.w,
+        w = parent.pagerW or parent.w,
         h = parent.pagerH or parent.h,
         x = parent.pagerX or ((parent.cols - 1) * parent.w) + parent.x ,
         y = parent.pagerY or (parent.rows * parent.h) + parent.y,
@@ -140,6 +140,13 @@ function MButtonPanel:setMomentary(momentary, optionIDX)
     self:setPage(1)
 end
 
+function MButtonPanel:setOptions(options)
+    for i, option in ipairs(options) do
+        self:setOption(i, option)
+    end
+    self:setPage(1)
+end
+
 function MButtonPanel:setOption(idx,parameters)
     --M.Msg('Adding option for '..self.name..' at index '..idx)
     if not self.options[idx] then
@@ -203,13 +210,13 @@ function MButtonPanel:selectByName(name)
         end
     end
 end
---returns a table of options
+--returns a table of options (or a single option?)
 function MButtonPanel:select(set,doNotRun)
     if set then
         local sw = self:getButtonForOption(set)
         M.Msg('found button '..sw.name)
         local option = self.options[set]
-        TStr(option,'selected option')
+        --TStr(option,'selected option')
         if option then   --some buttons may not have options...
             --in multi mode we generally just add or subtract from the selection.  If we want to do something, set 'run' to true
             if self.multi then   --in multimode we ignore everything in options except state
@@ -222,7 +229,7 @@ function MButtonPanel:select(set,doNotRun)
                     option.state = 0
                     sw:val(option.state)
                     self.selection[set] = nil
-                    if not doNotRun then option:func() end
+                    if doNotRun == false then option:func() end
                 end
 
             elseif not self.multi then --in single-select mode, we can run the action here...
@@ -253,7 +260,13 @@ function MButtonPanel:getSelection(index)
     else return self.selection
     end
 end
-
+--val can only get or set one value.  need another mechanism for multi-vals
+--wait this will typically be a name
+function MButtonPanel:val(name)
+    if name then self:selectByName(name)
+    else return self:getSelectionData()
+    end
+end
 
 function MButtonPanel:incPage(val) self:setPage(self.pageNum + val) end
 
