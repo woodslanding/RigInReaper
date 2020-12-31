@@ -9,6 +9,7 @@ package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;
 loadfile(libPath .. "scythe.lua")()
 
 require 'MoonUtils'
+local imageFolder = IMAGE_FOLDER  -- put path to images here
 
 local GUI = require("gui.core")
 local M = require("public.message")
@@ -114,7 +115,6 @@ function MSlider:onMouseUp(state)
             pct = (state.mouse.x - self.x)/self:throw()
         else  pct = 1 - ((state.mouse.y - self.y)/self:throw()) --y measured from top!
         end
-        --local v = self:val()  --not sure what I was trying to do here...
         self:val(self.min + (pct * self:getRange()))
         self:func(table.unpack(self.params))
     elseif self.waitToSet then self:func(table.unpack(self.params))
@@ -181,13 +181,13 @@ local slider = GUI.createElement({
     w = 180,h = 48,x = 0,y = 0,
     labelX = 0,labelY = 0,
     --image =  "meterL.png",
-    image = IMAGE_FOLDER.."SimpleFader.png",
+    image = imageFolder.."SimpleFader.png",
     func = function(self, a, b, c) M.Msg(self.name, self:val()) end,
     params = {"a", "b", "c"}
   })
 
   local vSlider = GUI.createElement({
-    frames = 144, frame = 0,
+    frames = 108, frame = 0,
     horizontal = false,
     caption = 'test',
     name = "vslider",
@@ -198,7 +198,7 @@ local slider = GUI.createElement({
     type = "MSlider",
     w = 64,h = 288,x = 200,y = 10,
     labelX = 0,labelY = 0,
-    image =  IMAGE_FOLDER.."Volume.png",
+    image =  imageFolder.."Volume.png",
     func = function(self, a, b, c) self.caption = self.value end,
     params = {"a", "b", "c"}
   })

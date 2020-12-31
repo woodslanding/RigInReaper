@@ -16,6 +16,8 @@ local M = require("public.message")
 local Table = require("public.table")
 local T = Table.T
 
+local moonTracks = nil
+
 --require 'Save_VST_Preset'
 
 IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
@@ -55,23 +57,24 @@ TRACKS = {  OUT_MASTER = 1,  --sum of A,B,C,D ??
             OUT_B = 4,
             OUT_C = 5,
             OUT_D = 6,
-            IN_BHR2 = 7,    --behringer#2 - Reaper Control Unit port
-            IN_ROLI = 8,   --notes and roli controls, I suppose? roli port/ all channels
-            IN_KEYB = 9,   --notes only, yamaha, CH1
-            IN_PB = 10,    --Yamaha Port, CH1
-            IN_MOD = 11,   --Yamaha Port, CH1
-            IN_ENC = 12,   --behringer port CH1
-            IN_PUSH = 13,  --behringer port CH2
-            IN_BTN_UP = 14,--behringer port CH3
-            IN_BTN_DN = 15,--behringer port CH4
-            IN_SUS = 16,   --FC port
-            IN_FSW = 17,   --FC port
-            IN_EXP = 18,   --FC port
-            IN_AT = 19,    --drawbar port
-            IN_DRWB = 20,  --drawbar port
-            IN_ORG_CTL = 21,--drawbar port
+            IN_MIDI = 7,
+            IN_BHR2 = 8,    --behringer#2 - Reaper Control Unit port
+            IN_ROLI = 9,   --notes and roli controls, I suppose? roli port/ all channels
+            IN_KEYB = 10,   --notes only, yamaha, CH1
+            IN_PB = 11,    --Yamaha Port, CH1
+            IN_MOD = 12,   --Yamaha Port, CH1
+            IN_ENC = 13,   --behringer port CH1
+            IN_PUSH = 14,  --behringer port CH2
+            IN_BTN_UP = 15,--behringer port CH3
+            IN_BTN_DN = 16,--behringer port CH4
+            IN_SUS = 17,   --FC port
+            IN_FSW = 18,   --FC port
+            IN_EXP = 19,   --FC port
+            IN_AT = 20,    --drawbar port
+            IN_DRWB = 21,  --drawbar port
+            IN_ORG_CTL = 22,--drawbar port
 }
-FIRST_INST_TRACK = 22
+FIRST_INST_TRACK = 23
 
 INPUT_DEVICE_NAME = 'HD Audio Mic input 1'
 --midi vol Settings
@@ -232,7 +235,6 @@ function GetSubFolderList(path)
     return names
 end
 
-
 --returns just the name portion, no path or extension
 function GetFilename(file)
     local path, filename = ultraschall.GetPath(file)
@@ -318,26 +320,31 @@ function GetLayoutXandY(i,x,y,w,h,rows)
 end
 
 --------------------------------------OPEN FX WINDOWS------------------------------------------
-function OpenPlugin(tracknum,fxnum)
+function OpenPlugin(chanNum,fxnum)
+    local tracknum = GetTrackForChannel(chanNum)
     local tr = GetTrack(tracknum)
     reaper.TrackFX_Show( GetTrack(tracknum), fxnum, 3 )  --fx zero-based again...
 end
 
-function OpenVST(tracknum)
+function OpenVST(chanNum)
+    local tracknum = GetTrackForChannel(chanNum)
     OpenPlugin(tracknum, INSTRUMENT_SLOT)
 end
 
-function OpenMidiChStrip(tracknum,open)
+function OpenMidiChStrip(chanNum,open)
+    local tracknum = GetTrackForChannel(chanNum)
     OpenPlugin(tracknum, MCS.SLOT)
 end
 
-function OpenMidiVol(tracknum,open)
+function OpenMidiVol(chanNum,open)
+    local tracknum = GetTrackForChannel(chanNum)
     OpenPlugin(tracknum, MIDIVOL.SLOT)
 end
 
 function GetLastTouchedFX()
     local _, _, tracknum, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
-    return tracknum, fxnum, paramnum
+    local chanNum = GetChannelForTrack(tracknum)
+    return tracknum, fxnum, paramnum, chanNum
 end
 ----------------------------------------------------------------------------------------------------------
 ------------------------------------------------------TABLE UTILITIES-------------------------------------
@@ -514,6 +521,17 @@ function TrackName(tracknum,name)
     end
 end
 
+function GetTrackForChannel(index)
+    local tracknum = index + FIRST_INST_TRACK - 1
+    M.Msg('tracknum for chan '..index..' = '..tracknum)
+    return  tracknum             --GetMoonTracks()[index]
+end
+
+function GetChannelForTrack(tracknum)
+    local chanNum = tracknum - FIRST_INST_TRACK + 1
+    if chanNum > 0 then return chanNum else M.Msg('No Channel for Track: '..tracknum) return nil end
+end
+
 function IsMoonTrack(tracknum)
     --Dbg('IsMoonTrack:  checking track ',tracknum)
     local track = reaper.GetTrack(0, tracknum - 1)
@@ -523,17 +541,19 @@ function IsMoonTrack(tracknum)
     --Dbg('effect name in slot 1: ',fxname)
     return fxname == MCS.NAME
 end
-
+-- For now we will assume we're not adding or removing moon tracks during use.
 function GetMoonTracks()
-    local mtracks = {}
     local count = 0
-    for i = 1,GetTrackCount() do
-        if IsMoonTrack(i) then
-            table.insert(mtracks,i)
-            count = count + 1
+    if not moonTracks then
+        moonTracks = {}
+        for i = 1,GetTrackCount() do
+            if IsMoonTrack(i) then
+                table.insert(moonTracks,i)
+                count = count + 1
+            end
         end
+    else return moonTracks
     end
-    return mtracks
 end
 
 function TrackEnable(track,enable)
@@ -704,11 +724,13 @@ end
 --for an instrument track thIs will be the fxtrack count.  for an effect track it will be COUNT- 1!!
 --because it will not include the effect itself.
 --so when Getting the lIst of available effects, we need to know who Is asking!!
+function IsEffectChannel(chanNum) return isEffectTrack(GetTrackForChannel(chanNum)) end
 function IsEffectTrack(tracknum)
     local IsFX = GetMoonParam(tracknum,MCS.AUDIO_IN)
     return IsFX > 1  --0 no input, 1 exernal input
 end
 --a lIst of all the instruments with mixer inputs, i.e. effects
+function GetEffectsForChannel(chanNum) return GetEffectsForTrack(GetTrackForChannel(chanNum)) end
 function GetEffectsForTrack(tracknum)
     local effectTracks = {}
     local trackcount = GetTrackCount()
@@ -1093,8 +1115,8 @@ function decFxPreset(tracknum, fx)
     local presetmove = -1
     reaper.TrackFX_NavigatePresets( track, fx, presetmove )
 end
-function SelectPreset(tracknum,fxnum, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
-    local track = GetTrack(tracknum)
+function SelectPreset(moonChanNum, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
+    local track = GetTrack(GetTrackForChannel(moonChanNum))
     reaper.TrackFX_SetPreset( track, INSTRUMENT_SLOT, presetname )
 end
 
@@ -1121,8 +1143,10 @@ end
 ------#######################################################################################################
 ------------------------------------------------ FX LOADING ---------------------------------------------
 
-function LoadInstrument(tracknum,vstname)
+function LoadInstrument(moonChanNum,vstname)
+    local tracknum = GetTrackForChannel(moonChanNum)
     local track = GetTrack(tracknum)
+    --defer???
     reaper.PreventUIRefresh(1)
     M.Msg('tracknum = '..tracknum)
     local oldName = GetFXName(tracknum, INSTRUMENT_SLOT)

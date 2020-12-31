@@ -230,7 +230,8 @@ end
 
 function Plugin.load(name)
     local filename = GetFileStartingWith(name)
-    M.Msg('loading file: '..PATH..filename)
+    if not filename then return end
+    M.Msg('loading file: ',PATH..filename)
     local f = assert(loadfile(PATH..filename..'.lua'))
     local data = f()
     local self = setmetatable(data,Plugin)

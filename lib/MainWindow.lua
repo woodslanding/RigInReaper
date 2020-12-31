@@ -49,11 +49,20 @@ local indent = '    '
 -- panel states
 local PStates = { global = 1, preset = 2, vst = 3 }
 local PState
+-- channel data
+local vsts = {}
+local plugs = {}
+local gBankNames = nil
+local gBankName = nil
+local gBankNamePage = 1
+local presets = {}
+local presetPages = {}
+local banks = {}
+local bankPages = {}
 --------------------------------------------------------------------------------------------------
 ---------------------------------     GENERAL FUNCTIONS  -----------------------------------------
 --------------------------------------------------------------------------------------------------
---TODO: we'll have to get the preset names from the channel titles.  And the banks need to be stored/displayed somewhere also
---but it doesn't seem like we need to save any data from the button panels...
+
 function Save(gPresetName)
     local saveData = 'return '..'{ \n'
     for name,elm in pairs(gui) do
@@ -93,28 +102,43 @@ function SaveAs()
     end
 end
 
-function Recall(presetName)
+function GlobalRecall(presetName)
     --need to load all the button settings.
-    --then load vsts if needed (how stored?)
-    --then load presets
+    --then load the vst if needed
+    --then fill the presets of any changed
     local path = PRESET_FOLDER..gui.globalBank.name..'/'..presetName..'.lua'
     M.Msg('loading file: '..path)
     local data = assert(loadfile(path))()
     --TStr(data,'data')
-    for name,val in pairs(data) do
+    for name,gval in pairs(data) do
         if name == 'channels' then
-            for i,chan in ipairs(val) do
+            for i,chan in ipairs(gval) do
                 M.Msg('Channel: '..i)
                 for name, val in pairs(chan) do
-                    M.Msg('Recalling '..name..': '..val)
-                    gui.ch[i][name]:val(val)
+                    --check for obselete fields....
+                    local field = gui.ch[i][name]
+                    if field then
+                        M.Msg('setting field: '..name..', value = '..val)
+                        gui.ch[i][name]:val(val) end
                 end
             end
         else
-            M.Msg('Recalling '..name)
-            gui[name]:val(val)
+            gui[name]:val(gval)
         end
     end
+    for i,channel in ipairs(gui.ch) do
+        local vst = channel.vst:val()
+        plugs[i] = Plugin.load(vst)
+        TStr(plugs[i],'plugin')
+        M.Msg("loading vst: "..plugs[i].vstName)
+        --LoadInstrument(i, vstName)
+        M.Msg('getting bank: '..channel.bank:val())
+        banks[i] = plugs[i]:getBank(channel.bank:val())
+        presets[i] = banks[i]:getPresets()
+        M.Msg('setting preset to: '..channel.preset:val())
+        SelectPreset(i, channel.preset:val())
+    end
+
 end
 -- Creates options from the files or the subfolders for a particular path
 function OptionsFromPath(path, useFolders)
@@ -128,24 +152,76 @@ function OptionsFromPath(path, useFolders)
     return options
 end
 
-function LoadGlobalBanks()
-    gui.banks:setOptions(OptionsFromPath(PRESET_FOLDER, true))
-    gui.banks:select(1)
-    PState = PStates.global
+local function loadPresets()
+    if PState == PStates.global then
+        local folder = PRESET_FOLDER..gBankName..'/'
+        M.Msg('folder = '..folder)
+        gui.presets:setOptions(OptionsFromPath(folder))
+        gui.presets:setPage(1)
+    elseif PState == PStates.vst then
+    elseif PState == PStates.preset then
+    end
 end
 
-function LoadGlobalPresets()
-    local bankName = gui.banks:val()
-    --M.Msg('bank val = '..bankName)
-    if not bankName then bankName = GetFileList(PRESET_FOLDER)[1] end
-    local folder = PRESET_FOLDER..bankName..'/'
-    --M.Msg('folder = '..folder)
-    gui.presets:setOptions(OptionsFromPath(folder))
+local function selectBank(bankName)
+    if PState == PStates.global then
+        gBankName = bankName
+    elseif PState == PStates.vst then
+    elseif PState == PStates.preset then
+    end
+    loadPresets()
+end
+-- use cases: 1--update bank display when channel changes
+--            2--change to bank display from global or vst display
+function ShowPresets(vst, chan)
+    PState = PStates.preset
+    local i
+    if chan then i = chan else i = ch() end
+    if not vst then vst = vsts[i] end  --we should fill this table before loading any banks, I think
+    if not plugs[i] or plugs[i].vstName ~= vst then plugs[i] = Plugin.load(vst) end  --don't want to re-read every time we switch channels
+    local banks = plugs[i]:getBankList()
+    gui.banks:setColor('gray', true)
+    for i,bankName in ipairs(banks) do
+        local bank = plugs[i]:getBank(bankName)
+        gui.banks:setOption(i, {index = i, name = bankName, bank = bank, color = GetRGB(bank.hue,bank.sat,BRIGHTNESS)})
+    end
+    if not gBankName then gBankName = GetFileList(PRESET_FOLDER)[1] end
+    gui.banks:setPage(bankPages[i] or 1)
+    Presets = Plug:getPresetList()
+    for i,preset in ipairs(Presets) do Presets[i] = { name = preset } end
+    gui.presets:setOptions(Presets)
+    gui.presets:setPage(presetPages[i] or 1)
+end
+
+function ShowVsts()
+    PState = PStates.vst
+    local i = 1
+    local plugName = GetFXName(CurrentTrack,INSTRUMENT_SLOT)
+    M.Msg('Plug Name = '..plugName)
+    for name,vst in pairs(GetBankFileTable()) do
+        M.Msg('setting option '..name..' to '..vst)
+        gui.banks:setOption(i,{ name = name, vst = vst })
+        local vstFile = vst..'.dll'
+        if vstFile == plugName then gui.banks:select(i) end
+        i = i + 1
+    end
+end
+
+function ShowGlobals()
+    PState = PStates.global
+    if not gBankNames then gBankNames = OptionsFromPath(PRESET_FOLDER, true) end
+    gui.banks:setOptions(gBankNames)
+    if not gBankName then gBankName = gui.banks:getOption(1).name end
+    selectBank(gBankName)
 end
 
 function ProcessPreset(name)
-    if PState == PStates.preset then ch().presetName:val(name)
-    elseif PState == PStates.global then Recall(name)
+    if PState == PStates.preset then
+        ch().presetName:val(name)
+        SelectPreset(ch(), name)
+    elseif PState == PStates.global then
+        GlobalRecall(name)
+    elseif PState == PStates.vst then
     end
 end
 
@@ -267,7 +343,7 @@ local function createTitle(props,ch)
         name = props.name..ch,
         momentary = props.momentary or true,
         multi = props.multi or false,
-        caption = props.name,
+        caption = props.caption or props.name,
         textColor = props.textColor or 'black',
         color = props.color or nil,
         font = font,
@@ -278,7 +354,10 @@ local function createTitle(props,ch)
         ch = ch
     })
     --
-    function title:val() return self.caption end
+    function title:val(new)
+        if new then self:setCaption(new)
+        else return self.caption end
+    end
     getLayer(titleZ):addElements(title)
     return title
 end
@@ -299,6 +378,7 @@ local function createLabel(props, ch)
         ch = ch,
         save = props.save
     })
+
     getLayer(titleZ):addElements(label)
     return label
 end
@@ -319,8 +399,8 @@ local function createPanel(props, pager, options)
         horizontal = false,
         multi = props.multi or false,
         image = imageFolder.."Combo.png",
-        rows = props.rows,cols = props.cols,
-        x = props.x ,y = props.y ,w = btnW,h = comboH, z = panelZ,
+        rows = props.rows, cols = props.cols,
+        x = props.x, y = props.y, w = btnW, h = comboH, z = panelZ,
         usePager = usePager or false,
         pagerImage = pImage,
         pagerX = px, pagerY = py, pagerW = pw, pagerH = ph,
@@ -423,17 +503,17 @@ end
 
 gui = {
     leftMenu = {  x = leftPad, y = 0, options = {
-            { name = 'Presets', momentary = true, func = function(self) end },
-            { name = 'Banks', momentary = true, func = function(self) end},
-            { name = 'VSTs', momentary = true, func = function(self) end},
-            { name = 'Scroll Left', momentary = false, func = function(self) leftPad = -300
+            { name = 'Presets', momentary = true, func = function() end },
+            { name = 'Banks', momentary = true, func = function() end},
+            { name = 'VSTs', momentary = true, func = function() end},
+            { name = 'Scroll Left', momentary = true, func = function(self) leftPad = -300
                                             ResizeWindow(window, leftX, 0, 1000, SCREEN_HEIGHT) window:redraw() end },
             { name = 'Quit', momentary = true, func = function(self) CloseWindow(window) end },
             { name = 'FullScreen', momentary = false, func = function(self) Fullscreen(window, self:val() == 0) end },
         },
     },
-    globalBank = { name = 'globalBank', save = true,  fontSize = 18, x = bankX - (btnW * 4), y = 0, w = 4 * btnW, func = function(self) end}, -- show global banks in preset panel, and vsts in bank panel
-    globalPreset = { name = 'globalPreset', save = false, x = bankX - btnW, y = 0, w = 4 * btnW, color = 'gray', func = function(self) end}, --show global presets in preset panel
+    globalBank = { name = 'globalBank', save = true, multi = false,  fontSize = 18, x = bankX - (btnW * 4), y = 0, w = 4 * btnW, func = function(self) end}, -- show global banks in preset panel, and vsts in bank panel
+    globalPreset = { name = 'globalPreset', save = true, x = bankX - btnW, y = 0, w = 4 * btnW, color = 'gray', func = function(self) end}, --show global presets in preset panel
     rightMenu = { x = transportX, y = 0, options =  {
             { name = 'Edit Banks',momentary = true, func = function(self) OpenBankEditor() end},
             { name = 'Save Preset', momentary = true, func = function(self) Save(gui.globalPreset.caption) end},
@@ -527,8 +607,9 @@ gui = {
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ CHANNELS }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
+    -- this data is stored unless save = false
     send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) end},
-    sendLabel =  { name = 'fxLabel', x = leftPad + pad, y = fxSendY, w = 120, h = 20 },
+    sendLabel =  { name = 'fxLabel', save = false, x = leftPad + pad, y = fxSendY, w = 120, h = 20 },
     semi =     { name = 'Semi', x = semiX, y = fxSendY, displayOnly = true, wrap = false, z = 4,
                                     w = 16, h = spinnerH, frames = 15, min = -7, max = 7 },
     oct  =     { name = 'Oct', x = semiX, y = octY, displayOnly = true, wrap = false, z = 4,
@@ -546,7 +627,7 @@ gui = {
     meterR = { name = 'meterR', save = false, x = leftPad, y = chanY - (meterH/2), h = panH/2, w = chanW, horizontal = true,
                                     displayOnly = true, frames = 25, chColor = true },
 
-    chanName =   { name = 'chanName', x = leftPad + 2, y = chanY + 88, fontSize = 28 },
+    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 88, fontSize = 28 },
     volume =    { name = 'volume', x = leftPad, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) end },
 
     lights =  { x = leftPad + indX, y = chanY + pad, w = indW, h = indH, displayOnly = true, z = indZ, options = {
@@ -570,9 +651,9 @@ gui = {
             { name = 'Enable',  vals = {1,2,3,4}, frames = 4, func = function(self) end },
         },
     },
-    vstName  =  { name = 'Vst', color = 'black', caption = 'vst', icon = 'Empty',
+    vst   =  { name = 'vst', caption = '', color = 'black', icon = 'Empty',
             x = leftPad, y = nsY - pad, w = chanW/2, h = pad, fontSize = 11, textColor = 'orange', displayOnly = true },
-    bankName  =  { name = 'Bank', color = 'black', caption = 'bank', icon = 'Empty',
+    bank  =  { name = 'Bank', color = 'black', caption = '', icon = 'Empty',
             x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = pad, fontSize = 11, textColor = 'gray', displayOnly = true },
     nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2}, frames = 3, w = faderW, h = btnH, func = function(self) end },
     select    =  { name = 'Select', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, func = function(self) chChanged(self.ch) end },
@@ -646,7 +727,7 @@ for i = 1,channelCount do
         ch[option.name] = createButton(option,i)
     end
 
-    ch.chanName = createLabel(gui.chanName, i)
+    ch.preset = createLabel(gui.preset, i)
     ch.volume = createFader(gui.volume, i)
 
     for num, option in ipairs(gui.buttons.options) do
@@ -655,8 +736,8 @@ for i = 1,channelCount do
         option.chColor = true
         ch[option.name] = createButton(option,i)
     end
-    ch.vstName = createTitle(gui.vstName,i)
-    ch.bankName = createTitle(gui.bankName,i)
+    ch.vst = createTitle(gui.vst,i)
+    ch.bank = createTitle(gui.bank,i)
     ch.nSource = createButton(gui.nSource, i)
     ch.select = createButton(gui.select, i)
     --move them into place en masse at the end!
@@ -681,8 +762,8 @@ end
 function chChanged(chNum)
     iCh = chNum
     --update preset list
-    --TStr(ch().chanName, 'channel label')
-    gui.trackTitle:setCaption(ch().chanName.caption)
+    --TStr(ch().presetName, 'channel label')
+    gui.trackTitle:setCaption(ch().preset:val())
     for i = 1,channelCount do
         ch(i).select:val(0)
         ch(i).select:setColor('black')
@@ -716,6 +797,5 @@ window:open()
 --M.Msg('got here')
 Fullscreen(window)
 chChanged(1)
-LoadGlobalBanks()
-LoadGlobalPresets()
+ShowGlobals()
 GUI.Main()--]]
