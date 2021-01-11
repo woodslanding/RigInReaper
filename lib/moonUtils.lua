@@ -2,7 +2,7 @@ dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
 package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
 local hsluv = require "hsluv"
 
-DBG = false
+DBG_OFF = false
 
 -- The core library must be loaded prior to anything else
 local libPath = reaper.GetExtState("Scythe v3", "libPath")
@@ -135,18 +135,23 @@ function GetNoteName(noteNum)
 end
 -----------------------------------------------------------------------------------------------------------
 ---------------------------------------------BASIC UTILITIES-----------------------------------------------
-function GetTrackChunk(trackNum)
-    dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
-
-    local found, trackstatechunk = ultraschall.GetTrackStateChunk_Tracknumber(trackNum)
-    print(trackstatechunk)
-end
-
-function Dbg(...)
-    if DBG then
-        --call M.Msg with args.... how?
+function MSG(...)
+    if DBG_OFF then return end
+    local out = {}
+    for _, v in ipairs({...}) do
+      out[#out+1] = tostring(v)
     end
+    reaper.ShowConsoleMsg(table.concat(out, " ").."\n")
 end
+
+function ERR(...)
+    local out = {}
+    for _, v in ipairs({...}) do
+      out[#out+1] = tostring(v)
+    end
+    reaper.ShowConsoleMsg('ERROR::::'..table.concat(out, " ").."\n")
+end
+
 
 function IncrementValue(value,min,max,wrap,inc)
     inc = inc or 1
@@ -160,7 +165,7 @@ function IncrementValue(value,min,max,wrap,inc)
         else
             --Dbg('incrementValue:  val=',value,'max=',max)
             if value < min or value > max then
-                M.Msg('incrementValue: value must be between min and max')
+                MSG('incrementValue: value must be between min and max')
             elseif value < max then
                 return value + inc
             elseif wrap then
@@ -179,7 +184,7 @@ function DecrementValue(value,min,max,wrap,inc)
     elseif value == false then return false
     else
         if value < min or value > max then
-            M.Msg('decrementValue: value must be between min and max')
+            MSG('decrementValue: value must be between min and max')
         elseif value > min then
             return value - inc
         elseif wrap then
@@ -247,7 +252,7 @@ function GetFileContaining(str,path)
     for _,fileName in pairs(files) do
         if string.find(fileName,str) then return fileName end
     end
-    M.Msg("ERROR:  No file found containing: "..str)
+    MSG("ERROR:  No file found containing: "..str)
 end
 
 function GetFileStartingWith(startsWith,path)
@@ -256,22 +261,41 @@ function GetFileStartingWith(startsWith,path)
         if StartsWith(fileName,startsWith) then return fileName
         end
     end
-    M.Msg('No file found starting with: '..startsWith)
+    MSG('No file found starting with: '..startsWith)
 end
 
 --parses bank folder and returns a table with displayName = vstName
 function GetBankFileTable(path)
     if not path then path = BANK_FOLDER end
     local table = {}
-    for i,name in pairs(GetFileList(path)) do
-        --M.Msg('file = '..name)
-        local parts = StringSplit(name,'.')
+    for i,filename in pairs(GetFileList(path)) do
+        --MSG('file = '..name)
+        local parts = StringSplit(filename,'.')
         --TStr(parts,'parts')
-        table[parts[1]] = parts[2]
-        --M.Msg('part 1 = '..parts[1]..',part 2 = '..parts[2])
+        table[i] = { name = parts[1], vst = parts[2] }
+        --MSG('part 1 = '..parts[1]..',part 2 = '..parts[2])
     end
     --TStr(table,'bank folder')
     return table
+end
+
+function GetPluginDisplayName(plugName, path)
+    for name, vst in pairs(GetBankFileTable(path)) do
+        if vst == plugName then return name end
+    end
+    return plugName --if no bank file, just use the dll filename2
+end
+
+-- Creates simple options from the files or the subfolders for a particular path
+function OptionsFromPath(path, useFoldersNotFiles)
+    local options = {}
+    if useFoldersNotFiles then options = GetSubFolderList(path) else options = GetFileList(path) end
+    --TStr(options, 'options')
+    for i,filename in ipairs(options) do
+        options[i] = { index = i, name = filename }
+        --MSG('added item: '..filename)
+    end
+    return options
 end
 
 function CreateFolder(path)
@@ -284,7 +308,7 @@ end
 
 function CloseWindow(window)
     local title = window.name
-    M.Msg('window title = '..title)
+    MSG('window title = '..title)
     local hWnd = reaper.JS_Window_Find(title, true) -- find window by title bar text
     if hWnd ~=nil then reaper.JS_WindowMessage_Post(hWnd, "WM_CLOSE", 0,0,0,0) end
 end
@@ -311,7 +335,7 @@ function ResizeWindow(window, x, y, w, h)
 end
 
 function GetLayoutXandY(i,x,y,w,h,rows)
-    --M.Msg("layout: x = "..x)
+    --MSG("layout: x = "..x)
     local xadj = math.floor((i - 1)/rows)
     local yadj = (i-1) % rows
     local xpos = x + (xadj * w)
@@ -320,46 +344,50 @@ function GetLayoutXandY(i,x,y,w,h,rows)
 end
 
 --------------------------------------OPEN FX WINDOWS------------------------------------------
-function OpenPlugin(chanNum,fxnum)
-    local tracknum = GetTrackForChannel(chanNum)
-    local tr = GetTrack(tracknum)
+function OpenPlugin(chanNum,fxnum, useReaperIDX)
+    local tracknum
+    if not useReaperIDX then tracknum = TrackOfChan(chanNum) else tracknum = chanNum end
     reaper.TrackFX_Show( GetTrack(tracknum), fxnum, 3 )  --fx zero-based again...
 end
 
 function OpenVST(chanNum)
-    local tracknum = GetTrackForChannel(chanNum)
-    OpenPlugin(tracknum, INSTRUMENT_SLOT)
+    OpenPlugin(chanNum, INSTRUMENT_SLOT)
 end
 
 function OpenMidiChStrip(chanNum,open)
-    local tracknum = GetTrackForChannel(chanNum)
-    OpenPlugin(tracknum, MCS.SLOT)
+    OpenPlugin(chanNum, MCS.SLOT)
 end
 
 function OpenMidiVol(chanNum,open)
-    local tracknum = GetTrackForChannel(chanNum)
     OpenPlugin(tracknum, MIDIVOL.SLOT)
 end
 
-function GetLastTouchedFX()
-    local _, _, tracknum, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
-    local chanNum = GetChannelForTrack(tracknum)
-    return tracknum, fxnum, paramnum, chanNum
+function GetFocusedFX(useReaperIDX)
+    local found,tracknum,_,fxnum = reaper.GetFocusedFX() --ignore item number
+    if found == 1 then found = true end
+    if not useReaperIDX then tracknum = ChanOfTrack(tracknum) end
+    return found, tracknum, fxnum
+end
+
+function GetLastTouchedFX(useReaperIDX)
+    local found, _, tracknum, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
+    if not useReaperIDX then tracknum = ChanOfTrack(tracknum) end
+    return found, tracknum, fxnum, paramnum
 end
 ----------------------------------------------------------------------------------------------------------
 ------------------------------------------------------TABLE UTILITIES-------------------------------------
 function TStr(table,str)
     if not str then local str = 'table unknown' end
-    if not table then return M.Msg('-----------TStr, table is nil: '..str) end
+    if not table then return MSG('-----------TStr, table is nil: '..str) end
     local val = nil
     if not str then str = table.name or 'TABLE' end
     if type(table) ~= 'table' then val = 'not a table' else val = Table.stringify(table) end
-    return M.Msg('\nT:------['..str..']-----\n'..val..'\n---------------------------')
+    return MSG('\nT:------['..str..']-----\n'..val..'\n---------------------------')
 end
 
-function ArraySort(t)
+function ArraySort(array)
     local sorted = {}
-    for i in ipairs(t) do table.insert(sorted,t[i]) end
+    for i in ipairs(array) do table.insert(sorted,array[i]) end
     table.sort(sorted, function (a,b) return a:lower() < b:lower() end)
     return sorted
 end
@@ -371,14 +399,19 @@ function TableSort(t)
     return sorted
 end
 
-function TableContains(table, element)
-    for _, value in pairs(table) do
-      if value == element then
-        return true
-      end
+function ArrayContains(array, element)
+    for _, value in ipairs(array) do
+        if value == element then return true end
     end
     return false
-  end
+end
+
+function TableContains(table, element)
+    for _, value in pairs(table) do
+      if value == element then return true end
+    end
+    return false
+end
 
 function RemoveDuplicates(table)
     local hash = {}
@@ -391,13 +424,36 @@ function RemoveDuplicates(table)
     end
     return res
   end
---returns the index of a table that has a .name field that matches name, or a string that matches name
+--returns the index of a table array that has a .name field that matches name, or a string that matches name
 function IForName(array, name)
     for i,element in ipairs(array) do
         if type(element) == 'table' and element.name and (element.name == name) then return i end
         if type(element) == 'string' and element == name then return i end
     end
     return nil
+end
+
+
+
+function ArraySortByField(array, field)
+    if not field then field = 'name' end
+    local names = {}
+    for i, element in ipairs(array) do
+        TStr(element, 'element table')
+        --if type(element) == 'table' then names[element.name] = element
+        if type(element) == 'table' then names[element[field]] = element or ''
+        elseif type(element) == 'string' then names[element] = element or ''
+        end
+    end
+    --TStr(names,'names')
+    local sorted =  TableSort(names)
+    TStr(sorted,'sorted')
+    for i, element in ipairs(sorted) do
+        sorted[i] = names[element]
+        --TStr(names[element])
+    end
+    return sorted
+
 end
 
 -------------------------------------------------------------------------------------------------------------
@@ -409,7 +465,7 @@ function StartsWith(sourceString, start)
 
 function EndsWith(sourceString, ending)
     local endString = sourceString:sub(string.len(sourceString) - string.len(ending) + 1, string.len(sourceString))
-    --M.Msg('end string = '..endString..', ending = '..ending)
+    --MSG('end string = '..endString..', ending = '..ending)
     return endString == ending
 end
 
@@ -451,19 +507,18 @@ end
 function SetMoonParam(tracknum,param,val)
     local track = GetTrack(tracknum)
     Dbg('Setting moon param',param,'to',val)
-    _ = reaper.TrackFX_SetParam(track,MCS.SLOT,param,val)
+    local _ = reaper.TrackFX_SetParam(track,MCS.SLOT,param,val)
 end
 
 function SetVolParam(tracknum,param,val)
     local track = GetTrack(tracknum)
-    _ = reaper.TrackFX_SetParam(track,MIDIVOL.SLOT,param,val)
+    local _ = reaper.TrackFX_SetParam(track,MIDIVOL.SLOT,param,val)
 end
 
 -------------------------------------------------------------------------------------------------
 -------------------------------------TRACK METHODS-----------------------------------------------
 
 function GetTrack(tracknum)
-    --Dbg('GetTrack: tracknum = ',tracknum)
     return reaper.GetTrack(0, tracknum - 1)
 end
 
@@ -477,7 +532,9 @@ function GetSelectedTrack()
     return track
 end
 
-function SetTrackSelected(tracknum)
+function SetTrackSelected(chanNum, useReaperIDX)
+    local tracknum
+    if not useReaperIDX then tracknum = TrackOfChan(chanNum) else tracknum = chanNum end
     reaper.SetOnlyTrackSelected( GetTrack(tracknum) )
 end
 
@@ -488,17 +545,19 @@ end
 function GetNumberOfTrack(mediatrack)
     --(returns zero if not found, -1 for master track) (read-only, returns the int directly)
     local num = reaper.GetMediaTrackInfo_Value( mediatrack,'IP_TRACKNUMBER')
-    if num == 0 then M.Msg('GetSelectedTrackNumber: Track Not Found')
+    if num == 0 then MSG('GetSelectedTrackNumber: Track Not Found')
     else return num
     end
 end
 
-function GetFXName(tracknum,slot)
+function GetFXName(chanNum,slot)
+    local tracknum = TrackOfChan(chanNum)
     local track = GetTrack(tracknum)
-    --reaper.BR_TrackFX_GetFXModuleName(track, 0, "", 0)
+    if not slot then slot = INSTRUMENT_SLOT end
+    --MSG('GETFXNAME, tracknum = '..tracknum)
     local done,name = reaper.BR_TrackFX_GetFXModuleName(track,slot,"",128)--NOT SHOWN IN API DOCS!
-    if done then M.Msg('getting fx name: '..name)
-    elseif track then M.Msg('fx name failed at track,slot: '..track,slot)
+    if done then MSG('getting fx name: '..name)
+    elseif track then ERR('MU.GetFXName--fx name failed at track,slot: ',tracknum,slot)
     end
     return GetFilename(name)  --strip off .dll
 end
@@ -521,15 +580,14 @@ function TrackName(tracknum,name)
     end
 end
 
-function GetTrackForChannel(index)
+function TrackOfChan(index)
     local tracknum = index + FIRST_INST_TRACK - 1
-    M.Msg('tracknum for chan '..index..' = '..tracknum)
-    return  tracknum             --GetMoonTracks()[index]
+    return  tracknum    --GetMoonTracks()[index]
 end
 
-function GetChannelForTrack(tracknum)
+function ChanOfTrack(tracknum)
     local chanNum = tracknum - FIRST_INST_TRACK + 1
-    if chanNum > 0 then return chanNum else M.Msg('No Channel for Track: '..tracknum) return nil end
+    if chanNum > 0 then return chanNum else MSG('No Channel for Track: '..tracknum) return nil end
 end
 
 function IsMoonTrack(tracknum)
@@ -542,6 +600,7 @@ function IsMoonTrack(tracknum)
     return fxname == MCS.NAME
 end
 -- For now we will assume we're not adding or removing moon tracks during use.
+-- Returns reaper track numbers
 function GetMoonTracks()
     local count = 0
     if not moonTracks then
@@ -552,8 +611,8 @@ function GetMoonTracks()
                 count = count + 1
             end
         end
-    else return moonTracks
     end
+    return moonTracks
 end
 
 function TrackEnable(track,enable)
@@ -724,13 +783,13 @@ end
 --for an instrument track thIs will be the fxtrack count.  for an effect track it will be COUNT- 1!!
 --because it will not include the effect itself.
 --so when Getting the lIst of available effects, we need to know who Is asking!!
-function IsEffectChannel(chanNum) return isEffectTrack(GetTrackForChannel(chanNum)) end
+function IsEffectChannel(chanNum) return isEffectTrack(TrackOfChan(chanNum)) end
 function IsEffectTrack(tracknum)
     local IsFX = GetMoonParam(tracknum,MCS.AUDIO_IN)
     return IsFX > 1  --0 no input, 1 exernal input
 end
 --a lIst of all the instruments with mixer inputs, i.e. effects
-function GetEffectsForChannel(chanNum) return GetEffectsForTrack(GetTrackForChannel(chanNum)) end
+function GetEffectsForChannel(chanNum) return GetEffectsForTrack(TrackOfChan(chanNum)) end
 function GetEffectsForTrack(tracknum)
     local effectTracks = {}
     local trackcount = GetTrackCount()
@@ -1101,9 +1160,40 @@ function ConfigureTrack(newtrack)
 end
 
 
+
+--------------------------------------------------------------------------------------------------------------
+------#######################################################################################################
+------------------------------------------------ FX LOADING ---------------------------------------------
+
+function LoadInstrument(chanNum,vstname)
+    --defer???
+    reaper.PreventUIRefresh(1)
+    local oldName = GetFXName(chanNum, INSTRUMENT_SLOT)
+    MSG('new fx name = '..vstname, 'old name = '..oldName)
+    if vstname ~= oldName then
+        local tracknum = TrackOfChan(chanNum)
+        local track = GetTrack(tracknum)
+        reaper.TrackFX_Delete( track, INSTRUMENT_SLOT )
+        reaper.TrackFX_AddByName(track, vstname, false, -1)
+        reaper.TrackFX_CopyToTrack( track, reaper.TrackFX_GetCount(track) - 1, track, 1, true )
+        MSG('adding vst:'..vstname)
+    end
+    reaper.PreventUIRefresh(-1)
+end
+
+function SaveInstrument(tracknum)
+    ClearRouting(tracknum)
+    local name = GetInstName(tracknum)
+    Dbg('saveInstrument: name=',name)
+end
+
+function GetInstName()
+    --todo
+end
+
 ---------------------------------------------------------------------------------------------------------------
 --#############################################################################################################
--------------------------------------------------PRESET SELECTION-----------------------------------------------
+-------------------------------------------------PRESETS-----------------------------------------------
 
 function incFxPreset(tracknum, fx)
     local track = GetTrack(tracknum)
@@ -1115,87 +1205,38 @@ function decFxPreset(tracknum, fx)
     local presetmove = -1
     reaper.TrackFX_NavigatePresets( track, fx, presetmove )
 end
-function SelectPreset(moonChanNum, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
-    local track = GetTrack(GetTrackForChannel(moonChanNum))
-    reaper.TrackFX_SetPreset( track, INSTRUMENT_SLOT, presetname )
-end
-
-function SavePreset(tracknum,presetname)
-    if not presetname then presetname = 'test' end  --get current preset name...
-    local found, trackstatechunk = ultraschall.GetTrackStateChunk_Tracknumber(tracknum)
-    --M.Msg('TRACK_CHUNK\n'..trackstatechunk)
-    local fxStateChunk = ultraschall.GetFXStateChunk(trackstatechunk)
-    --M.Msg("FX_CHUNK\n"..fxStateChunk)
-    local fx_lines, startoffset, endoffset = ultraschall.GetFXFromFXStateChunk(fxStateChunk, 2)
-    local fx_statestring_base64, fx_statestring = ultraschall.GetFXSettingsString_FXLines(fx_lines)
-    M.Msg('State String'..fx_lines)
-    --ultraschall.SaveFXStateChunkAsRFXChainfile( string filename, string FXStateChunk)
+function SelectPreset(chanNum, presetname, useReaperIDX) --Test:  if RPL and built-in have same name, RPL is chosen??
+    local trackNum
+    if useReaperIDX then trackNum = TrackOfChan(chanNum) else trackNum = chanNum end
+    reaper.TrackFX_SetPreset(GetTrack(trackNum), INSTRUMENT_SLOT, presetname )
 end
 
 function GetParamName(tracknum,fxnum, paramnum)
-    --M.Msg('getting param name for ',tracknum,fxnum,paramnum)
+    --MSG('getting param name for ',tracknum,fxnum,paramnum)
     local track = GetTrack(tracknum)
     local _, name = reaper.TrackFX_GetParamName( track, fxnum, paramnum - 1, "" )--wtf? here the fx are zero based!  so are params.
-    --M.Msg('param name is'..name)
+    --MSG('param name is'..name)
     return name
 end
---------------------------------------------------------------------------------------------------------------
-------#######################################################################################################
------------------------------------------------- FX LOADING ---------------------------------------------
 
-function LoadInstrument(moonChanNum,vstname)
-    local tracknum = GetTrackForChannel(moonChanNum)
-    local track = GetTrack(tracknum)
-    --defer???
-    reaper.PreventUIRefresh(1)
-    M.Msg('tracknum = '..tracknum)
-    local oldName = GetFXName(tracknum, INSTRUMENT_SLOT)
-    M.Msg('new fx name = '..vstname, 'old name = '..oldName)
-    if vstname ~= oldName then
-        reaper.TrackFX_Delete( track, INSTRUMENT_SLOT )
-        reaper.TrackFX_AddByName(track, vstname, false, -1)
-        reaper.TrackFX_CopyToTrack( track, reaper.TrackFX_GetCount(track) - 1, track, 1, true )
-        M.Msg('adding vst:'..vstname)
-    end
-    reaper.PreventUIRefresh(-1)
-end
+local fxpText = '----  VST built-in programs  ----'
+local rplText = '----  User Presets (.rpl)  ----'
+local defaultText = 'Reset to factory default'
 
-function SaveInstrument(tracknum)
-    ClearRouting(tracknum)
-    local name = GetInstName(tracknum)
-    Dbg('saveInstrument: name=',name)
-
-end
-
-function GetInstName()
-    --todo
-end
-
----------------------------------------------------------------------------------------------------------------
--------------------------------------------------GET PRESETS---------------------------------------------------
-
-local vstText = '----  VST built-in programs  ----'
-local userText = '----  User Presets (.rpl)  ----'
-
-local function GetPresetList(tracknum, factory, ignoreName, fxnum )
+local function GetPresetList(chanNum, ignoreName, fxnum )
     if not fxnum then fxnum = INSTRUMENT_SLOT end
     if not ignoreName then ignoreName = '' end
-    if not tracknum then tracknum = 1 end
-    if not factory then factory = false end
-    local writeFile = true  --true:write, false, write to console
-    --Check that fx window is focused----------------------------------------------------
-    OpenPlugin(tracknum,fxnum)
-    local focused
-    focused,tracknum,_,fxnum = reaper.GetFocusedFX()
-    local track = GetTrack(tracknum)
-    local fx_name
-    if focused then
-        --M.Msg('track num ='..tracknum, 'fx num '..fxnum)
-
-        _,fx_name = reaper.TrackFX_GetFXName(track, fxnum,"")
-        --M.Msg('fx name = '..fx_name)
+    if not chanNum then chanNum = 1 end
+    --if not factoryPresets then factoryPresets = false end
+    local writeFile = true
+    OpenPlugin(chanNum,fxnum)
+    local fxName
+    if GetFocusedFX() then
+        MSG('chan num ='..chanNum, 'fx num '..fxnum)
+        fxName = GetFXName(chanNum)
+        MSG('fx name = '..fxName)
     end
-    local vstWindowTitle = reaper.JS_Localize(fx_name, "common")
+    local vstWindowTitle = reaper.JS_Localize(fxName, "common")
     local hwnd = reaper.JS_Window_Find(vstWindowTitle, false)
     local container = reaper.JS_Window_FindChildByID(hwnd, 0)
     local presetWindow = reaper.JS_Window_FindChildByID(container, 1000)
@@ -1203,66 +1244,240 @@ local function GetPresetList(tracknum, factory, ignoreName, fxnum )
     -- save current index
     local cur_index = reaper.JS_WindowMessage_Send(presetWindow, "CB_GETCURSEL", 0,0,0,0)
     -- get indexes for start/end of user preset names --
-    local list_start = -1
-    local list_end = itemCount
-    for i = 0, itemCount-1 do
+    local presetLines = {}
+    for i = 0, itemCount - 1 do  -- 0 is default text
         reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", i, 0,0,0)
         local name = reaper.JS_Window_GetTitle(presetWindow,"")
-        if not factory then
-            if name == userText then list_start = i + 1
-            elseif name == vstText then list_end = i
-            end
-        elseif name ==vstText then list_start = i + 1
-        end
+        table.insert(presetLines,name)
+
     end
-    -- add user preset names --
-    local presets = {}
-    local presetcount = 0
-    local presetsByName = {} --for sorting later
-    for i = list_start, list_end-1 do
-        reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", i, 0,0,0)
-        local presetname = reaper.JS_Window_GetTitle(presetWindow,"")
-        if presetname == ignoreName then --don't add preset
-        else
-            local num = i-list_start
-            presets[num] = presetname
-            presetsByName[presetname] = num
-            presetcount = presetcount + 1
-            --reaper.ShowConsoleMsg('added preset '..presetname)
+    local rpls = {}
+    local fxps = {}
+    local onToFXPs = false
+    for i, line in ipairs(presetLines) do
+        if line == defaultText then MSG(i,': ignoring default line')--do nothing
+        elseif line ~= fxpText and line ~= rplText and not onToFXPs then MSG(i,': adding to rpls') table.insert(rpls, line)
+        elseif line == fxpText then onToFXPs = true MSG(i,': on to fxps')
+        elseif line ~= ignoreName and line ~= rplText then table.insert(fxps, line)
         end
     end
     -- restore preset index
     reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", cur_index, 0,0,0)
-    --TStr(presets,'presets unsorted')
-    for i,name in ipairs(presets) do reaper.ShowConsoleMsg('PRESET: '..name..'\n') end
-    presets =  ArraySort(presets)
-    --TStr(presets,'sorted presets')
-    presets = RemoveDuplicates(presets)
-    --TStr(presets,'duplicates removed')
-    reaper.TrackFX_Show(track, INSTRUMENT_SLOT, 2) --close the fx float
-    return presets
+    rpls =  RemoveDuplicates(ArraySort(rpls))
+    fxps = RemoveDuplicates(ArraySort(fxps))
+    ShowFX(chanNum, true)
+    --reaper.TrackFX_Show(track, INSTRUMENT_SLOT, 2) --close the fx float
+    return rpls, fxps
 end
 
-function GetVstPresets(tracknum)
-    return GetPresetList(tracknum,true,'<empty>')
+function ShowFX(chanNum, hide, slot)
+    if not slot then slot = INSTRUMENT_SLOT end
+    if not hide then hide = 3 else hide = 2 end
+    return reaper.TrackFX_Show(GetTrack(TrackOfChan(chanNum)), slot, hide)
 end
 
-function GetRplPresets(tracknum)
+function GetFXPs(tracknum, ignore, fxNum)
+    if not fxNum then fxNum = INSTRUMENT_SLOT end
+    if not ignore then ignore = '' end
+    local _, fxps = GetPresetList(tracknum, ignore, fxNum)
+    return fxps
+end
+
+function GetRPLs(tracknum)
     return GetPresetList(tracknum)
 end
 
+function GetFxPresetName(chan, fxNum, useReaperIDX)
+    if not useReaperIDX then chan = TrackOfChan(chan) end
+    local track = GetTrack(chan)
+    if not fxNum then fxNum = INSTRUMENT_SLOT end
+    local found, presetname = reaper.TrackFX_GetPreset(track, fxNum, "")
+    if found then return presetname
+    end
+end
+
+--This will overwrite rpls with vsts....
+function WritePreset(chanNum, fxNum, presetName, useReaperIDX)
+    if not fxNum then fxNum = INSTRUMENT_SLOT end
+    if not presetName then presetName = GetFxPresetName(chanNum, fxNum) end
+    local vstName = GetFXName(chanNum, fxNum)
+    local trackNum
+    if not useReaperIDX then trackNum = TrackOfChan(chanNum) else trackNum = chanNum end
+    --get track data
+    local found, chunk = ultraschall.GetTrackStateChunk_Tracknumber(trackNum)
+    if not found then ERR('Track chunk not found: ',trackNum, fxNum) end
+    local data1 = ultraschall.GetFXStateChunk(chunk)
+    local data2 = ultraschall.GetFXFromFXStateChunk(data1, fxNum + 1)  --ultraschall fx are 1-based
+    local data3 = ultraschall.GetFXSettingsString_FXLines(data2)
+    local data4 = ultraschall.Base64_Decoder(data3)
+    local data = ultraschall.ConvertAscii2Hex(data4)
+    MSG('data',data)
+    --local data = getPresetHex(chanNum, fxNum)
+    --prepare for writing file
+    local presetFile = reaper.GetResourcePath()..'/presets/vst-'..vstName..'.ini'
+    --MSG('path = ', presetFile)
+    local presetCount, key, section
+    if reaper.file_exists(presetFile) then
+        ultraschall.GetIniFileValue()
+         _, presetCount =  reaper.BR_Win32_GetPrivateProfileString("General", "NbPresets", "", presetFile)
+        section = 'Preset'..math.tointeger(presetCount)
+    else section, presetCount = 'Preset0', 0
+    end
+    presetCount = math.tointeger(presetCount + 1)
+    --Update/write number of presets
+    MSG("GOT HERE")
+    ultraschall.SetIniFileValue('General', 'NbPresets', presetCount, presetFile)
+    local presetLength = #data
+    local stringPos = 1
+    for i = 1, math.ceil(presetLength/32768) do
+        if i == 1 then key = 'Data' else key = 'Data_'..(i - 1) end
+        local chunk = data:sub(stringPos, stringPos + 32767)
+        local sum = 0
+        for i = 1, #chunk, 2 do  sum = sum + tonumber( chunk:sub(i,i + 1), 16) end
+        sum = string.sub( string.format("%X", sum), -2, -1 )
+        ultraschall.SetIniFileValue(section, key, chunk..sum, presetFile)
+        stringPos = stringPos + 32768
+        MSG('written: '..i)
+    end
+    ultraschall.SetIniFileValue(section,'Name', presetName, presetFile)
+    ultraschall.SetIniFileValue(section,'Len', presetLength//2, presetFile)
+    reaper.TrackFX_SetPreset(GetTrack(trackNum), fxNum, presetName)
+end
+
+local function loadFXPsForConversion(chanNum, fxNum, overwrite, ignore)
+    --MSG('loading fx for ch',chanNum,'fx',fxNum)
+    if not fxNum then fxNum = INSTRUMENT_SLOT end
+    --local trackNum = TrackOfChan(chanNum)
+    local rpls,fxps = GetPresetList(chanNum, ignore, fxNum)
+    --TStr(rpls, 'rpls')
+    local convert = {}
+    for i, name in ipairs(fxps) do
+        --MSG('checking fxp',name)
+        if name ~= ignore then
+            local presetExists = ArrayContains(rpls, name)
+            --if presetExists then MSG('preset exists: ',name) end
+            if overwrite or (not overwrite and not presetExists) then
+                table.insert(convert, {name = name, chan = chanNum, fx = fxNum})
+            end
+        end
+    end
+    --TStr(convert,'convert')
+    return convert
+end
+
+local function convertNextPreset(presetList, waitTime, presetNumber)
+    local preset = presetList[presetNumber]
+    local deferID = "PresetConversion"
+    MSG('Saving Preset: ', preset.name)
+    for i, preset in ipairs(presetList) do
+    WritePreset(preset.chan, preset.fx, preset.name) end
+    --[[if presetNumber < #presetList then
+        --MSG('preset number', presetNumber)
+        ultraschall.Defer(convertNextPreset(presetList, waitTime, presetNumber + 1), deferID, 2, waitTime)
+    else ultraschall.StopDeferCycle(deferID)
+    end--]]
+end
+
+function ConvertPresets(chanNum, fxNum, overwrite, ignorePresetsNamed, waitTime)
+    local presetList = loadFXPsForConversion(chanNum, fxNum, overwrite, ignorePresetsNamed)
+    convertNextPreset(presetList, waitTime, 1)
+end
+
+function Get_Strings_Until(stringTable, index, test)
+    --MSG('checking string: '..stringTable[index]..'index: '..index)
+    if StartsWith(stringTable[index], test) then return index
+    elseif index == #stringTable then return -1
+    else return Get_Strings_Until(stringTable, index + 1, test)
+    end
+end
+
+local function getFXLines(chanNum, fxNum)
+    if not fxNum then fxNum = INSTRUMENT_SLOT end
+    local track = GetTrack(TrackOfChan(chanNum))
+    local ret, Track_Chunk =  reaper.GetTrackStateChunk(track,"",false)
+    local lines = {}
+    for s in Track_Chunk:gmatch("[^\r\n]+") do
+        table.insert(lines, s)
+    end
+    local chainIDX = Get_Strings_Until(lines, 1, "<FXCHAIN")
+    local fxIDX = chainIDX + 1
+    local FX_Type
+    for i = 0,fxNum do
+        fxIDX = Get_Strings_Until(lines, fxIDX, "<")
+        FX_Type = lines[fxIDX]:sub(2,4)
+        fxIDX = fxIDX + 1
+    end
+    local lastIDX = Get_Strings_Until(lines, fxIDX, ">") - 1
+    return lines, fxIDX, lastIDX, chainIDX
+end
+
+function SaveMoonPreset(chanNum, fxNum)
+    local lines, first, last  = getFXLines(chanNum, fxNum)
+    local presetName = GetFxPresetName(chanNum, fxNum)
+    local vstName = GetFXName(chanNum, fxNum)
+    local filename = BANK_FOLDER..vstName..'/'..presetName..'.MPF'
+    MSG('file = '..filename)
+    CreateFolder(BANK_FOLDER..vstName)
+    local file = io.open(filename,'w+')
+    MSG('writing to file: '..filename)
+    --local chunkTable = {}
+    for i = first,last do
+        file:write(lines[i],'\n')
+    end
+    file:close()
+end
+
+function LoadMoonPreset(chanNum, fxNum, presetName)
+    local fxLines = {}
+    local track = GetTrack(TrackOfChan(chanNum))
+    local fileName = BANK_FOLDER..GetFXName(chanNum, fxNum)..'/'..presetName..'.MPF'
+    for line in io.lines(fileName) do
+        fxLines[#fxLines + 1] = line
+    end
+    local trackChunkLines, first, last = getFXLines(chanNum, fxNum)
+    local lastPart = {}
+    local fxPart= {}
+    local firstPart = {}
+    for i = 1, first do firstPart[i] = trackChunkLines[i]end
+    for i = last, #trackChunkLines do lastPart[i] = trackChunkLines[i] end
+    for i = first, last do fxLines[i] = trackChunkLines[i - first + 1] end
+    local bits = {}
+    table.insert(bits,table.concat(firstPart,'\n'))
+    table.insert(bits,table.concat(fxPart,'\n'))
+    table.insert(bits,table.concat(lastPart,'\n'))
+    local str = table.concat(bits,'\n')
+    MSG('writing to ch '..str)
+    reaper.SetTrackStateChunk(track, str, false)
+end
 
 ---------------------------------------------------------------------------------------------------------------
 --#############################################################################################################
 -------------------------------------------------TESTING METHODS-----------------------------------------------
 
 function Test()
-    M.Msg('testing')
-    ends = 'test'
-    notend = 'west'
-    string = 'thisisatest'
-    M.Msg('string end test: '..tostring(EndsWith(string,ends)))
-    M.Msg('string end fail: '..tostring(EndsWith(string,notend)))
+    MSG('testing')
+    --SaveMoonPreset(1)
+    LoadMoonPreset(1,INSTRUMENT_SLOT,'Black Market 0')
+    --GetPresetList(1,'<empty>')
+    --ConvertPresets(1, INSTRUMENT_SLOT, false, '<empty>', 1 )
+    --WritePreset(1)
+    --[[
+    local table = {
+        { name = 'element', color = 'blue'},
+        {name ='thing', color = 'white'},
+        {name ='unit', color = 'red'},
+        {name ='piece', color = 'green'},
+        {name = 'bit', color = 'cyan' }
+    }
+    TStr(ArraySortByField(table, 'color'),'sorted')
+    --]]
+
+    --ends = 'test'
+    --notend = 'west'
+    --string = 'thisisatest'
+    --MSG('string end test: '..tostring(EndsWith(string,ends)))
+    --MSG('string end fail: '..tostring(EndsWith(string,notend)))
+
     --GetTrackChunk(1)
     --SavePreset(1,2,'TEST')
     --Dbg('test: Setting wet level',20)
@@ -1290,5 +1505,5 @@ function Test()
 
 end
 
---Test()
+Test()
 --reaper.Track_GetPeakInfo( track, chan ) --use for meters

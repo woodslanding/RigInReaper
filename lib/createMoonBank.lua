@@ -1,4 +1,30 @@
 
+   --[[
+we want to populate the combos with two things:
+   1.  a list of banks for this particular VST
+   2.  a list of presets for the selected bank.
+   so the function would be:  loadPresets(vstName,bankname)
+   this would search the file vstName and return 2 values:
+       1. a list of all the bank names for this vstName
+       2. a list of all the presets in the bank 'bankname'
+   selecting a vst parses the moonBank file, and creates bank lists for it
+   -----------------------
+   If we have a 1-button solution to converting vst built-in programs to RPLs,
+   (updating) we can deal exclusively with RPLs.
+
+    for creating the .mbf file we need:
+    1.  A means of viewing ALL presets for a vst (rpl list) and assigning each one
+        to one or more banks.  This can be a fullscreen window with button arrays
+        on the left for presets, and the right for banks.  The bank buttons are
+        multi-select, and bank data is written whenever the preset is changed.
+        It should show a lot of (32?) banks, with option for paging
+        It should be associated with a track so the selected preset can be auditioned.
+    2.  Also needs: Buttons for creating, renaming, reordering, coloring, and deleting banks/tags.
+
+
+
+   --]]
+
 -- The core library must be loaded prior to anything else
 local libPath = reaper.GetExtState("Scythe v3", "libPath")
 if not libPath or libPath == "" then
@@ -17,7 +43,7 @@ require 'moonUtils'
 local Bank = {}
 Bank.__index = Bank
 
-local PATH = 'C:\\Users\\moon\\Documents\\_REAPER\\Scripts\\_RigInReaper\\Banks\\'  --for testing
+local PATH = BANK_FOLDER
 
 function Bank.new(name)
     local self = setmetatable({}, Bank)
@@ -27,6 +53,7 @@ end
 
 function Bank:__tostring()
     local propstr = ""
+    local tab = '    '
     local paramstr, presetstr
     for prop,val in pairs(self) do
         if prop == 'name' then propstr = 'name = '..Esc(val)..', '..propstr --put the name first
@@ -35,27 +62,20 @@ function Bank:__tostring()
         else propstr = propstr..prop..' = '..val..', '
         end
     end
-    local rtnStr = '    '..self.name..' = { '..propstr..'\n            '
+    local rtnStr = tab..'{ '..propstr..'\n'..tab..tab..tab
     ..paramstr..'\n'
     ..presetstr..'\n'
-    ..'        }'
+    ..tab..tab..'}'
     return rtnStr
 end
 
 function Bank:addPreset(name)
         self.presets[name] = name
-        --M.Msg('Added preset '..name..', presets = '..Table.stringify(self.presets))
+        --MSG('Added preset '..name..', presets = '..Table.stringify(self.presets))
 end
 
 function Bank:setParam(control,name)
-    self.params[control]=name
-    --don't map encoder push mappings, they are just for soloing (receive only on this track)
-    --E1...E8,   --encoder mappings
-    --L1...L8,   --lower button mappings
-    --U1...U8,   --upper button mappings
-    --F1...F4,   --footswitch mappings
-    --T1...T8,   --organ toggle mappings
-    --D1...D9,   --drawbar mappings
+    self.params[control] = name
 end
 
 function Bank:getParam(control)
@@ -63,10 +83,10 @@ function Bank:getParam(control)
 end
 
 function GetPresetStr(presets)
-    --M.Msg('PRESETS UNSORTED = '..Table.stringify(presets))
+    --MSG('PRESETS UNSORTED = '..Table.stringify(presets))
     local retStr = '            presets = {'
     local sorted = TableSort(Table.invert(presets))
-    --M.Msg('PRESETS SORTED = '..Table.stringify(sorted))
+    --MSG('PRESETS SORTED = '..Table.stringify(sorted))
     if #sorted == 0 then return retStr..'}' end
     for index,val in pairs(sorted) do
         retStr = retStr..Esc(val)..', '
@@ -107,21 +127,43 @@ function Plugin:__tostring()
     local plugStr = 'return {\n    vstName = '..Esc(self.vstName)..', name = '..Esc(self.name)..', emptyPreset = '..Esc(self.emptyPreset)..','
     local preStr =  '\n    presets = {'..self:getPresetString()..'}, \n'
     local bankPre = '\n    banks = {\n    '
-    for bankName in pairs(self.banks) do
-        table.insert(bankT,tostring(self.banks[bankName]))
+    --self:getSortedBanks()
+    for i,bank in ipairs(self:getBanks()) do  --alphabetize banks when writing
+        --MSG('Writing bank:'..bankName)
+        table.insert(bankT,tostring(bank))
     end
     return plugStr..preStr..'    '..GetParamStr(self.params)..bankPre..table.concat(bankT,',\n    ')..'\n    }\n'..'}'
 end
 
 function Plugin:getPresetString()
     local retStr = ''
-    --M.Msg('GETTING MASTER PRESET LIST: presets unsorted'..Table.stringify(self.presets))
+    --MSG('GETTING MASTER PRESET LIST: presets unsorted'..Table.stringify(self.presets))
     local sorted = TableSort(Table.invert(self.presets))
+    TStr(sorted, 'SORTED INVERTED TABLE OF PRESETS')
     for i,val in ipairs(sorted) do
         retStr = retStr..Esc(val)..', '
     end
-    --M.Msg('MASTER:Presets sorted = '..retStr)
+    --MSG('MASTER:Presets sorted = '..retStr)
     return CleanComma(retStr)
+end
+
+function Plugin:getBanks() --sorts them also
+    local banks = {}
+    for i,name in ipairs(self:getBankList()) do
+        table.insert(banks, self:getBank(name))
+    end
+    self.banks = banks
+    return banks
+end
+
+function Plugin:getBankList()
+    local nameTable = {}
+    for i, bank in ipairs(self.banks) do
+        table.insert(nameTable,bank.name)
+    end
+    TStr(nameTable,'nameTable')
+    local sorted = TableSort(Table.invert(nameTable))
+    return sorted
 end
 
 function Plugin.new(vstName, name, properties)
@@ -143,7 +185,7 @@ end
 
 function Plugin:getPresetList()
     local sorted = ArraySort(self.presets)
-    --M.Msg('PLUGIN GETTING PRESETS = \n'..Table.stringify(sorted))
+    --MSG('PLUGIN GETTING PRESETS = \n'..Table.stringify(sorted))
     return sorted
 end
 
@@ -161,58 +203,74 @@ function Plugin:addBank(bankName,properties)
             bank[prop] = val  --add props from method call
         end
     end
-    self.banks[bankName] = bank
-    --TStr(bank,'bank created')
+    table.insert(self.banks,bank)
+    TStr(bank,'bank created')
 end
 
-function Plugin:addPreset(preset)
-    if not self.presets[preset] then
-        self.presets[preset] = preset
-    end
-end
-
-function Plugin:bankContainsPreset(bankName,presetName)
-    local bank = self.banks[bankName]
-    for i,name in pairs(bank.presets) do
+function Plugin:containsPreset(presetName)
+    for i,name in ipairs(self.presets) do
         if name == presetName then return true end
     end
     return false
 end
 
+function Plugin:addPresets(arrayOrString)
+    if type(arrayOrString) == 'string' then arrayOrString = { arrayOrString } end
+    for i,preset in ipairs(arrayOrString) do
+        if not self:containsPreset() then table.insert(self.presets, preset) end
+    end
+end
 
-function Plugin:getBanksContaining(presetName)
-    local list = self.getBankList()
-    TStr(list,'Banks with '..presetName)
+function Plugin:bankContainsPreset(bankName,presetName)
+    local bank = self:getBank(bankName)
+    for i,name in ipairs(bank.presets) do
+        if name == presetName then return true end
+    end
+    return false
+end
+
+function Plugin:getIndicesOfBanksContaining(presetName)
+    local indices = {}
+    for i,bank in ipairs(self.banks) do
+        if self:bankContainsPreset(bank.name, presetName) then
+            table.insert(indices, i)
+        end
+    end
+    return indices
 end
 
 function Plugin:addPresetToBanks(presetName,banks)
-    --M.Msg('adding preset '..presetName, 'to banks: '..TStr(banks))
-    for i,option in pairs(banks) do
-        self.banks[option.name]:addPreset(presetName)
+    --MSG('adding preset '..presetName, 'to banks: '..TStr(banks))
+    for i, bank in pairs(banks) do
+        self:getBank(bank.name):addPreset(presetName)
     end
 end
 
 function Plugin:setPresetsForBank(bankName,presets)
-    --M.Msg('bank name = '..bankName)
-    self.banks[bankName].presets = {}
-    --M.Msg('setting presets for bank:'..Table.stringify(presets))
+    --MSG('bank name = '..bankName)
+    self:getBank(bankName).presets = {}
+    --MSG('setting presets for bank:'..Table.stringify(presets))
     for i,option in pairs(presets) do
-        self.banks[bankName]:addPreset(self.presets[i])
-        --M.Msg('adding preset: '..self.presets[i])
+        self:getBank(bankName):addPreset(self.presets[i])
+        --MSG('adding preset: '..self.presets[i])
     end
 end
 
 function Plugin:setBankPreset(bankName,presetName)
-    if not self.banks[bankName] then print('non-existent bank: '..bankName) return end
-    --M.Msg('setting bank preset '..presetName)
-    self:addPreset(presetName)
-    self.banks[bankName]:addPreset(presetName)
+    if not self:getBank(bankName) then print('non-existent bank: '..bankName) return end
+    --MSG('setting bank preset '..presetName)
+    self:addPresets(presetName)
+    self:getBank(bankName):addPreset(presetName)
 end
-function Plugin:getBankList()
-    return TableSort(self.banks)
-end
-function Plugin:getBank(bank)
-    return self.banks[bank]
+
+function Plugin:getBank(bankName)
+    --MSG('bankname = ')
+    for i, bank in ipairs(self.banks) do
+        MSG('Checking '..self.name..' for bank '..bank.name)
+        if bank.name == bankName then return bank end
+    end
+    MSG('createMoonBank, bank not found: ',bankName)
+    return nil
 end
 
 function Plugin:setParam(control,name)
@@ -231,26 +289,26 @@ end
 function Plugin.load(name)
     local filename = GetFileStartingWith(name)
     if not filename then return end
-    M.Msg('loading file: ',PATH..filename)
+    MSG('loading file: ',PATH..filename)
     local f = assert(loadfile(PATH..filename..'.lua'))
     local data = f()
     local self = setmetatable(data,Plugin)
-    --M.Msg('initializing banks')
-    for bankName,table in pairs(self.banks) do
-        self.banks[bankName] = Bank.init(table)
-        --M.Msg('init bank'..Table.stringify(self.banks[bankName]))
+    --MSG('initializing banks')
+    for i,bank in ipairs(self.banks) do
+        self.banks[i] = Bank.init(bank)
+        MSG('init bank'..Table.stringify(self.banks[i]))
     end
     return self
 end
 function Plugin:save()
     local filename = PATH..self.name..'.'..self.vstName..'.lua'
     local file = io.open(filename,'w')
-    M.Msg('writing to file: '..filename)
+    MSG('writing to file: '..filename)
     file:write(tostring(self))
     file:close()
 end
 
---[[function Plugin.test(vstName,name)
+function Plugin.test(vstName,name)
     local plug = Plugin.new(vstName,name,{emptyPreset = 'not found'})
     plug:setParam('A1','Reverb')
     plug:setParam('A2','Chorus')
@@ -264,6 +322,7 @@ end
     plug:setBankPreset('pianos','Death Piano')
     plug:setBankPreset('pianos','poor naming')
     plug:setBankPreset('basses','Really Rad Bass!')
+    MSG('got here')
     local curBank = plug:getBank('favorites')
     curBank:setParam('A5','Wah')
     plug:getBank('pianos'):setParam('A1','Reverb')

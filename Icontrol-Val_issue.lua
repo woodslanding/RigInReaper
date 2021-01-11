@@ -60,11 +60,11 @@ function IControl:init()
 end
 
 function IControl:draw()
-    
+
     local x, y, w, h = self.x, self.y, self.w, self.h
     gfx.mode = 0
   --gfx.blit(self.buffer, 1, 0, self.state * self.w, 0, self.w, self.h, self.x, self.y, self.w, self.h)
- 
+
     self.sprite:draw(x, y, w, h, self.state, self.frames)
       -- Draw the caption
     local state = self.state
@@ -77,10 +77,10 @@ function IControl:draw()
     local strWidth, strHeight = gfx.measurestr(str)
     local playX = w-strWidth
     local playY = h - strHeight
-    
+
     gfx.x = x + (playX / 2) + (self.labelX * playX)
     gfx.y = y + (playY / 2) + (self.labelY * playY)
-    
+
     gfx.drawstr(str)
 end
 
@@ -96,7 +96,7 @@ function IControl:onMouseDown(state)
     DragStartY = state.mouse.y
     local mouseVal = self.horizontal and state.mouse.x or state.mouse.y
     DragStartState = self:getState(mouseVal/self:longSide())
-    if self.mode == MODES.BUTTON then 
+    if self.mode == MODES.BUTTON then
       self.state = 1
       self:val(self.max)
     end
@@ -111,10 +111,10 @@ function IControl:increment(goingUp,wrapping)
     local limit = self.frames - 1
     if (self.state == limit and goingUp and wrapping)
        or (self.state == 0 and not goingUp and not wrapping) then self.state = 0
-    elseif (self.state == 0 and not goingUp and wrapping) 
+    elseif (self.state == 0 and not goingUp and wrapping)
         or (self.state == limit and goingUp and not wrapping) then self.state = limit
     else self.state = self.state + inc end
-    --M.Msg('state = ',self.state)
+    --MSG('state = ',self.state)
     return true
 end
 
@@ -127,7 +127,7 @@ function IControl:onMouseUp(state)
     elseif self.mode == MODES.SPINNER and not self.horizontal and state.mouse.y < midY then self:increment(false,self.loop)
     elseif self.mode == MODES.SPINNER and not self.horizontal and state.mouse.y > midY then self:increment(true,self.loop)
     elseif self.mode == MODES.SLIDER and not hasBeenDragging  then
-        --move slider to mouse position    
+        --move slider to mouse position
         local pos = self.horizontal and state.mouse.x or state.mouse.y
         local rel = self.horizontal and pos - self.x or pos - self.y
         local pct = rel / self:longSide()
@@ -146,14 +146,14 @@ function IControl:onDrag(state,last)
         hasBeenDragging = true
         local pixels = self.horizontal and  state.mouse.x - DragStartX  or state.mouse.y - DragStartY
         local pct = (pixels/self:longSide()) --getting funky values
-        M.Msg('mouse state',state.mouse.x,'drag start',DragStartX)
-        M.Msg('state:',self.state,'pct: ',pct)
-        self.state = Math.clamp( self:getState(pct) - DragStartState, 0, self.frames-1)      
+        MSG('mouse state',state.mouse.x,'drag start',DragStartX)
+        MSG('state:',self.state,'pct: ',pct)
+        self.state = Math.clamp( self:getState(pct) - DragStartState, 0, self.frames-1)
         --local adj = ((self.max - self.min) * self.sens) / self:longSide()
         --self.state = math.floor ( Math.clamp(self.state + (pixels * adj), self.min, self.max) - self.min )
         self:redraw()
-        
-        
+
+
     end
 end
 

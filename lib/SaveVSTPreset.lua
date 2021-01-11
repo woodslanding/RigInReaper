@@ -7,7 +7,9 @@
    * Version: 1.04
    * Mod by X-Raym
   ]]
-
+  dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
+  package.path = debug.getinfo(1,"S").source:match[[^@?(.*[\/])[^\/]-$]] .."?.lua;".. package.path
+  require 'moonUtils'
 --------------------------------------------------------------------------------
 -- Base64_to_Hex(modded from lua.org functions)  -------------------------------
 --------------------------------------------------------------------------------
@@ -62,7 +64,8 @@ end
 --------------------------------------------------------------------------------
 -- Variant 1 ---------------------------
 function FX_Chunk_to_HEX(FX_Type, FX_Chunk, Preset_Name)
-  local Preset_Chunk = FX_Chunk:match("\n.*\n")        -- extract preset(simple var)
+
+    --[[local Preset_Chunk = FX_Chunk:match("\n.*\n")        -- extract preset(simple var)
 
     ---------------------------------------
     -- For JS -----------------------------
@@ -72,7 +75,7 @@ function FX_Chunk_to_HEX(FX_Type, FX_Chunk, Preset_Name)
        --reaper.ShowConsoleMsg(Preset_Chunk..'\n')
        return String_to_HEX(Preset_Chunk..Preset_Name)
     end
-
+--]]
     ---------------------------------------
     -- For VST ----------------------------
     ---------------------------------------
@@ -80,7 +83,8 @@ function FX_Chunk_to_HEX(FX_Type, FX_Chunk, Preset_Name)
     local init = 1
     ---------------------
     for i=1, math.huge do
-          line = Preset_Chunk:match("\n.-\n", init)    -- extract line from preset(simple var)
+          --line = Preset_Chunk:match("\n.-\n", init)    -- extract line from preset(simple var)
+          line = FX_Chunk
           if not line then
              --reaper.ShowConsoleMsg(Hex_TB[i-1].."\n")
              Hex_TB[i-1] = "00"..String_to_HEX(Preset_Name).."0010000000" -- Preset_Name to Hex(replace name from chunk)
@@ -166,14 +170,39 @@ function Write_to_File(PresetFile, Preset_HEX, Preset_Name)
   file:close()
 end
 
+function Get_Strings_Until(stringTable, index, test)
+    MSG('checking string: '..stringTable[index]..'index: '..index)
+    if StartsWith(stringTable[index], test) then MSG('FOUND: '..index) return index
+    elseif index == #stringTable then return -1
+    else return Get_Strings_Until(stringTable, index + 1, test)
+    end
+end
 --------------------------------------------------------------------------------
 -- Get FX_Chunk and PresetFile  ------------------------------------------------
 --------------------------------------------------------------------------------
 function Get_FX_Data(track, fxnum)
-  local fx_cnt = reaper.TrackFX_GetCount(track)
-  if fx_cnt==0 or fxnum>fx_cnt-1 then return end       -- if fxnum not valid
-  local ret, Track_Chunk =  reaper.GetTrackStateChunk(track,"",false)
-  --reaper.ShowConsoleMsg(Track_Chunk)
+    local fx_cnt = reaper.TrackFX_GetCount(track)
+    if fx_cnt==0 or fxnum>fx_cnt-1 then return end       -- if fxnum not valid
+    local ret, Track_Chunk =  reaper.GetTrackStateChunk(track,"",false)
+    reaper.ShowConsoleMsg('TRACK CHUNK READ')
+    local lines = {}
+    for s in Track_Chunk:gmatch("[^\r\n]+") do
+        table.insert(lines, s)
+    end
+    reaper.ShowConsoleMsg(lines[1])
+    local chainIDX = Get_Strings_Until(lines, 1, "<FXCHAIN")
+    MSG('chain line: ',chainIDX)
+    local fxIDX = chainIDX + 1
+    local FX_Type
+    for i = 0,fxnum do
+        fxIDX = Get_Strings_Until(lines, fxIDX, "<")
+        FX_Type = lines[fxIDX]:sub(2,4)
+        fxIDX = fxIDX + 1
+    end
+    local FX_Chunk = lines[fxIDX]
+
+--[[
+
 
   ------------------------------------
   -- Find FX_Chunk(use fxnum) --------
@@ -192,11 +221,16 @@ function Get_FX_Data(track, fxnum)
     local FX_Chunk = Track_Chunk:match("%b<>", s)      -- FX_Chunk(simple var)
     ----------------------------------
     --reaper.ShowConsoleMsg("\n\n"..fxnum.."\n"..FX_Chunk.."\n")
-
+--]]
   ------------------------------------
   -- Get UserPresetFile --------------
   ------------------------------------
   local PresetFile = reaper.TrackFX_GetUserPresetFilename(track, fxnum, "")
+  local filename = BANK_FOLDER..'/'..PresetFile..'.'..self.vstName..'.lua'
+    local file = io.open(filename,'w')
+    MSG('writing to file: '..filename)
+    file:write(tostring(self))
+    file:close()
   ------------------------------------
   return FX_Type, FX_Chunk, PresetFile
 end
@@ -248,7 +282,6 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Start  ------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
---[[
 local track, fxnum, Preset_Name = Get_LastTouch_FX()                  -- any function can be used
 Save_VST_Preset(track, fxnum, Preset_Name)                            -- RUN
 
@@ -297,4 +330,4 @@ function runloop()
   end
 end
 
-reaper.defer(runloop)--]]
+reaper.defer(runloop)

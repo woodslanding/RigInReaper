@@ -81,7 +81,7 @@ function Scale(val)
 end
 
 function CreateChannel(chanNum,color)
-    
+
     local chanW = Scale(120)
     local chanH = Scale(528)
     local xpos = (chanNum - 1) * chanW
@@ -151,7 +151,7 @@ end
 
 for i = 1,16 do
     CreateChannel(i,GetRGB(i * 130,100,50))
-    --M.Msg('creating channel'..i)
+    --MSG('creating channel'..i)
 end
 
 

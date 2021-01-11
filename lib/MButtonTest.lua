@@ -34,7 +34,7 @@ local function createSwitch(i)
         type = "MButton",
         labelX = 0, labelY = 0,
         image =  imageFolder.."Notesource.png",
-        func = function(self) M.Msg('setting track'..i.. 'to '..self.value) TrackName(i,"track "..self.value) end,
+        func = function(self) MSG('setting track'..i.. 'to '..self.value) TrackName(i,"track "..self.value) end,
         params = {"a", "b", "c"}
     })
     switches[i] = switch
@@ -54,7 +54,7 @@ function MSpinnerTest()
         value = 1,
         min = 1, max = 3,
         image = imageFolder.."EffectSpin.png",
-        func = function(self) switches[1]:val(self.value) self.caption = self:val() M.Msg('function called:'..self.value) end,
+        func = function(self) switches[1]:val(self.value) self.caption = self:val() MSG('function called:'..self.value) end,
     })
     return spinner
 end

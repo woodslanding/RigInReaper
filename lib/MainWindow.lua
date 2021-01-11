@@ -47,28 +47,171 @@ local imageFolder = IMAGE_FOLDER  --from MoonUtilities
 local presetFolder = PRESET_FOLDER
 local indent = '    '
 -- panel states
-local PStates = { global = 1, preset = 2, vst = 3 }
-local PState
+local PanelDisplay = 1
+    local GLOBAL = 1
+    local VST = 2
+    local PRESET = 3
+local PanelDisplay
+-----------------------------------------------------------------------------------------------------
+------------------------------------------- PANEL FUNCTIONS -----------------------------------------
+-----------------------------------------------------------------------------------------------------
+--[[
+    presets will be loaded for all channels on startup, based on loading a default global presetFolder
+    banks will be loaded for all channels, global banks will be loaded, and the first one selected.
+
+    Commands:
+    The panels will get functions updated as part of options loaded as their function changes.
+        so these can be atomic.
+
+
+    open in global mode
+    1.GLOBAL MODE:      Right panel shows global banks,
+                        Left panel shows global presets for current bank:  setMode(GLOBAL)
+
+    2.VST MODE:     Left panel shows banks for selected vst, Right panels shows master VST list
+    3.CHANNEL MODE: Left panel shows presets for current channel, Right panel shows banks for current VST
+
+]]
 -- channel data
-local vsts = {}
-local plugs = {}
-local gBankNames = nil
-local gBankName = nil
-local gBankNamePage = 1
-local presets = {}
-local presetPages = {}
-local banks = {}
-local bankPages = {}
+local vsts = nil  --list of all mapped VSTs
+local plugs = nil  --list of selected VSTs by channel
+local gBanks = nil  --list of all global banks
+local gBank = nil  --current global bank name
+local gBankPage = 1  --current global bank page
+local gPresets = nil
+local gPreset = nil
+local presets = {}  --table of tables of presets by channel
+local presetPages = {} --table of preset pages
+local banks = {}  -- list of banks for selected vst by channel
+local bankPages = {} --list of bank pages
+
+local function init()
+    vsts = GetBankFileTable()
+    plugs =
+
+end
+
+local function setPanelsGLOBAL()
+    if not gBanks then gBanks = OptionsFromPath(PRESET_FOLDER) end
+    gui.banks:setOptions(gBanks)
+    if not gBank then gBank = gBanks:getOption(1) end
+    if not gPresets then
+        local folder = PRESET_FOLDER..gBank..'/'
+        gPresets = OptionsFromPath(folder)
+    end
+    gui.presets:setOptions(gPresets)
+    if not gPreset then gPreset = gui.presets:getOption(1)
+                        gui.presets:setPage(1)
+    else gui.presets:select(gPreset.index)
+        gui.presets:pageToSelection()
+    end
+end
+
+local function setPanelsVST()
+    if not vsts then vsts = GetBankFileTable() end
+    gui.banks:setOptions(vsts)
+    gui.banks:selectByName(ch().vst:val())
+    gui.presets:setOptions()
+
+end
+
+local function setPanelsPRESETS()
+end
+--not needed?
+local function getPlugList()
+    if not plugs then
+        for i = 1,channelCount do
+            plugs[i] = gui.ch.vst:val()
+        end
+        TStr(plugs, 'plugins by chan')
+    end
+    return plugs
+end
+
+local function loadPresets()
+    if PanelDisplay == GLOBAL then
+        local folder = PRESET_FOLDER..gBank..'/'
+        MSG('folder = '..folder)
+        gui.presets:setOptions(OptionsFromPath(folder))
+        gui.presets:setPage(1)
+    elseif PanelDisplay == VST then
+    elseif PanelDisplay == PRESET then
+    end
+end
+
+local function selectBank(bankName)
+    if PanelDisplay == GLOBAL then
+        gBank = bankName
+    elseif PanelDisplay == VST then
+    elseif PanelDisplay == PRESET then
+    end
+    loadPresets()
+end
+-- use cases: 1--update bank display when channel changes
+--            2--change to bank display from global or vst display
+function ShowPresets(vst, chan)
+    PanelDisplay = PRESET
+    local i
+    if chan then i = chan else i = ch() end
+    if not vst then vst = vsts[i] end  --we should fill this table before loading any banks, I think
+    if not plugs[i] or plugs[i].vstName ~= vst then plugs[i] = Plugin.load(vst) end  --don't want to re-read every time we switch channels
+    local banks = plugs[i]:getBankList()
+    gui.banks:setColor('gray', true)
+    for i,bankName in ipairs(banks) do
+        local bank = plugs[i]:getBank(bankName)
+        gui.banks:setOption(i, {index = i, name = bankName, bank = bank, color = GetRGB(bank.hue,bank.sat,BRIGHTNESS)})
+    end
+    if not gBank then gBank = GetFileList(PRESET_FOLDER)[1] end
+    gui.banks:setPage(bankPages[i] or 1)
+    Presets = Plug:getPresetList()
+    for i,preset in ipairs(Presets) do Presets[i] = { name = preset } end
+    gui.presets:setOptions(Presets)
+    gui.presets:setPage(presetPages[i] or 1)
+end
+
+function ShowVsts()
+    PanelDisplay = VST
+    local i = 1
+    local plugName = GetFXName(CurrentTrack,INSTRUMENT_SLOT)
+    MSG('Plug Name = '..plugName)
+    for name,vst in pairs(GetBankFileTable()) do
+        MSG('setting option '..name..' to '..vst)
+        gui.banks:setOption(i,{ name = name, vst = vst })
+        local vstFile = vst..'.dll'
+        if vstFile == plugName then gui.banks:select(i) end
+        i = i + 1
+    end
+end
+
+function ShowGlobalPanel()
+    PanelDisplay = GLOBAL
+    if not gBanks then gBanks = OptionsFromPath(PRESET_FOLDER, true) end
+    gui.banks:setOptions(gBanks)
+    if not gBank then gBank = gui.banks:getOption(1).name end
+    selectBank(gBank)
+end
+
+function ProcessPreset(name)
+    if PanelDisplay == PresetPanel then
+        ch().presetName:val(name)
+        SelectPreset(ch(), name)
+    elseif PanelDisplay == GLOBAL then
+        GlobalRecall(name)
+    elseif PanelDisplay == VST then
+    end
+end
+
+
 --------------------------------------------------------------------------------------------------
 ---------------------------------     GENERAL FUNCTIONS  -----------------------------------------
 --------------------------------------------------------------------------------------------------
 
-function Save(gPresetName)
+function GlobalSave(gPresetName)
     local saveData = 'return '..'{ \n'
     for name,elm in pairs(gui) do
-        --M.Msg('saving element: '..name)
+        --MSG('saving element: '..name)
         if elm.save then
-            --M.Msg('saving ctl: '..name)
+            --MSG('saving ctl: '..name)
             saveData = saveData..indent..name..' = '..Esc(elm:val())..',\n'
         end
     end
@@ -78,7 +221,7 @@ function Save(gPresetName)
         saveData = saveData..indent..indent..'{ '
         for name, elm in pairs(chan) do
             if type(elm) == 'table' and elm.save ~= false then
-                M.Msg('saving control: '..name)
+                MSG('saving control: '..name)
                 saveData = saveData..name..' = '..Esc(elm:val())..', '
             end
         end
@@ -86,18 +229,18 @@ function Save(gPresetName)
     end
     saveData = saveData..indent..'},'..'\n}'
     local folder = PRESET_FOLDER..'/'..gui.globalBank.name
-    if not CreateFolder(folder) then M.Msg("Couldn't create folder: "..folder) end
+    if not CreateFolder(folder) then MSG("Couldn't create folder: "..folder) end
     local file = io.open(folder..'/'..gPresetName..'.lua','w')
-    M.Msg('writing to file: '..gPresetName)
+    MSG('writing to file: '..gPresetName)
     file:write(saveData)
     file:close()
 end
 
-function SaveAs()
+function GlobalSaveAs()
     Keyboard:visible(true)
     Keyboard.func = function(self)
-        M.Msg('Saving preset as '..Keyboard.text)
-        Save(Keyboard.text)
+        MSG('Saving preset as '..Keyboard.text)
+        GlobalSave(Keyboard.text)
         Keyboard:visible(false)
     end
 end
@@ -107,18 +250,18 @@ function GlobalRecall(presetName)
     --then load the vst if needed
     --then fill the presets of any changed
     local path = PRESET_FOLDER..gui.globalBank.name..'/'..presetName..'.lua'
-    M.Msg('loading file: '..path)
+    MSG('loading file: '..path)
     local data = assert(loadfile(path))()
     --TStr(data,'data')
     for name,gval in pairs(data) do
         if name == 'channels' then
             for i,chan in ipairs(gval) do
-                M.Msg('Channel: '..i)
+                MSG('Channel: '..i)
                 for name, val in pairs(chan) do
                     --check for obselete fields....
                     local field = gui.ch[i][name]
                     if field then
-                        M.Msg('setting field: '..name..', value = '..val)
+                        MSG('setting field: '..name..', value = '..val)
                         gui.ch[i][name]:val(val) end
                 end
             end
@@ -130,100 +273,18 @@ function GlobalRecall(presetName)
         local vst = channel.vst:val()
         plugs[i] = Plugin.load(vst)
         TStr(plugs[i],'plugin')
-        M.Msg("loading vst: "..plugs[i].vstName)
+        MSG("loading vst: "..plugs[i].vstName)
         --LoadInstrument(i, vstName)
-        M.Msg('getting bank: '..channel.bank:val())
+        MSG('getting bank: '..channel.bank:val())
         banks[i] = plugs[i]:getBank(channel.bank:val())
         presets[i] = banks[i]:getPresets()
-        M.Msg('setting preset to: '..channel.preset:val())
+        MSG('setting preset to: '..channel.preset:val())
         SelectPreset(i, channel.preset:val())
     end
 
 end
--- Creates options from the files or the subfolders for a particular path
-function OptionsFromPath(path, useFolders)
-    local options = {}
-    if useFolders == true then options = GetSubFolderList(path) else options = GetFileList(path) end
-    TStr(options, 'options')
-    for i,filename in ipairs(options) do
-        options[i] = { index = i, name = filename }
-        --M.Msg('added item: '..filename)
-    end
-    return options
-end
 
-local function loadPresets()
-    if PState == PStates.global then
-        local folder = PRESET_FOLDER..gBankName..'/'
-        M.Msg('folder = '..folder)
-        gui.presets:setOptions(OptionsFromPath(folder))
-        gui.presets:setPage(1)
-    elseif PState == PStates.vst then
-    elseif PState == PStates.preset then
-    end
-end
 
-local function selectBank(bankName)
-    if PState == PStates.global then
-        gBankName = bankName
-    elseif PState == PStates.vst then
-    elseif PState == PStates.preset then
-    end
-    loadPresets()
-end
--- use cases: 1--update bank display when channel changes
---            2--change to bank display from global or vst display
-function ShowPresets(vst, chan)
-    PState = PStates.preset
-    local i
-    if chan then i = chan else i = ch() end
-    if not vst then vst = vsts[i] end  --we should fill this table before loading any banks, I think
-    if not plugs[i] or plugs[i].vstName ~= vst then plugs[i] = Plugin.load(vst) end  --don't want to re-read every time we switch channels
-    local banks = plugs[i]:getBankList()
-    gui.banks:setColor('gray', true)
-    for i,bankName in ipairs(banks) do
-        local bank = plugs[i]:getBank(bankName)
-        gui.banks:setOption(i, {index = i, name = bankName, bank = bank, color = GetRGB(bank.hue,bank.sat,BRIGHTNESS)})
-    end
-    if not gBankName then gBankName = GetFileList(PRESET_FOLDER)[1] end
-    gui.banks:setPage(bankPages[i] or 1)
-    Presets = Plug:getPresetList()
-    for i,preset in ipairs(Presets) do Presets[i] = { name = preset } end
-    gui.presets:setOptions(Presets)
-    gui.presets:setPage(presetPages[i] or 1)
-end
-
-function ShowVsts()
-    PState = PStates.vst
-    local i = 1
-    local plugName = GetFXName(CurrentTrack,INSTRUMENT_SLOT)
-    M.Msg('Plug Name = '..plugName)
-    for name,vst in pairs(GetBankFileTable()) do
-        M.Msg('setting option '..name..' to '..vst)
-        gui.banks:setOption(i,{ name = name, vst = vst })
-        local vstFile = vst..'.dll'
-        if vstFile == plugName then gui.banks:select(i) end
-        i = i + 1
-    end
-end
-
-function ShowGlobals()
-    PState = PStates.global
-    if not gBankNames then gBankNames = OptionsFromPath(PRESET_FOLDER, true) end
-    gui.banks:setOptions(gBankNames)
-    if not gBankName then gBankName = gui.banks:getOption(1).name end
-    selectBank(gBankName)
-end
-
-function ProcessPreset(name)
-    if PState == PStates.preset then
-        ch().presetName:val(name)
-        SelectPreset(ch(), name)
-    elseif PState == PStates.global then
-        GlobalRecall(name)
-    elseif PState == PStates.vst then
-    end
-end
 
 --------------------------------------------------------------------------------------------------
 --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{          LAYOUT CONSTANTS            }}}}}}}}}}}}}}}}}}}}}}}}}}}}}
@@ -274,7 +335,6 @@ local fxSendY = paramsY + btnH + (btnH * paramRows) + pad
 local octY = fxSendY + spinnerH
 local chanY = octY + spinnerH + meterH
 local nsY = chanY + (chanBtnRows * btnH) - btnH + pad
-
 ------------------------------------------------------------------------------------------------------
 --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ GUI METHODS }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
 ------------------------------------------------------------------------------------------------------
@@ -384,7 +444,7 @@ local function createLabel(props, ch)
 end
 
 local function createPanel(props, pager, options)
-    --M.Msg('pager = ',pager)
+    --MSG('pager = ',pager)
     local usePager, px, py, pw, ph, pImage
     if pager then px = pager.x
         py = pager.y
@@ -409,7 +469,7 @@ local function createPanel(props, pager, options)
         options = {},
         save = props.save
     })
-    --M.Msg('pager'..panel.pager)
+    --MSG('pager'..panel.pager)
     if pager and panel.pager and pager.horizontal then
         panel.pager.horizontal = pager.horizontal
     end
@@ -425,7 +485,7 @@ local function createFader(props, ch)
     if not ch then ch = '' end
     local icon
     if props.icon then icon = props.icon else icon = props.name end
-    --M.Msg('create fader'..props.name)
+    --MSG('create fader'..props.name)
     local z = props.z or faderZ
     local fader = GUI.createElement({
         frames = props.frames,
@@ -516,18 +576,18 @@ gui = {
     globalPreset = { name = 'globalPreset', save = true, x = bankX - btnW, y = 0, w = 4 * btnW, color = 'gray', func = function(self) end}, --show global presets in preset panel
     rightMenu = { x = transportX, y = 0, options =  {
             { name = 'Edit Banks',momentary = true, func = function(self) OpenBankEditor() end},
-            { name = 'Save Preset', momentary = true, func = function(self) Save(gui.globalPreset.caption) end},
-            { name = 'Save As', momentary = true, func = function(self) SaveAs()  end }
+            { name = 'GlobalSave Preset', momentary = true, func = function(self) GlobalSave(gui.globalPreset.caption) end},
+            { name = 'GlobalSave As', momentary = true, func = function(self) GlobalSaveAs()  end }
         }
     },
     masterVol = {   name = 'masterVol', save = true, icon = 'fxLevel', color = 'blue', x = masterVolX, y = 0, h = paramsY,  frames = 72,
-                        func = function(self) M.Msg('volume = '..self:val()) end},
+                        func = function(self) MSG('volume = '..self:val()) end},
     masterLabel =  { name = 'masterLabel', caption = 'MASTER', x = masterVolX + pad, y = 0, w = 120, h = 24 },
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ ROW 1 }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
     presets =   {   name = 'presetPanel', x = leftPad, y = presetY, rows = presetRows, cols = presetCols, chColor = true,
-                func = function() local name = gui.presets:getSelectionData() M.Msg('name = '..name) ProcessPreset(name) end},
+                func = function() local name = gui.presets:getSelectionData() MSG('name = '..name) ProcessPreset(name) end},
     presetPager = {  x = bankX - spinnerW - pad, y = presetY, w = spinnerW, h = spinnerH, chColor = true},
     banks =     {   name = 'bankPanel', x = bankX, y = presetY, rows = presetRows, cols = bankCols, func = function(self) end },
     bankPager = {  x = bankX - spinnerW, y = paramsY - spinnerH - pad, w = spinnerW, h = spinnerH},
@@ -694,7 +754,7 @@ for i, btn in ipairs(gui.inspector.options) do
     btn.w, btn.h = gui.inspector.w, gui.inspector.h
     btn.chColor = gui.inspector.chColor
     if not btn.momentary then btn.name = 'I'..btn.name end
-    --M.Msg('Creating inspector button: '..btn.name)
+    --MSG('Creating inspector button: '..btn.name)
     gui[btn.name] = createButton(btn)
 end
 
@@ -707,7 +767,7 @@ gui.monitorLabel = createLabel(gui.monitorLabel)
 
 ------------------------------------------    CREATE   CHANNEL -------------------------------------
 for i = 1,channelCount do
-    ----M.Msg('Chan '..i)
+    ----MSG('Chan '..i)
     local ch = {}
     ch.sendLabel =  createLabel(gui.sendLabel,i)
     ch.send =       createFader(gui.send, i)
@@ -743,12 +803,12 @@ for i = 1,channelCount do
     --move them into place en masse at the end!
     for _, elm in pairs(ch) do
         elm.x = elm.x + (chanW * (i - 1))
-        M.Msg('x = '..elm.x,'name '..elm.name)
+        MSG('x = '..elm.x,'name '..elm.name)
         elm.name = elm.name..i
     end
     ch.color = 'gray'
     gui.ch[i] = ch
-    M.Msg('got here')
+    MSG('got here')
 
 end
 
@@ -773,7 +833,7 @@ function chChanged(chNum)
     --update inspector
     for i,elm in ipairs(gui.lights.options) do
         local lightName = elm.name  -- the original options don't have an 'I'
-        --M.Msg('light: '..lightName)
+        --MSG('light: '..lightName)
         local inspName = 'I'..lightName
         --set global gui inspector values to channel's light values
         if inspName ~= 'IEmpty' then  --except this one!
@@ -783,7 +843,7 @@ function chChanged(chNum)
     end
 
     for name,ctl in pairs(gui) do
-        --M.Msg('ctl = '..name)
+        --MSG('ctl = '..name)
         if ctl.chColor and ctl.color then ctl:setColor(ch().color) end
     end
 
@@ -792,10 +852,10 @@ end
 
 for _,layer in pairs(layers) do window:addLayers(layer) end
 
---Save('test')
+--GlobalSave('test')
 window:open()
---M.Msg('got here')
+--MSG('got here')
 Fullscreen(window)
 chChanged(1)
-ShowGlobals()
+GLOBAL()
 GUI.Main()--]]

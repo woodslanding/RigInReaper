@@ -48,7 +48,7 @@ function MButtonPanel:createComponents()
         xpos = self.x + ((i - 1) * self.w)
         for j = 1, self.rows do
             ypos = self.y + ((j - 1) * self.h)
-            M.Msg('creating switch # '..index)
+            MSG('creating switch # '..index)
             self.switches[index] = GUI.createElement({
                 name = self.name..'button'..index,
                 type = "MButton",
@@ -90,7 +90,7 @@ function MButtonPanel:getElements()
 end
 
 function MButtonPanel:init()
-    M.Msg('calling init')
+    MSG('calling init')
     --self:createComponents()
 end
 
@@ -136,7 +136,7 @@ function MButtonPanel:select(set)
             if sw.max == set then
                 sw.frame = 1
                 option.val = 1
-                M.Msg('option '..option.name,' enabled', 'frame set to 1!')
+                MSG('option '..option.name,' enabled', 'frame set to 1!')
             else sw.frame = 0
             end
             sw:redraw()
@@ -146,7 +146,7 @@ end
 
 function MButtonPanel:setPage(page) --pages start at 1
     self.pageCount = math.ceil(#self.options/(self.rows * self.cols))
-    M.Msg('pageCount = '..self.pageCount)
+    MSG('pageCount = '..self.pageCount)
     self.pager.max = self.pageCount
     if page > self.pageCount then self.pageNum = self.pageCount else self.pageNum = page end
     for buttonNum = 1, self.rows * self.cols do
@@ -155,12 +155,12 @@ function MButtonPanel:setPage(page) --pages start at 1
         sw.caption = option.name or '---'
         self.pager.caption = self.pageNum
         if option.val and option.val > 0 then
-            --M.Msg('setting button '..buttonNum..' on')
+            --MSG('setting button '..buttonNum..' on')
             sw.frame = 1
         else sw.frame = 0 end
         sw:redraw()
     end
-    M.Msg('PAGE SET')
+    MSG('PAGE SET')
 end
 
 function MButtonPanel:setColor(color)
@@ -219,16 +219,16 @@ end
 
 local layer = GUI.createLayer({name = "Layer1", z = 1})
 layer:addElements(panel)
-M.Msg('pre-init???')
+MSG('pre-init???')
 for i = 1,#panel.switches do
    layer:addElements(panel.switches[i])
-   M.Msg('adding switch '..i)
+   MSG('adding switch '..i)
 end
 --layer:addElements(table.unpack(panel.switches))
 layer:addElements(panel.pager)
 window:addLayers(layer)
 window:open()
-M.Msg('calling main')
+MSG('calling main')
 GUI.Main()--]]
 
 panel.pager.image = imageFolder.."EffectSpin.png"

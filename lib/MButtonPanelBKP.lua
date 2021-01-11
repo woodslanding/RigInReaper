@@ -203,8 +203,8 @@ end
 
 function MButtonPanel:setPage(page) --pages start at 1
     self.pageCount = math.ceil(#self.options/(self.rows * self.cols))
-    M.Msg('option count = '..#self.options)
-    M.Msg('pageCount = '..self.pageCount)
+    MSG('option count = '..#self.options)
+    MSG('pageCount = '..self.pageCount)
     if self.pager then self.pager.max = self.pageCount end
     if page > self.pageCount then self.pageNum = self.pageCount else self.pageNum = page end
     for buttonNum = 1, self.rows * self.cols do
@@ -213,12 +213,12 @@ function MButtonPanel:setPage(page) --pages start at 1
         sw.caption = option.name or '---'
         if self.pager then self.pager.caption = self.pageNum end
         if option.state and option.state > 0 then
-            --M.Msg('setting button '..buttonNum..' on')
+            --MSG('setting button '..buttonNum..' on')
             sw.frame = 1
         else sw.frame = 0 end
         sw:redraw()
     end
-    --M.Msg('PAGE SET')
+    --MSG('PAGE SET')
 end
 
 function MButtonPanel:setColor(color)

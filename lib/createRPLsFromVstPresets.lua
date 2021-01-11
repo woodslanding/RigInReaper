@@ -96,8 +96,8 @@ function GetPresetList(tracknum, factory, ignoreName, fxnum )
     return presets
 end
 
-function GetVstPresets(tracknum)
-    return GetPresetList(tracknum,true,'<empty>')
+function GetVstPresets(tracknum, ignore)
+    return GetPresetList(tracknum,true, ignore)
 end
 
 function GetRplPresets(tracknum)

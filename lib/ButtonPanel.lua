@@ -57,7 +57,7 @@ function CreateSwitch(i, xpos, ypos, wd, ht, title, hue, sat, level)
         type = "MButton",
         --labelX = 0, labelY = 0,
         image =  "comboButton2pos.png",
-        func = function(self) M.Msg('setting val to '..i,'caption = '..self.caption) end,
+        func = function(self) MSG('setting val to '..i,'caption = '..self.caption) end,
         params = {"a", "b", "c"}
     })
     function switch:onMouseUp()
@@ -82,13 +82,13 @@ function CreatePager(pages)
         value = 1,
         type = "MButton",
         image =  "fxSel.png",
-        func = function(self) M.Msg('page = '..self.value) SetPage(self.value)  end
+        func = function(self) MSG('page = '..self.value) SetPage(self.value)  end
     })
     return pager
 end
 
 function CreateSelButton()
-    -- M.Msg('creating sel button')
+    -- MSG('creating sel button')
     local selType = GUI.createElement({
         name = 'selectionType',
         w = 80, h = 40,
@@ -109,11 +109,11 @@ function MultiSel(set)
         if option.val == 0 then
             option.val = 1
             sw.frame = 1
-            M.Msg('option '..option.name,'on')
+            MSG('option '..option.name,'on')
         else
             option.val = 0
             sw.frame = 0
-            M.Msg('option '..option.name,'off')
+            MSG('option '..option.name,'off')
         end
         sw:redraw()
     end
@@ -127,7 +127,7 @@ function Select(set)
         if sw.max == set then
             sw.frame = 1
             option.val = 1
-            M.Msg('option '..option.name,' enabled')
+            MSG('option '..option.name,' enabled')
         else sw.frame = 0
         end
         sw:redraw()
@@ -144,7 +144,7 @@ function SetPage(page) --pages start at 1
         sw.caption = option.name or '---'
         pager.caption = pageNum
         if option.val and option.val > 0 then
-            M.Msg('setting button '..buttonNum..' on')
+            MSG('setting button '..buttonNum..' on')
             sw.frame = 1
         else sw.frame = 0 end
         sw:redraw()

@@ -88,7 +88,7 @@ function MSlider:draw()
     Font.set(self.font)
 
     local str = self:formatOutput(self.caption)
-    --M.Msg('caption = '..self.caption)
+    --MSG('caption = '..self.caption)
     str = str:gsub([[\n]],"\n")
 
     local strWidth, strHeight = gfx.measurestr(str)
@@ -130,7 +130,7 @@ function MSlider:onDrag(state)
     if self.horizontal then delta = state.mouse.x - self.dragStartX else delta = self.dragStartY - state.mouse.y end
     local newVal = (delta * pixval) + self.origVal
     local v = Math.clamp(newVal,self.min,self.max)
-    --M.Msg('newVal - '..newVal)
+    --MSG('newVal - '..newVal)
     self:val(v)
     if not self.waitToSet then self:func(table.unpack(self.params)) end
 
@@ -182,7 +182,7 @@ local slider = GUI.createElement({
     labelX = 0,labelY = 0,
     --image =  "meterL.png",
     image = imageFolder.."SimpleFader.png",
-    func = function(self, a, b, c) M.Msg(self.name, self:val()) end,
+    func = function(self, a, b, c) MSG(self.name, self:val()) end,
     params = {"a", "b", "c"}
   })
 

@@ -172,10 +172,11 @@ end
 function MText:processKey(key)
     if key == "-->" then
         self.func()
+        self:setTitle('')
+        self.textfield:setCaption('')
         self.keyboard.layer:hide()
-        self.textfield.setCaption('')
     elseif key == "<<" then self.text = self.text:sub(1, string.len(self.text) -1) self.textfield:setCaption(self.text)--trim the last character
-    else self.text = self.text..key M.Msg('setting caption:'..self.text) self.textfield:setCaption(self.text)
+    else self.text = self.text..key MSG('setting caption:'..self.text) self.textfield:setCaption(self.text)
     end
 end
 

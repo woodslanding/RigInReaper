@@ -56,7 +56,7 @@ function MButton:new(props)
 end
 
 function MButton:init()
-    --M.Msg('Calling init for button '..self.name)
+    --MSG('Calling init for button '..self.name)
     self.sprite = Sprite:new({})
     if self.image then
         self.sprite:setImage(self.image,self.vertFrames)
@@ -110,7 +110,7 @@ function MButton:increment(incVal)
     if incVal == 0 then return end
     local usingRange = self.min ~= nil and self.max ~= nil
     --self:m('calling inc =,'..incVal..' using range = '..tostring(usingRange))
-    if self.vals and (#self.vals ~= self.frames) then M.Msg('#vals must = frames')
+    if self.vals and (#self.vals ~= self.frames) then MSG('#vals must = frames')
     elseif not self.wrap then
         if (self.vals and self.value == self.vals[1] and incVal < 0)
             or (self.vals and self.value < self.vals[#self.vals] and incVal > 0)
@@ -203,7 +203,7 @@ end
 ]]
 
 function MButton:val(set)
-    --if set then M.Msg('setting val to '..set..' for '..self.name)end
+    --if set then MSG('setting val to '..set..' for '..self.name)end
     if not set and self.vals then return self.vals[self.value]
     elseif not set and self.min and self.max then return self.value
     elseif self.vals then
@@ -217,7 +217,7 @@ function MButton:val(set)
                 return true
             end
         end
-        M.Msg("can't set value of control to: "..set)
+        MSG("can't set value of control to: "..set)
     elseif self.min and self.max then
         if set >= self.min and set <= self.max then
             self.value = set
@@ -230,7 +230,7 @@ function MButton:val(set)
 end
 
 function MButton:m(text)
-    --M.Msg(self.name..': '..text)
+    --MSG(self.name..': '..text)
 end
 
 function MButton:__tostring()
@@ -274,7 +274,7 @@ function createSwitch(i)
         type = "MButton",
         labelX = 0, labelY = 0,
         image =  imageFolder.."Notesource.png",
-        func = function(self) M.Msg('setting track'..i.. 'to '..self.value) TrackName(i,"track "..self.value) end,
+        func = function(self) MSG('setting track'..i.. 'to '..self.value) TrackName(i,"track "..self.value) end,
         params = {"a", "b", "c"}
     })
     switches[i] = switch
@@ -294,7 +294,7 @@ function MSpinnerTest()
         value = 1,
         min = 1, max = 3,
         image = imageFolder.."EffectSpin.png",
-        func = function(self) switches[1]:val(self.value) self.caption = self:val() M.Msg('function called:'..self.value) end,
+        func = function(self) switches[1]:val(self.value) self.caption = self:val() MSG('function called:'..self.value) end,
     })
     return spinner
 end

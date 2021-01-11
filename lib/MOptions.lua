@@ -37,7 +37,7 @@ local MOptions = {}
 MOptions.__index = MOptions
 
 function MOptions:createControls()
-    --M.Msg(Table.stringify(self))
+    --MSG(Table.stringify(self))
     local xpos, ypos
     local index = 1
     for i = 1, self.cols do
@@ -63,7 +63,7 @@ function MOptions:createControls()
                 params = {"a", "b", "c"}
             })
             self.controls[index] = switch
-            M.Msg('adding switch:'..index)
+            MSG('adding switch:'..index)
             index = index + 1
             self.layer:addElements(switch)
         end
@@ -93,7 +93,7 @@ function MOptions:createPager()
         func = function(self)  end
     })
     self.layer:addElements(pager)
-    M.Msg('adding pager')
+    MSG('adding pager')
 end
 
 local defaults = {
@@ -236,7 +236,7 @@ function MOptions:setPage(page) --pages start at 1
             sw:redraw()
         end
     end
-    M.Msg('PAGE SET')
+    MSG('PAGE SET')
 end
 --sets button color, unless the option already has one
 function MOptions:setColor(color)

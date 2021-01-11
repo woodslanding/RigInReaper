@@ -7,7 +7,7 @@
    * Version: 1.04
    * Mod by X-Raym
   ]]
-  dofile(reaper.GetResourcePath().."/UserPlugins/ultraschall_api.lua")
+
 --------------------------------------------------------------------------------
 -- Base64_to_Hex(modded from lua.org functions)  -------------------------------
 --------------------------------------------------------------------------------
@@ -20,7 +20,6 @@ local base64bytes = {['A']=0, ['B']=1, ['C']=2, ['D']=3, ['E']=4, ['F']=5, ['G']
 --------------------------------------------
 -- Decode Base64 to HEX --------------------
 --------------------------------------------
-function Msg(s) reaper.ShowConsoleMsg(s) end
 function B64_to_HEX(data)
   local chars  = {}
   local result = {}
@@ -65,8 +64,6 @@ end
 function FX_Chunk_to_HEX(FX_Type, FX_Chunk, Preset_Name)
   local Preset_Chunk = FX_Chunk:match("\n.*\n")        -- extract preset(simple var)
 
-    --reaper.ShowConsoleMsg("\nchunk: "..FX_Chunk.."\n")
-
     ---------------------------------------
     -- For JS -----------------------------
     ---------------------------------------
@@ -98,7 +95,7 @@ function FX_Chunk_to_HEX(FX_Type, FX_Chunk, Preset_Name)
     end
     ---------------------
     return table.concat(Hex_TB)
-end--]]
+end
 
 -- Variant 2(without Name to Hex, simple var) ------
 --[[
@@ -176,45 +173,32 @@ function Get_FX_Data(track, fxnum)
   local fx_cnt = reaper.TrackFX_GetCount(track)
   if fx_cnt==0 or fxnum>fx_cnt-1 then return end       -- if fxnum not valid
   local ret, Track_Chunk =  reaper.GetTrackStateChunk(track,"",false)
+  --reaper.ShowConsoleMsg(Track_Chunk)
 
   ------------------------------------
   -- Find FX_Chunk(use fxnum) --------
   ------------------------------------
-  --[[
   local s, e = Track_Chunk:find("<FXCHAIN")            -- find FXCHAIN section
   -- find VST(or JS) chunk
   for i=1, fxnum+1 do
       s, e = Track_Chunk:find("<%u+%s.->", e)
-  end--]]
-
-  --local found, Track_Chunk = ultraschall.GetTrackStateChunk_Tracknumber(1)
-    --local found, trackstatechunk = ultraschall.GetTrackStateChunk_Tracknumber( )
-    Msg('TRACK_CHUNK\n'..Track_Chunk)
-    local Chain_Chunk = ultraschall.GetFXStateChunk(Track_Chunk)
-    Msg("CHAIN_CHUNK\n"..Chain_Chunk)
-    --local FX_Chunk, startoffset, endoffset = ultraschall.GetFXFromFXStateChunk(fxStateChunk, 2)
-  --local Chain_Chunk, s = ultraschall.GetFXStateChunk(Track_Chunk)
-  --reaper.ShowConsoleMsg('chunk = '..Track_Chunk)
+  end
     ----------------------------------
     -- FX_Type -----------------------
-    --local FX_Type = string.match(Track_Chunk:sub(s+1,s+3), "%u+")   -- FX Type
-    --if not(FX_Type=="VST" or FX_Type=="JS") then return end         -- Only VST and JS supported
+    local FX_Type = string.match(Track_Chunk:sub(s+1,s+3), "%u+")   -- FX Type
+    if not(FX_Type=="VST" or FX_Type=="JS") then return end         -- Only VST and JS supported
     ----------------------------------
     -- extract FX_Chunk --------------
-    local fx_lines = ultraschall.GetFXFromFXStateChunk(Chain_Chunk, 2)
-    Msg("FX_LINES\n"..fx_lines)
-    local fx_statestring_base64, fx_statestring = ultraschall.GetFXSettingsString_FXLines(fx_lines)
-    --local FX_Chunk = Track_Chunk:match("%b<>", s)      -- FX_Chunk(simple var)
+    local FX_Chunk = Track_Chunk:match("%b<>", s)      -- FX_Chunk(simple var)
     ----------------------------------
-    reaper.ShowConsoleMsg("\n\n"..fxnum.."\n"..fx_statestring.."\n")
-    --SHOWS: 1 /n <VST "VSTi: Reaktor5 (Native Instruments GmbH) (2->
+    --reaper.ShowConsoleMsg("\n\n"..fxnum.."\n"..FX_Chunk.."\n")
 
   ------------------------------------
   -- Get UserPresetFile --------------
   ------------------------------------
   local PresetFile = reaper.TrackFX_GetUserPresetFilename(track, fxnum, "")
   ------------------------------------
-  return 'VST', fx_statestring_base64, PresetFile
+  return FX_Type, FX_Chunk, PresetFile
 end
 
 --------------------------------------------------------------------------------

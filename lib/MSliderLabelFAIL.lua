@@ -100,7 +100,7 @@ function MSlider:draw()
         Font.set({'calibri',self.fontSize,'b'})
 
         local str = self:formatOutput(self.caption)
-        --M.Msg('caption = '..self.caption)
+        --MSG('caption = '..self.caption)
         str = str:gsub([[\n]],"\n")
 
         strWidth, strHeight = gfx.measurestr(str)
@@ -117,10 +117,10 @@ function MSlider:draw()
 
         Font.set({'calibri',self.fontSize,'b'})
         local str = self:formatOutput(self.caption)
-        M.Msg('caption = '..self.caption)
+        MSG('caption = '..self.caption)
 
         strWidth, strHeight = gfx.measurestr(str)
-        M.Msg('width, height = ',strWidth,strHeight)
+        MSG('width, height = ',strWidth,strHeight)
         local playX, playY = (h - strWidth)/2, (w - strHeight)/2
         local xpos, ypos
         if self.center then
@@ -194,7 +194,7 @@ function MSlider:onDrag(state)
     if self.horizontal then delta = state.mouse.x - self.dragStartX else delta = self.dragStartY - state.mouse.y end
     local newVal = (delta * pixval) + self.origVal
     local v = Math.clamp(newVal,self.min,self.max)
-    --M.Msg('newVal - '..newVal)
+    --MSG('newVal - '..newVal)
     self:val(v)
     if not self.waitToSet then self:func(table.unpack(self.params)) end
 
@@ -221,10 +221,10 @@ end
 function MSlider:val(incoming)
     if incoming then
         self.value = incoming
-        M.Msg('incoming val: '..incoming)
+        MSG('incoming val: '..incoming)
         local pct = ((self.value - self.min)/self:getRange())
         local frame = Math.round((self.frames-1) * pct)
-        M.Msg("FRAME = "..frame)
+        MSG("FRAME = "..frame)
         if frame < 0 then frame = 0 elseif frame > self.frames - 1 then frame = self.frames - 1 end
         self.frame = frame
         self:redraw()

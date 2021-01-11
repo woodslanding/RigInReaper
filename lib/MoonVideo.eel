@@ -1,0 +1,76 @@
+// Moon Video Controls
+//We want to specify the top, bottom, width and height of the video view.
+//This will never change as zoom and pan change
+// 'name'                   [defval minval maxval centval  step]
+//@param 1:opacity 'Opacity'     1       0      1     0.5    0.01;
+//@param 2:zoom 'Zoom'           1       1      5    2.25    0.05
+//@param 3:x_pan 'Horiz Pan'     0      -1      1      0     0.01
+//@param 4:y_pan 'Vert Pan '     0      -1      1      0     0.01
+//@param 6:coarse_y 'Top'       .5       0      1     .5     0.01
+//@param 7:coarse_x 'Left'      .5       0      1     .5     0.01
+//@param 8:coarse_h 'Height'    .5       0      1     .5     0.01
+//@param 9:coarse_w 'Width'     .5       0      1     .5     0.01
+//@param 11:fine_y 'Top-fine'    0      -1      1      0     0.01
+//@param 12:fine_x 'Left-fine'   0      -1      1      0     0.01
+//@param 13:fine_h 'Height-fine' 0      -1      1      0     0.01
+//@param 14:fine_w 'Width-fine'  0      -1      1      0     0.01
+//@param 16:asp 'Keep Aspect'    1       0      1      0      1;
+
+img1=0;
+img2=input_track(0);  //this is the actual image
+gfx_blit(img2);
+
+input_info(img1,iw,ih);  //this gets the img dimension
+sourceW = iw;
+sourceH = ih;
+
+fine = .01;
+
+//HEIGHT AND WIDTH
+percentH = (coarse_h + (fine * fine_h));
+percentW = (coarse_w + (fine * fine_w));
+percentX = (coarse_x + (fine * fine_x));
+percentY = (coarse_y + (fine * fine_y));
+//convert percents to pixels
+frameH = percentH * project_h;
+frameW = percentW * project_w;
+frameX = rangeX * project_w;
+frameY = rangeY * project_h;
+//don't let us zoom out too far,
+//the minimum zoom should be larger for smaller frames
+
+zoomAdj = zoom * (1 / min(percentH, percentW));
+/*the bigger zoomAdj gets,
+  the larger pan gets
+  the larger image size gets
+*/
+//percent x and y is smaller
+rangeX = percentX * (1 - percentW);
+rangeY = percentY * (1 - percentH);
+
+//THIS IS THE WIDTH WE WILL ACTUALLY USE, SO SMALLER WITH MORE ZOOM
+imageW = sourceW / zoomAdj;
+imageH = sourceH / zoomAdj;
+//this is the size the full image would be, so larger with more zoom
+totalImageH = sourceH * zoomAdj;
+totalImageW = sourceW * zoomAdj;
+/*
+
+
+*/
+xPanAdj = x_pan;// totalImageW / frameW;
+yPanAdj = y_pan;// totalImageH / frameH;
+
+imageX = ((sourceW - imageW) / 2)  * (1 - xPanAdj);
+imageY = ((sourceH - imageH) / 2)  * (yPanAdj + 1);
+
+gfx_set(1,0,0,opacity);
+gfx_fillrect(0, yt, project_w, txth*(1+border*2));
+
+gfx_mode = 1>0.5 ? 256 : 0; //HQ filter always on
+
+//gfx_blit(input,aspect,x,y,w,h,srcx,srcy,srcw,srch);
+gfx_blit(img1,asp,
+   frameX, frameY, frameW|0, frameH|0,    //pipe-zero truncates any decimal
+   imageX, imageY, imageW|0, imageH|0
+   );
