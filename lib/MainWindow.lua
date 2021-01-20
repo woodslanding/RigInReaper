@@ -56,12 +56,23 @@ local PanelDisplay
 ------------------------------------------- PANEL FUNCTIONS -----------------------------------------
 -----------------------------------------------------------------------------------------------------
 --[[
-    presets will be loaded for all channels on startup, based on loading a default global presetFolder
-    banks will be loaded for all channels, global banks will be loaded, and the first one selected.
+    When we start the script, we need to have a viable wkp open.  This means all 16 channels with compliant
+    fx chains, and all the midi and audio tracks to support them.
+
+    Then when we start up, we needn't load up a default global preset: it is loaded already, and we just need
+    to get the ui to reflect it.
+
+    We should probably start up on the preset page for ch 1, but that is easy to change.
+
+    Every control in the ui needs a method to query reaper for its associated value, and get accordingly.
+    On startup we will run through all the ui elements and call this method.  Can use a lot of code from loading
+    and saving global presets.
+
+    Then we need to fill all the preset and bank tables for the channels.  Also fill the VST table.
 
     Commands:
     The panels will get functions updated as part of options loaded as their function changes.
-        so these can be atomic.
+    So there is no need for if-> then statements to check what the preset and bank tables are displaying.
 
 
     open in global mode
@@ -85,9 +96,31 @@ local presetPages = {} --table of preset pages
 local banks = {}  -- list of banks for selected vst by channel
 local bankPages = {} --list of bank pages
 
-local function init()
-    vsts = GetBankFileTable()
-    plugs =
+---------------------------------------------------------------------------------------------
+--[[
+    what can't be recalled?
+    Bank name
+    Drawbars -- we'll just be enabling that midi send, so that workings
+    Footswitches -- if we put the hardwired ones on a different channel, we can mute by channel and check that way
+    Cue--we can query mute states of outputs maybe
+    MuteFX-- todo: check
+    We can get tempo, but not any metric mods that led to it.  That's okay... we can load from preset...
+    Can get track color... can we tease out Hue and Sat??  Maybe don't need to.
+
+]]
+
+local function sync()
+    --query all ui elements for the reaper value they address
+    for i = 1,channelCount do
+        for name,element in pairs(gui.ch[i]) do
+            MSG('updating control: ', element.name)
+            --MSG('element.sync = ', element.sync)
+            if element.sync then element:sync() end
+
+        end
+    end
+    --vsts = GetBankFileTable()
+    --plugs =
 
 end
 
@@ -114,8 +147,12 @@ local function setPanelsVST()
     gui.presets:setOptions()
 
 end
-
+--we must always have valid plugs in all channels right from startup
+--also valid banks.  we can fill in presets from there
 local function setPanelsPRESETS()
+    local ch = ch()
+    if not presets[ch] then presets[ch] = plugs[ch].getBank(banks[ch]):getPresets() end
+    gui.presets:setOptions()
 end
 --not needed?
 local function getPlugList()
@@ -147,7 +184,7 @@ local function selectBank(bankName)
     end
     loadPresets()
 end
--- use cases: 1--update bank display when channel changes
+-- use cases: 1--get bank display when channel changes
 --            2--change to bank display from global or vst display
 function ShowPresets(vst, chan)
     PanelDisplay = PRESET
@@ -400,7 +437,7 @@ local function createTitle(props,ch)
     local font = {'Calibri', fontSize,"b"}
     local title = GUI.createElement ({
         type = "MButton",
-        name = props.name..ch,
+        name = props.name..'_'..ch,
         momentary = props.momentary or true,
         multi = props.multi or false,
         caption = props.caption or props.name,
@@ -411,9 +448,10 @@ local function createTitle(props,ch)
         x = props.x, y = props.y,
         func = props.func,
         save = props.save,
-        ch = ch
+        ch = ch,
+        sync = props.sync or nil
     })
-    --
+    --for title buttons, the data is the text
     function title:val(new)
         if new then self:setCaption(new)
         else return self.caption end
@@ -430,13 +468,14 @@ local function createLabel(props, ch)
         type = "MLabel",
         vertical = props.vertical or true,
         caption = props.caption or 'LABEL TEST '..ch,
-        name = props.name..ch,
+        name = props.name..'_'..ch,
         font = font,
         textColor = props.textColor or 'text',
         w = props.w, h = props.h,
         x = props.x, y = props.y,
         ch = ch,
-        save = props.save
+        save = props.save,
+        sync = props.sync or nil
     })
 
     getLayer(titleZ):addElements(label)
@@ -467,7 +506,8 @@ local function createPanel(props, pager, options)
         window = window, z = panelZ,
         func = props.func,
         options = {},
-        save = props.save
+        save = props.save,
+        sync = props.sync or nil
     })
     --MSG('pager'..panel.pager)
     if pager and panel.pager and pager.horizontal then
@@ -490,14 +530,15 @@ local function createFader(props, ch)
     local fader = GUI.createElement({
         frames = props.frames,
         horizontal = props.horizontal or false,
-        name = props.name..ch,
+        name = props.name..'_'..ch,
         type = "MSlider",
         min = props.min or 0, max = props.max or 1, value = 0,
         x = props.x ,y = props.y, w = props.w or faderW, h = props.h,
         image = imageFolder..icon..".png",
         func = props.func,
         ch = ch,
-        save = props.save
+        save = props.save,
+        sync = props.sync or nil
     })
     getLayer(z):addElements(fader)
     return fader
@@ -511,7 +552,7 @@ local function createButton(props, ch)
     local icon = props.icon or props.name
     local z = props.z or ctlLayerZ
     local button = GUI.createElement({
-        name = props.name..ch,
+        name = props.name..'_'..ch,
         displayOnly = props.displayOnly or false,
         momentary = props.momentary or false,
         type = 'MButton', wrap = props.wrap or true,
@@ -525,8 +566,10 @@ local function createButton(props, ch)
         image = imageFolder..icon..".png",
         func = props.func,
         ch = ch,
-        save = props.save
+        save = props.save,
+        sync = props.sync or nil
     })
+    --MSG('Created Element: '..button.name)
     getLayer(z):addElements(button)
     return button
 end
@@ -537,7 +580,7 @@ local function createSpinner(props, ch)
     local icon
     if props.icon then icon = props.icon else icon = 'Spinner' end
     local spinner = GUI.createElement({
-        name = props.name..ch,
+        name = props.name..'_'..ch,
         type = "MButton",
         momentary = true,
         spinner = true, wrap = false,
@@ -621,9 +664,10 @@ gui = {
             { name = 'Switches2', func = function(self) ch().Switches2:val(self:val())  end },
             { name = 'Drawbars', func = function(self)  ch().Drawbars:val(self:val())  end },
         },
-    },--]]
+    },
     params =    {   name = 'params', x = paramsX, y = paramsY + btnH, rows = paramRows, cols = paramCols, chColor = true, func = function(self) end },
-    mappings =  {  name = 'mappings', x = paramsX, y = paramsY + btnH, rows = paramRows, cols = paramCols, options = {  --this is basically just a cheat sheet, right?
+    mappings =  {  name = 'mappings', x = paramsX, y = paramsY + btnH, rows = paramRows, cols = paramCols, options = {
+         --this is basically just a cheat sheet, right? Eventually they might be active, and display/edit values...
             {name = 'Select Track', color = getColor(HUES.VIOLET), func = function(self) end},
             {name = 'Enable Track', color = getColor(HUES.VIOLET),func = function(self) end},
             {name = 'Cue Track', color = getColor(HUES.VIOLET), func = function(self) end},
@@ -667,56 +711,64 @@ gui = {
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ CHANNELS }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
+
+    --TODO: volume scaling check... How to retrieve BANK on startup?  Maybe just do a 'set' on bank by the bank text....
+    --In most cases, display and proj should agree about values, but if not, then the project wins.
+
     -- this data is stored unless save = false
-    send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) end},
-    sendLabel =  { name = 'fxLabel', save = false, x = leftPad + pad, y = fxSendY, w = 120, h = 20 },
+    send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) end, sync = function() end},
+    sendLabel =  { name = 'sendLabel', x = leftPad + pad, y = fxSendY, w = 120, h = 20, sync = function(self) SetFxChanByName(self:val(), self.ch) end }, --fx selected by spinner, but stored here
     semi =     { name = 'Semi', x = semiX, y = fxSendY, displayOnly = true, wrap = false, z = 4,
-                                    w = 16, h = spinnerH, frames = 15, min = -7, max = 7 },
+                                    w = 16, h = spinnerH, frames = 15, min = -7, max = 7, sync = function(self) self:val(GetMoonParam(self.ch, MCS.SEMI))  end }, -- stores semi data
     oct  =     { name = 'Oct', x = semiX, y = octY, displayOnly = true, wrap = false, z = 4,
-                                    w = 16, h = spinnerH, frames = 11, min = -5, max = 5 },
+                                    w = 16, h = spinnerH, frames = 11, min = -5, max = 5,
+                                    sync = function(self) self:val(GetMoonParam(self.ch, MCS.OCTAVE)) end }, --stores oct data
     fxSpin =   { name = 'fxSpin', save = false, x = leftPad + faderW, y = fxSendY, func = function(self) end },
     octaveSpin =  { name = 'octaveSpin', save = false, x = leftPad + faderW, y = octY, chColor = true, func = function(self)
-                                                                            ch(self.ch).oct:increment(self:val())
-                                                                            if ch(self.ch).oct:val() ~= 0 then
-                                                                                self.caption = ch(self.ch).oct:val()
+                                                                            local chan = ch(self.ch)
+                                                                            chan.oct:increment(self:val())
+                                                                            SetMoonParam(self.ch, MCS.OCTAVE, chan.oct:val())
+                                                                            if chan.oct:val() ~= 0 then
+                                                                                self.caption = math.floor(chan.oct:val())
                                                                             else self.caption = '' end end},
     pan =    { name = 'pan', x = leftPad, y = chanY - meterH, h = panH, w = chanW, horizontal = true, z = 4,
-                                    displayOnly = true, frames = 25, min = -1, max = 1 },
+                                    displayOnly = true, frames = 25, min = -1, max = 1,  sync = function(self) self:val(Pan(self.ch)) end  },
     meterL = { name = 'meterL', save = false, x = leftPad, y = chanY - meterH, h = panH/2, w = chanW, horizontal = true,
                                     displayOnly = true,frames = 25, chColor = true },
     meterR = { name = 'meterR', save = false, x = leftPad, y = chanY - (meterH/2), h = panH/2, w = chanW, horizontal = true,
                                     displayOnly = true, frames = 25, chColor = true },
 
-    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 88, fontSize = 28 },
-    volume =    { name = 'volume', x = leftPad, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) end },
+    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 88, fontSize = 28,  sync = function(self) self:val(GetFxPresetName(self.ch)) end  },
+    volume =    { name = 'volume', x = leftPad, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) end ,  sync = function(self) self:val(Volume(self.ch)) end },
 
     lights =  { x = leftPad + indX, y = chanY + pad, w = indW, h = indH, displayOnly = true, z = indZ, options = {
-            { name = 'Cue' },
-            { name = 'Solo' },
-            { name = 'MuteFx' },
-            { name = 'NsSolo' },
-            { name = 'Hands' },
-            { name = 'Encoders' },
-            { name = 'Switches1' },
-            { name = 'Switches2' },
-            { name = 'Drawbars' },
+            { name = 'Cue', sync = function(self) end },
+            { name = 'Solo', sync = function(self) end },
+            { name = 'MuteFx', sync = function(self) end },
+            { name = 'NsSolo', sync = function(self) end },
+            { name = 'Hands', sync = function(self) GetMoonParam(self.ch, MCS.HANDS) end },
+            { name = 'Encoders', sync = function(self) end },
+            { name = 'Switches1', sync = function(self) end },
+            { name = 'Switches2', sync = function(self) end },
+            { name = 'Drawbars', sync = function(self) end },
         },
     },
+    --can these be updated from reaper??
     buttons = { x = chanBtnX, y = chanY, w = chBtnW, h = btnH, chColor = true, options =  {
-            { name = 'NoSus', func = function(self) end },
-            { name = 'Hold', func = function(self) end },
-            { name = 'Breath', func = function(self) end },
-            { name = 'Ped2', func = function(self) end },
-            { name = 'Exp', func = function(self) end },
-            { name = 'Enable',  vals = {1,2,3,4}, frames = 4, func = function(self) end },
+            { name = 'NoSus', func = function(self) end, sync = function(self) end },
+            { name = 'Hold', func = function(self) end, sync = function(self) GetMoonParam(self.ch, MCS.HOLD) end },
+            { name = 'Breath', func = function(self) end, sync = function(self) end },
+            { name = 'Ped2', func = function(self) end, sync = function(self) end },
+            { name = 'Exp', func = function(self) end, sync = function(self) IsExpOn(self.ch) end },
+            { name = 'Enable',  vals = {1,2,3,4}, frames = 4, func = function(self) end, sync = function(self) end },
         },
     },
     vst   =  { name = 'vst', caption = '', color = 'black', icon = 'Empty',
-            x = leftPad, y = nsY - pad, w = chanW/2, h = pad, fontSize = 11, textColor = 'orange', displayOnly = true },
+            x = leftPad, y = nsY - pad, w = chanW/2, h = pad, fontSize = 11, textColor = 'orange', displayOnly = true, sync = function(self) self:val(GetFXName(self.ch)) end },
     bank  =  { name = 'Bank', color = 'black', caption = '', icon = 'Empty',
-            x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = pad, fontSize = 11, textColor = 'gray', displayOnly = true },
-    nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2}, frames = 3, w = faderW, h = btnH, func = function(self) end },
-    select    =  { name = 'Select', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, func = function(self) chChanged(self.ch) end },
+            x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = pad, fontSize = 11, textColor = 'gray', displayOnly = true, sync = function(self) end },
+    nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2}, frames = 3, w = faderW, h = btnH, func = function(self) end, sync = function(self) end },
+    select    =  { name = 'Select', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, func = function(self) chChanged(self.ch) end, sync = function(self) end },
     ch = {},  --this is where all the channel components will go
 }
 -----------------------------------------------------------------------------------------------------------
@@ -803,12 +855,10 @@ for i = 1,channelCount do
     --move them into place en masse at the end!
     for _, elm in pairs(ch) do
         elm.x = elm.x + (chanW * (i - 1))
-        MSG('x = '..elm.x,'name '..elm.name)
-        elm.name = elm.name..i
     end
     ch.color = 'gray'
     gui.ch[i] = ch
-    MSG('got here')
+    --MSG('got here')
 
 end
 
@@ -821,7 +871,7 @@ end
 
 function chChanged(chNum)
     iCh = chNum
-    --update preset list
+    --get preset list
     --TStr(ch().presetName, 'channel label')
     gui.trackTitle:setCaption(ch().preset:val())
     for i = 1,channelCount do
@@ -830,7 +880,7 @@ function chChanged(chNum)
         ch(i).nSource:setColor('black')
     end
     ch().select:val(1)
-    --update inspector
+    --get inspector
     for i,elm in ipairs(gui.lights.options) do
         local lightName = elm.name  -- the original options don't have an 'I'
         --MSG('light: '..lightName)
@@ -856,6 +906,6 @@ for _,layer in pairs(layers) do window:addLayers(layer) end
 window:open()
 --MSG('got here')
 Fullscreen(window)
+sync()
 chChanged(1)
-GLOBAL()
 GUI.Main()--]]

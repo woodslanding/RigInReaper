@@ -139,7 +139,7 @@ function Plugin:getPresetString()
     local retStr = ''
     --MSG('GETTING MASTER PRESET LIST: presets unsorted'..Table.stringify(self.presets))
     local sorted = TableSort(Table.invert(self.presets))
-    TStr(sorted, 'SORTED INVERTED TABLE OF PRESETS')
+    --TStr(sorted, 'SORTED INVERTED TABLE OF PRESETS')
     for i,val in ipairs(sorted) do
         retStr = retStr..Esc(val)..', '
     end
@@ -308,7 +308,7 @@ function Plugin:save()
     file:close()
 end
 
-function Plugin.test(vstName,name)
+--[[function Plugin.test(vstName,name)
     local plug = Plugin.new(vstName,name,{emptyPreset = 'not found'})
     plug:setParam('A1','Reverb')
     plug:setParam('A2','Chorus')

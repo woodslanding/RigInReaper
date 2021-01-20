@@ -1,5 +1,9 @@
 --------------------------------------------------------Edit Banks---------------------------------------
 --[[
+
+    Should NS info be stored with bank?  FI, MPE mode, PB range, etc.?
+    Or should we create a real NS editing panel?  Maybe a tab on the organ panel?
+
     PARAMS PANEL:   Shows all mappable controls, and allows them to be mapped to parameters.
     MENU:
     LISTS:  There are 4 lists reading Left to Right!
@@ -39,6 +43,13 @@
         1. DisplayName.VstName.lua
         2. We will concatenate this file name when saving, and use the first part when filling vst and channel tables
         3. When loading, we need to search for a file whose first part matches the name in the table, and load the second parts
+
+    OTHER BANK SETTINGS
+        1. AT --> CC and TOGGLE/ threshold
+        2. MPE or NORMAL?
+        3. MPE voice count
+        4. AUDIO INPUT (NONE, EXT, MIXER, BOTH)
+        5.
 
 
 ]]--
@@ -332,7 +343,7 @@ Options = {
         {name = 'banks',rows = 8, cols = 4, icon = 'ComboRev',func = function(self)
             if Mode == MODES.BANK then
                 Bank = Plug:getBank(self.name)
-                TStr(Bank,'selected bank')
+                --TStr(Bank,'selected bank')
                 PresetPanel:clearSelection()
                 SetBankInfo()
                 --might be able to streamline this, now options are indexed....
@@ -340,11 +351,11 @@ Options = {
                     option.color = Bank:getColor()
                     for _, name in ipairs(Bank.presets) do
                         if name == option.name then
-                            MSG('adding preset '..name..' for option: '..i)
+                            --MSG('adding preset '..name..' for option: '..i)
                             PresetPanel:select(i,true)
-                        end--]]
+                        end
                     end
-                end--]]--
+                end
                 PresetPanel:setPage(1)
             elseif Mode == MODES.PRESET then
                 local bankNums = BankPanel:getSelectionData()
@@ -385,6 +396,21 @@ Options = {
         {name = 'expcrv',title = 'Exp Curve',min = 0, max = 10, func = function(self) Bank.expcrv = Int(self) SavePlug() end },
         {name = 'ped2crv',title = 'Ped2 Curve',min = 0, max = 10, func = function(self) Bank.ped2crv = Int(self) SavePlug() end },
     },
+    --[[OTHER ARCANE BANK SETTINGS
+    buttons:
+        AUDIO INPUT (NONE, EXT, MIXER, BOTH)
+        MIDI IN: MPE or NORMAL?  --tag on to midiIn button
+        PB->NOTES
+    sliders:
+        MPE voice count
+        PB RANGE IN
+        PB RANGE OUT
+        AT --> CC
+        AT TOGGLE /threshold
+        Transpose->CC   --poss. control pitchshift vst?
+    textfield:
+        bank notes (probably display only--we don't want to type a bunch of stuff with the onscreen keyboard)
+    ]]
     rangeSliders = {
         {name = 'lokey',title = 'Low', func = function(self) Bank.lokey = Int(self) self:setCaption(GetNoteName(self:val())) SavePlug() end },
         {name = 'hikey',title = 'High', func = function(self) Bank.hikey = Int(self) self:setCaption(GetNoteName(self:val())) SavePlug() end },
@@ -526,7 +552,6 @@ end
 
 for i,s in ipairs(Options.sliders) do
     local waitToSet
-    --if s.waitToSet == false then waitToSet = false else waitToSet = true end
     local xpos = (9 * w) + (pad * 2)
     local ypos = (i - 1) * h -- ((i + 9) * h) + pad
     local slider = GUI.createElement({

@@ -1,0 +1,454 @@
+desc:midiChStrip
+tags: MIDI
+author: Eric Moon
+version: .55
+changelog:
+ /* v. 0.55 -- Seems like we might need to store FX Status in here.  FxStatus = [off, internal, external, both]
+    this would be read-only, as it can't directly affect the audio sends.  this will be scripted
+ /* v. 0.53 -- TODO -- need to get notesource soloing figured out.  Perhaps go by channels.
+    So Roli can solo for all channels it's working with.  [Covered in MoonUtils??]
+    But what if a nsSoloed roli instrument is using ch2-8, and another roli instrument is using 2-16?
+    We don't want notes on channels 9-16 not to be soloed!
+    I guess we need to declare a global ROLI channel range, which the track doesn't need to use all of.
+    X-16, where X is the number of other sources + 1.
+    If we get memory sharing figured out, we should also make it so PANIC affects all instances of the FX.
+
+    v. 0.52 -- Removed key counting, using method to find lowest open ch for roli notes
+               Notes now stored by key if using Roli with non-MPE vst.  Fixed fake sus for this.
+
+
+    -- TODO -- Need to get roli working.  When we have Roli controlling a normal vst,
+    we need to set the VST pitch bend range to the normal value!  Otherwise our PB range is too small.
+    Need to figure out pb -> notes, this is not working at all.
+    Implement proper all notes off (another toggle value for releaseNotes()?)
+
+    v. 0.51 -- transpose, foldback, faked sustain, hold  WORKING --for standard keyboard input
+
+    v. 0.50 -- added support for AT toggling
+
+about:
+    ## Description
+    Designed to be placed upstream from a VSTi to control the flow of midi data in.  Facilitates creating
+    composite instruments with layers on multiple tracks, all controlled from a single controller.
+    Includes pitchbend and voice limiting, for converting between MPE and conventional midi.
+    Eliminates the need for changing PB or polyphony settings either from modules or from the Roli Dashboard
+    ## Notes
+    Features:
+    1.Midi enable/disable,Octave and Semitone transpose (transpose allows dynamic changes without stuck notes,noteoffs sent when midi is disabled
+    2.Option to convert Semitone control to send CC out, for drum sounds, effects, etc.
+    3.'Hands' feature moves LH up an octave, and RH down an octave for playing drums or 2-handed melodies
+    4.Limit midi range, high and low note.
+    5.High and low 'foldback' transposes by octaves to bring notes within range, ala Hammond organs.
+    6.Switch to ignore sustain pedal, for drum sounds, etc., or simulate sustain for vsts that do not support it
+    7.Expression CC# can be converted and rescaled or inverted
+    7.'Hold' feature, withholds note offs and ignores new notes until released, then sends all necessary note offs.
+    8.Conversion from conventional midi to MPE.  Support for any combination of MPE/conventional controllers and VSTis.
+    9.Pitch Bend conversion, so VSTs that cannot support the full MPE spec of +-48 semitones can be used alongside those that do.
+    10.PB conversion to allow musical (smaller) pitch bends from a traditional wheel, for VSTis with PB maxed out for MPE.
+    11.Creation of new MIDI notes from MPE pitch bends, for better behaviour with VSTis that do not use pitch bends, e.g. organs, pianos.
+    11.MPE voice reduction so VSTis that cannot receive on the full 15 channels of MPE (e.g. Omnisphere) can be used with those that do.
+    12.Simple MIDI ch remapping for conventional VSTs used with a conventional controller.
+    13.AT->CC conversion, so MPE AT can be mapped to a CC, for VSTis that do not respond to AT (e.g. many Kontakt orchestral libraries)
+    12.Option to set AT toggling so that sustained pressure will toggle a value from 0 to 127
+*/
+
+//////////////////////////////// DEFINE SLIDERS  ///////////////////////////////
+//
+slider1:s_enable=1<0,1,1{off,on}>Midi Enable
+
+slider4:s_octave=0<-5,5,1>Octave transpose
+slider5:s_semi=0<-7,7,1>Semitone transpose
+slider6:s_semiToCC=0<0,127,1>Semi->CC# (0 for none)
+slider7:s_hands=0<0,1,1{off,on}>Hands (LH up 8va, RH down 8va)
+
+slider8:s_loNote=0<0,127,1>Lo Note (MIDI Note #)
+slider9:s_hiNote=127<0,127,1>Hi Note (MIDI Note #)
+slider10:s_loFold=0<0,127,1>Fold lo (MIDI Note #)
+slider11:s_hiFold=127<0,127,1>Fold hi (MIDI Note #)
+//NOTESOURCE
+slider13:s_nsStatus=0<0,1,1{off,on}>NS Status
+slider14:s_nsMuteLo=0<0,127,1>NS Mute Low (MIDI Note #)
+slider15:s_nsMuteHi=0<0,127,1>NS Mute High (MIDI Note #)
+//PEDALS
+slider16:s_susType=0<0,2,0{normal,ignored,faked}>Sus Type
+slider17:s_hold=0<0,1,1{off,hold}>Hold
+slider18:s_expToCC=3<0,127,1>ExpToCC#
+slider19:s_expCurve=0<0,3,1{Normal,Reverse,X-Fade,Rev Xfade}>Expr Curve
+
+//MPE for Src:Both,
+slider20:s_mpeSrc=0<0,3,1{Normal,Dual,MPE,NONE}>Controller Type
+slider21:s_mpeVST=0<0,1,1{no,yes}>MPE vst
+slider22:s_baseCh=0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}>ChanOut (base chan for MPE)
+slider23:s_mpePoly=5<1,15,1>MPE poly to vst
+slider24:s_ATtoCC=0<0,11,1{off,1,2,3,4,5,6,7,8,9,10,11}>AT->CC
+
+slider25:s_pbNorm=2<0,48,1>Normal pb range (e.g. 2)
+slider26:s_pbMPE=48<1,48,1>MPE pb range (e.g. 48)
+slider27:s_pbVST=48<1,48,1>VST pb range (e.g. 12)
+slider28:s_bendToNotes=0<0,1,1{off,on}>PB->notes
+
+slider30:s_outputBuss=0<0,3,1{A,B,C,D}>Output Buss
+slider31:s_audioInput=0<0,3,1{none,ext,mixer,both}>Audio Input
+
+slider35:s_PANIC=0<0.1.1>PANIC
+
+// these lines tell Reaper the effect has no audio input/output, which enables processing optimizations.  MIDI-only FX should always have these lines.
+in_pin:none
+out_pin:none
+options:no_meter
+
+@init
+ext_noinit = 1; //don't reset on stop/start
+//CONSTANTS
+ROLI_CC = 74;
+EXP_CC = 3; //expression midi in value....
+EXP_CH = 1;
+K_PNO = 0;
+K_DBL = 1;
+K_MPE = 2;
+K_NON = 3;
+
+////////////////////////////// MIDI FUNCTIONS ///////////////////////////
+NOTE_OFF = 128;
+NOTE_ON = 144;
+CC = 176;
+PG_CH = 192;
+CH_AT = 208;
+P_BEND = 224;
+MOD = 1;
+SUSTAIN = 64;
+
+// Aftertouch->toggle
+touchToggleState = 0;
+toggleThreshold = 100; //value must be continuously above threshold to toggle
+toggleDuration = 20000;  //samples of sustained pressure to toggle
+toggleCount = 0;  //reset to zero when pressure released
+counting = 0;  //are we counting?
+sendToggle = 0;
+
+isSustaining = 0; //when faking sustain, we need to store its value...
+
+function getStatus (msg)  ( msg & $xF0; );
+function getChannel (msg) ( msg & $x0F; );
+function getLSB (pbValue) ( pbValue % 128;  );
+function getMSB (pbValue) ( floor(pbValue / 128) ; );
+function isMpeMsg(status,msg2,msg3)  (
+    (((status == CC) && (msg2 == ROLI_CC))
+    || ((status == CC) && (msg2 == MOD))
+    || (status == CH_AT)
+    || (status == P_BEND))  ? 1 : 0; //include Sustain here??
+);
+function isSustain(status,msg2)  (
+    (status == CC) && (msg2 == SUSTAIN) ? 1 : 0;
+);
+function scalePB (pbMSB,pbLSB,channel) local(val,ratio) (
+    val = ((pbMSB * 128) + pbLSB) - $x2000;  //aka 8192... center about 0
+    // if the source is non-mpe, or an mpe src is sending pb on ch1
+    (channel == 0 && s_mpeSrc == K_MPE) || (s_mpeSrc == K_PNO) ?
+    (   // rescale pb from 12 to 2,
+        ratio = s_pbVST / s_pbNorm;  //=6, so reduce to 1/6th
+        val = val / ratio;
+    )
+    :
+    (
+       // rescale pb from 12 to 48
+       ratio = s_pbVST / s_pbMPE; //=1/4
+       val = val / ratio; // = PB * 4
+    );
+    //decenter
+    val = val + $x2000;
+    val = val < 0 ? 0 : val;
+    //trim
+    val = val > $x4000 ? $x4000 : val;
+    val;
+);
+//sends a CC to all relevant channels
+function sendCC(num,val)  (
+   // (s_semiToCC > 0)  ?
+        (
+            (s_mpeVST > 0) ?
+            (
+                ch = s_baseCh;
+                loop( s_mpePoly,
+                    midisend(0,CC + ch,num,val);
+                    ch = ch + 1;   );
+            )
+            : midisend(0,CC + s_baseCh,num,val);
+        )
+);
+
+function computeExp(ccval) (
+    s_expCurve == 0 ? val = ccval :
+    s_expCurve == 1 ? val = 127 - ccval :
+    s_expCurve == 2 ? val = min(ccval*2, 127):
+    s_expCurve == 3 ? val = min(127-(ccval*2),127);
+);
+
+function playNote(key) (
+    play = 1;
+    (key < s_loNote) || (key > s_hiNote) || (s_hold == 1) ? play = 0;
+    (s_nsMuting == 1) && (key > s_nsMuteLo) && (key < snsMuteHi) ? play = 0;
+    play;
+);
+
+///////////////////////////////// NOTE STORAGE  /////////////////////
+k_size = 2;  // 2 entries per note: newNoteOff, released
+v_size = 4; // 4 entries per note: newNoteOff, newChan, origVel, released
+
+keyInput = 0;    //keyDowns coming in from conventional controller
+voiceInput = v_size * 100;  //voices coming in from the roli
+
+function clearArrays() local(i) (
+    i = 0;
+    loop (k_size * 128,
+        keyInput[i] = -1;
+        i = i + 1;
+    );
+    i = 0;
+    loop (v_size * 16,
+        voiceInput[i] = -1;
+        i = i + 1;
+    );
+);
+
+//set data
+function k_store(key,note)  (
+    keyInput[k_size * key] = note;
+    keyInput[(k_size * key) + 1] = 0;  //not released
+);
+function v_store(voice,note,chan,vel)  (
+    voiceInput[v_size * voice] = note;
+    voiceInput[(v_size * voice) + 1] = chan;
+    voiceInput[(v_size * voice) + 2] = vel;
+    voiceInput[(v_size * voice) + 3] = 0; //not released
+);
+function k_setOff(key)  ( keyInput[(k_size * key) +1] = 1; );   //key released
+function v_setOff(voice)  ( voiceInput[(v_size * voice) + 3] = 1; );  //key released
+//get data by key
+function k_note(key)     ( keyInput[k_size * key]; );
+function k_released(key) ( keyInput[(k_size * key) + 1];  );
+//get data by voice (roli input chan)
+function v_note(voice)    ( voiceInput[v_size * voice];  );
+function v_chan(voice)    ( voiceInput[(v_size * voice) + 1];  );
+function v_vel(voice)     ( voiceInput[(v_size * voice) + 2];  );
+function v_released(voice)( voiceInput[(v_size * voice) + 3];  );
+
+function getFreeMPEChan() local(ch) (
+    //todo: improve handling when poly is maxed. Right now it keeps assigning extra notes to the last channel.
+    ch = s_baseCh;
+    while ( v_note(ch) > -1 && ch < s_mpePoly + s_baseCh ) ( ch = ch + 1; );
+    ch;
+);
+
+function releaseKeys(flag) local(key,ch) (
+    key = 0;
+    loop( 128,
+        //flag: 0-Released Notes, 1-Sounding Notes, 2-ALL NOTES
+        ((flag == 0 && k_note(key) > -1 && k_released(key) == 1) ||
+        (flag == 1 && k_note(key) > -1) || (flag == 2)) ?
+        (
+            midisend(0,NOTE_OFF + s_baseCh, k_note(key), 0);
+            k_store(key,-1);  //zero the buffer
+
+        );
+        key = key + 1;
+    );
+    ch = s_baseCh;
+    loop( s_mpePoly,
+        ((flag == 0 && v_note(ch) > -1 && v_released(voice) == 1) ||
+        (flag == 1 && v_note(ch) > -1) || (flag == 2)) ?
+        (
+            midisend(0,NOTE_OFF + v_chan(ch) + s_baseCh, v_note(ch), 0);  //ch value for offset
+            v_store(ch,-1,-1,-1)  //zero the buffer
+        );
+        ch = ch + 1;
+    )
+);
+
+clearArrays();
+// global variables
+SENSITIVITY = 100;
+holdPrev = 0;  // always power up with hold off. TEST: Is this sufficient??
+
+@slider ///@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ SLIDER @@@@@@@@@@@@@@@@@@@@@@@@@@///////
+s_mpeSrc == K_DBL ?       // DUAL MODE
+  (s_mpeVST=0;        // must be non-mpe vst...
+   s_bseCh=1;         // base chan is 1
+   s_mpePoly = 15; ); // use all available poly
+s_mpeSrc == K_NON ?  releaseKeys(); //when we disable input, clear notes
+s_semiToCC > 0 ? semi = 0 : semi = s_semi;//if converted to CCs, don't use for transpose
+tuneVal = (s_semi + 7) * (127/14);//scale +-7 to 0-127
+transpose = (s_octave * 12) + semi;
+s_loFold > s_hiFold - 12 ? s_hiFold = s_loFold + 12;
+s_loNote > s_hiNote ? s_hiNote = s_loNote; //todo:  allow 'deadspot' negative ranges....
+
+@block  ////@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ BLOCK  @@@@@@@@@@@@@@@@@@@@@@@@@@///////
+//send semi-> cc values
+semiPrev != s_semi && s_semiToCC > 0 ? sendCC(s_semiToCC,tuneVal);
+semiPrev = s_semi;
+
+//hold changed to 0 in the last block. clear held notes
+holdPrev != s_hold && s_hold == 0 ? releaseKeys(1);
+holdPrev = s_hold; //check for change in hold value
+
+//midi disabled in the last block. clear held notes
+enablePrev != s_enable && s_enable == 0 ? releaseKeys();
+enablePrev = s_enable; //check for change in hold value
+
+//if we are counting, increment.  If counting has stopped, reset.
+counting ? toggleCount = toggleCount + 1 : toggleCount = 0;
+
+/////////////////////////////////////////////////////MIDI RECEIVE//////////////////////////////
+while (midirecv(offset,msg1,msg2,msg3) && s_enable > 0 && (s_mpeSrc != K_NON))  //input none really NONE?
+    (
+    status = getStatus(msg1);
+    channel = getChannel(msg1);
+    ///////////////////////////////////////////////// NOTE ON ////////////////////////
+    (status == NOTE_ON) && (msg3 > 0)  ?
+    (
+        key = msg2;
+        vel = msg3;
+        playNote(key) == 1 ?
+        (
+            note = (key + transpose); // transposed note
+            s_hands ? ( (key < 65) ? note = note + 12 : note = note - 12; );
+            //foldback:: while not in range, transpose up or down by octaves as needed
+            while ( note < s_loFold ?  note = note + 12; );
+            while ( note > s_hiFold ?  note = note - 12; );
+            //??Can roli send same note on 2 different channels?  YES!
+            //so store roli data by channel, not note... and only if the vst is running MPE!
+            (s_mpeSrc == K_PNO) || ((s_mpeSrc == K_DBL) && (channel == 1)) || (s_mpeVST == 0)  ?
+            //store in array by which key was hit on the keyboard
+            (
+                k_store(key,note);
+                midisend(offs, status + s_baseCh, note, vel);
+            )
+            :
+            (
+                //store in array by lowest free channel.
+                noteOnOut = getFreeMPEChan();
+                v_store(channel,note,noteOnOut,vel);
+                midisend(offs, status + noteOnOut, note, vel);
+            )
+        )
+    )
+    :  ////////////////////////////////////// NOTE OFF //////////////////////////
+    ( (status == NOTE_ON && msg3 == 0 ) || status == NOTE_OFF) ?
+    (
+        key = msg2;
+        vel = msg3;
+        (s_hold == 1) ? //ignore note-offs
+        :
+        (s_mpeSrc == K_PNO) || ((s_mpeSrc == K_DBL) && (channel == 1)) || (s_mpeVST == 0) ?
+        (
+            noteOff = k_note(key);
+            ( s_susType == 2 && isSustaining == 1 ) ? k_setOff(key)
+            :
+            (
+                midisend(offs,status + s_baseCh,noteOff,vel);
+                k_store(key,-1);
+            );
+        )
+        :
+        (
+            noteOff = v_note(channel);
+            ( s_susType == 2 && isSustaining == 1 ) ? v_setOff(channel)
+            :
+            (
+                midisend(offs,status + v_chan(channel),noteOff,vel);
+                v_store(channel,-1,-1,-1);
+            )
+        );
+    )
+    : ///////////////////////////////////////// SUSTAIN ///////////////////////
+    isSustain(status,msg2) ?
+    (
+        (s_susType == 0)  ?   sendCC(SUSTAIN,msg3)
+        : (s_susType == 2) ?
+          (msg3 > 63) ?   isSustaining = 1
+        : (msg3 < 63) && (s_hold == 0) ?
+        (
+          releaseKeys(0);
+          isSustaining = 0;
+        );
+         //if we're ignoring sustain, don't do anything...
+    )
+    :  ///////////////////////////////////// PITCH BEND ///////////////////////
+    isMpeMsg(status,msg2,msg3) && (v_note(channel) > - 1) ? //check for note
+    (
+        (status == P_BEND)  ?
+        (
+            bendAmount = scalePB(msg3,msg2,channel);
+            (s_bendToNotes == 0) || (s_mpeSrc == K_PNO)  ? //don't convert bends from non-mpe sources
+            (
+                msg3 = getMSB(bendAmount);
+                msg2 = getLSB(bendAmount);
+                midisend(offs,status + v_chan(channel),msg2,msg3);
+            )
+            :  //convert pb to notes... no pb is sent out...
+            (
+                bendAdjust = 8192/s_pbVST;  ///# of midi vals per 1/2 step...
+                rawBendVal = bendAmount/bendAdjust; // 1/2 steps un-rounded
+                bendVal = floor(bendVal + 0.5);
+                abs(rawBendVal - bendVal) < SENSITIVITY ? //looking for 'sweet spot'
+                (
+                    bendInterval = bendVal - s_pbMPE;  //center about 0
+                    origPitch = v_note[channel];
+                    origVel = v_vel[channel];
+                    newPitch = bendInterval + origPitch;
+                    (s_mpeVST == 0) ? pbNoteChOut = s_baseCh :
+                                      pbNoteChOut = v_chan[channel];
+                    (newPitch - origPitch) != 0 ?
+                    (
+                        midisend(offs,NOTE_OFF + pbNoteChOut,origPitch,10);
+                        v_store(channel,newPitch,pbNoteChOut,origVel);
+                        midisend(offs,NOTE_ON + pbNoteChOut,newPitch,origVel);
+                    )
+                )
+            )
+        )
+        : /////////////////////////////////////// AFTER TOUCH ////////////////
+        //if toggling, then we need to see consistent values above the threshold before toggling
+        //so we should maintain a count, incrementing with each block, see @block
+        (status == CH_AT) && (s_aTouchLatch > 0) ?
+        (
+            (msg2 > toggleThreshold) ?
+            (
+                counting = 1;
+                (toggleCount > toggleDuration) ?
+                (
+                    //toggle the value!
+                    touchToggleState = 0 ? touchToggleState = 127 : touchToggleState = 0;
+                    msg3 = touchToggleState;
+                    counting = 0;
+                    //reset counting
+                )
+                //if we are counting, but not to duration, we should not send out an event!!
+                : stopMidiEvent = 1
+            ) :
+            (
+                counting = 0;
+                toggleCount = 0;
+            )
+        ) :
+            // if we are latching and not over the threshold, don't send out data.
+            stopMidiEvent = 1;
+        (s_mpeSrc == K_PNO) ?
+        (
+            (stopMidiEvent == 0) ?
+                midisend(offs,status + s_baseCh,msg2,msg3)
+                : stopMidiEvent = 0; //reset event withholding.
+        )
+        :
+        (
+            (stopMidiEvent == 0) ?
+            (
+                mpeCtlOut = v_chan(channel);
+                midisend(offs,status + mpeCtlOut,msg2,msg3);
+            ) : stopMidiEvent = 0;
+        )
+    )
+    :
+    midisend(offs,msg1,msg2,msg3);  //pass all other events
+);
+
