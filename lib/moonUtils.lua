@@ -399,11 +399,8 @@ end
 
 --------------------------------------OPEN FX WINDOWS------------------------------------------
 function OpenPlugin(chan,fxnum)
+    if not fxnum then fxnum = INSTRUMENT_SLOT end
     reaper.TrackFX_Show( GetTrack(chan), fxnum, 3 )  --fx zero-based again...
-end
-
-function OpenVST(chan)
-    OpenPlugin(chan, INSTRUMENT_SLOT)
 end
 
 function OpenMidiChStrip(chan,open)
@@ -612,6 +609,7 @@ function GetPresetName(chan, slot)
     --MSG('Getting fx preset for chan: ', chan)
     if not slot then slot = INSTRUMENT_SLOT end
     local found, presetname = reaper.TrackFX_GetPreset(GetTrack(chan), slot, "")
+    --MSG('preset found for chan', chan, ' named ', presetname)
     if found then return presetname else return 'No Preset' end
 end
 
@@ -749,7 +747,7 @@ function SetSendPreFader(chan, destChan)
 end
 
 function SetSendPhase(chan, destChan, flipped)
-    ----MSG('SetSendPhase: track=',tracknum,'ph=',flipped)
+    MSG('SetSendPhase: track=',tracknum,'ph=',flipped)
     local idx = GetSendIndex(chan,destChan)
     local worked = reaper.SetTrackSendInfo_Value( GetTrack(chan), REAPER.SEND,idx-1, 'B_PHASE', BoolToInt(flipped))
 end
@@ -872,7 +870,7 @@ function IsEffectCh(chan)
     if chan == 1 then testCh = 2 end --just make sure the test channel is not the same as the channel
     for i = 1, GetSendCount(testCh) do
         if GetSendDest(testCh, i) == chan then
-            MSG('found effect channel', chan)
+            --MSG('found effect channel', chan)
             return true end
     end
     return false --chan is not a send for testCh...
@@ -922,7 +920,8 @@ end
 
 function SetFxByIdx(chan,fxIdx)
     local fxCh = GetFxForIndex(chan, fxIdx)
-    --MSG('setting fx chan to', fxCh)
+    MSG('setting fx chan to', fxCh)
+    if fxCh == nil then return end
     SetFxChan(chan, fxCh)
 end
 
@@ -945,10 +944,10 @@ end
 --need to include the channel, so it won't send to itself
 function GetChFxList(chan)
     local chFX = {}
-    for i, moonchan in ipairs(getFxList()) do
-        if moonchan ~= chan then
+    for i, fxchan in ipairs(getFxList()) do
+        if fxchan ~= chan then
             --MSG('Get chan fx list, adding',moonchan)
-            table.insert(chFX, moonchan)
+            table.insert(chFX, fxchan)
         end
     end
     return chFX, #chFX

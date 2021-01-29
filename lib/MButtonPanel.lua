@@ -158,7 +158,6 @@ function MButtonPanel:setOption(idx,parameters)
             color = params.color or self.color or 'gray',
             textColor = params.textColor or 'text',
             momentary = params.momentary or self.momentary,
-            type = params.type or 'MButton',
             name = params.name or '???',
             func = params.func or self.func
         }
@@ -171,7 +170,7 @@ function MButtonPanel:getOption(idx)
 end
 
 function MButtonPanel:getSelectedOption(idx)
-    return self:getOption(self:getSelection())
+    return self:getOption(self:getSelection(idx))
 end
 
 function MButtonPanel:clearSelection()

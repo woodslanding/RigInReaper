@@ -142,6 +142,26 @@ function GetCurrentBank(chan)
     return bank
 end
 
+function GetChFxOptions(chan)
+    local options = {}
+    for i, fxch in ipairs(GetChFxList(chan)) do
+        MSG('fx chan = ',fxch)
+        options[i] = {name = GetPresetName(fxch), color = chanColor(fxch), chan = fxch,
+                    func = function(self)
+                        local option = gui.fxSelect:getOption(self.index)
+                        SetFxByIdx( iCh, option.chan )
+                        ch().send:setColor(option.color)
+                        ch().sendLabel:val(option.name)
+                        ch().fxSpin:setCaption(option.chan)
+                        gui.fxLevel:setColor(option.color)
+                        gui.fxLabel:val(option.name)
+                    end
+        }
+        --MST(options[i], 'created option')
+    end
+    return options
+end
+
 local function initTables()
     vsts = GetBankFileTable()
     for chan = 1, channelCount do
@@ -178,26 +198,21 @@ function selectPreset()
     end
 end
 
-function SetPanelsPRESETS()
-    PanelDisplay = PRESET
-    gui.banks:setOptions(banks[iCh])
-    gui.presets:setOptions(presets[iCh])
-end
-
-local function sync()
-    --query all ui elements for the reaper value they address
-    for i = 1,channelCount do
-        for name,element in pairs(gui.ch[i]) do
-            --MSG('updating control: ', element.name)
-            --MSG('element.sync = ', element.sync)
-            if element.sync then element:sync() end
-
-        end
+local function loadPresets()
+    if PanelDisplay == GLOBAL then
+        local folder = PRESET_FOLDER..gBank..'/'
+        MSG('folder = '..folder)
+        gui.presets:setOptions(OptionsFromPath(folder))
+        gui.presets:setPage(1)
+    elseif PanelDisplay == VST then
+    elseif PanelDisplay == PRESET then
     end
-    --plugs =
 end
 
+-----------------------------------------------------------------------------------------------------------------
+-------------------------------------------SWITCH PANEL DISPLAYS ------------------------------------------------
 local function setPanelsGLOBAL()
+    PanelDisplay = GLOBAL
     if not gBanks then gBanks = OptionsFromPath(PRESET_FOLDER) end
     gui.banks:setOptions(gBanks)
     if not gBank then gBank = gBanks:getOption(1) end
@@ -214,37 +229,20 @@ local function setPanelsGLOBAL()
 end
 
 local function setPanelsVST()
-    --if not vsts then vsts = GetBankFileTable() end
+    PanelDisplay = VST
     gui.banks:setOptions(vsts)
     gui.banks:selectByName(ch().vst:val())
     gui.presets:setOptions()
 end
---not needed?
-local function getPlugList()
-    if not plugs then
-        for i = 1,channelCount do
-            plugs[i] = gui.ch.vst:val()
-        end
-        MST(plugs, 'plugins by chan')
-    end
-    return plugs
+
+function SetPanelsPRESETS()
+    PanelDisplay = PRESET
+    gui.banks:setOptions(banks[iCh])
+    gui.presets:setOptions(presets[iCh])
 end
 
-local function loadPresets()
-    if PanelDisplay == GLOBAL then
-        local folder = PRESET_FOLDER..gBank..'/'
-        MSG('folder = '..folder)
-        gui.presets:setOptions(OptionsFromPath(folder))
-        gui.presets:setPage(1)
-    elseif PanelDisplay == VST then
-    elseif PanelDisplay == PRESET then
-    end
-end
-
-
--- use cases: 1--get bank display when channel changes
---            2--change to bank display from global or vst display
-function ShowPresets(vst, chan)
+-- DEPRECATE
+--[[function ShowPresets(vst, chan)
     PanelDisplay = PRESET
     local i
     if chan then i = chan else i = ch() end
@@ -284,7 +282,7 @@ function ShowGlobalPanel()
     gui.banks:setOptions(gBanks)
     if not gBank then gBank = gui.banks:getOption(1).name end
     selectBank(gBank)
-end
+end]]
 
 
 --------------------------------------------------------------------------------------------------
@@ -430,6 +428,17 @@ local window = GUI.createWindow({
 
 Keyboard = MText.new({ x = 100, y = 100, window = window, z = 2 })
 Keyboard:visible(false)
+
+local function sync()
+    --query all ui elements for the reaper value they address
+    for i = 1,channelCount do
+        for name,element in pairs(gui.ch[i]) do
+            --MSG('updating control: ', element.name)
+            --MSG('element.sync = ', element.sync)
+            if element.sync then element:sync() end
+        end
+    end
+end
 
 local function setBackdrop()
     local bkdp = GUI.createElement({
@@ -682,7 +691,7 @@ gui = {
     fxLabel =  {   name = 'fxLabel', x = leftPad + pad, y = paramsY + 55, fontSize = 24, h = 5 * btnH},
     panFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true,
                     w = 2 * inspBtnW, h = btnH, func =  function(self) ch().pan:val(self:val()) end },
-    trackTitle = {  name = 'trackTitle', x = paramsX, y = paramsY, w = btnW * 3, func = function(self) end },  --show vst
+    trackTitle = {  name = 'trackTitle', x = paramsX, y = paramsY, w = btnW * 3, func = function(self) OpenPlugin(iCh) end },  --show vst
     paramTabs = { name = 'paramTabs',x = paramsX + (5 * btnW), y = paramsY, rows = 1, cols = 2, color = GetRGB(0,0,75), options = {
             { name = 'Params', func = function(self) gui.params.layer:show() gui.mappings.layer:hide()  end },
             { name = 'Mappings', func = function(self) gui.params.layer:hide() gui.mappings.layer:show() end },
@@ -757,7 +766,7 @@ gui = {
 
     -- this data is stored unless save = false
     send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, self:val()) end, sync = function(self) self:val(GetFxLevel(self.ch)) self:setColor(chanColor(GetFxChan(self.ch))) end},
-    sendLabel =  { name = 'sendLabel', x = leftPad + 4, y = fxSendY, w = 120, h = 20, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
+    sendLabel =  { name = 'sendLabel', x = leftPad + 4, y = fxSendY + 8, w = 120, h = 20, fontSize = 18, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
     semi =     { name = 'Semi', bg = true, x = semiX, y = fxSendY, displayOnly = true, wrap = false, z = 4,
                                     w = 16, h = spinnerH, frames = 15, min = -7, max = 7, sync = function(self) self:val(GetMoonParam(self.ch, MCS.SEMI))  end }, -- stores semi data
     oct  =     { name = 'Oct', bg = true, x = semiX, y = octY, displayOnly = true, wrap = false, z = 4,
@@ -921,8 +930,20 @@ function chChanged(chNum)
     local color = chanColor(chNum)
     --get preset list
     --MST(ch().presetName, 'channel label')
+    gui.trackTitle.textColor = color
     gui.trackTitle:setCaption(ch().preset:val())
-    gui.fxLabel:val(ch().sendLabel:val())
+    --fx
+    MSG('got here')
+    gui.fxLabel:val( ch().sendLabel:val() )
+
+    gui.fxSelect:setOptions(GetChFxOptions(iCh))
+    --MST(gui.fxSelect.options, 'OPTIONS')
+
+    gui.fxSelect:select(GetFxChan(iCh),true)
+    --should this happpen automatically???
+
+    gui.fxSelect:pageToSelection()
+
     for i = 1,channelCount do
         ch(i).select:val(0)
         ch(i).select:setColor('black')
