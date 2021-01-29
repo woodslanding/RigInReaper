@@ -4,6 +4,14 @@ local hsluv = require "hsluv"
 
 DBG_OFF = false
 
+--[[
+SCYTHE EDITS AND BUGS
+    color line 228:     local rgb = Table.map(colorTable, function(v) return math.floor(v * 255) end)
+    window, line 148:   local w, h = self.currentW, self.currentH + self.titleHeight
+    layer, line 111:    gfx.setimgdim(self.buffer, self.window.currentW, self.window.currentH + self.window.titleHeight)
+    sprite... edit for vert or horiz frames
+]]
+
 -- The core library must be loaded prior to anything else
 local libPath = reaper.GetExtState("Scythe v3", "libPath")
 if not libPath or libPath == "" then
@@ -14,6 +22,7 @@ loadfile(libPath .. "scythe.lua")({printErrors = true})
 
 local M = require("public.message")
 local Table = require("public.table")
+local Color = require("public.color")
 local T = Table.T
 
 local moonTracks = nil
@@ -27,8 +36,7 @@ PRESET_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Presets/"
 BRIGHTNESS = 50
 
 SCREEN_WIDTH = 1920
-SCREEN_HEIGHT = 1080
-TASKBAR_H = 30
+SCREEN_HEIGHT = 1280
 
 HUES = {
     CRIMSON = 0,
@@ -50,32 +58,43 @@ HUES = {
     FUSCHIA = 294
 }
 
+--number of moon channels
+CH_COUNT = 16
 --I/O track numbers   todo: Set controls to different channels on behringer
-TRACKS = {  OUT_MASTER = 1,  --sum of A,B,C,D ??
-            OUT_MON = 2,
-            OUT_A = 3,
-            OUT_B = 4,
-            OUT_C = 5,
-            OUT_D = 6,
-            IN_MIDI = 7,
-            IN_BHR2 = 8,    --behringer#2 - Reaper Control Unit port
-            IN_ROLI = 9,   --notes and roli controls, I suppose? roli port/ all channels
-            IN_KEYB = 10,   --notes only, yamaha, CH1
-            IN_PB = 11,    --Yamaha Port, CH1
-            IN_MOD = 12,   --Yamaha Port, CH1
-            IN_ENC = 13,   --behringer port CH1
-            IN_PUSH = 14,  --behringer port CH2
-            IN_BTN_UP = 15,--behringer port CH3
-            IN_BTN_DN = 16,--behringer port CH4
-            IN_SUS = 17,   --FC port
-            IN_FSW = 18,   --FC port
-            IN_EXP = 19,   --FC port
-            IN_PED2 = 20,  --FC port
-            IN_AT = 21,    --drawbar port
-            IN_DRWB = 22,  --drawbar port
-            IN_ORG_CTL = 23,--drawbar port
+TRACKS = {
+        --AUDIO OUTS
+        OUT_MASTER = 1 + CH_COUNT,  --10 ch with direct hardware outs.
+            OUT_MON = 2 + CH_COUNT,  --post fader send to master 1,2
+            OUT_A = 3 + CH_COUNT,    --post fader send to master 3,4
+            OUT_B = 4 + CH_COUNT,    --post fader send to master 5,6
+            OUT_C = 5 + CH_COUNT,    --post fader send to master 7,8
+            OUT_D = 6 + CH_COUNT,    --post fader send to master 9,10
+        --MIDI INPUTS
+        IN_MIDI = 7 + CH_COUNT,  --All midi comes in here, and then is sent on to other virtual devices? Maybe all but Roli?
+            IN_BHR2 = 8 + CH_COUNT,    --behringer#2 - Reaper Control Unit port
+            IN_ROLI = 9 + CH_COUNT,   --notes and roli controls, I suppose? roli port/ all channels
+            IN_KEYB = 10 + CH_COUNT,   --notes only, yamaha, CH1
+            IN_PB = 11 + CH_COUNT,    --Yamaha Port, CH1
+            IN_MOD = 12 + CH_COUNT,   --Yamaha Port, CH1
+            IN_ENC = 13 + CH_COUNT,   --behringer port CH1
+            IN_PUSH = 14 + CH_COUNT,  --behringer port CH2
+            IN_BTN_UP = 15 + CH_COUNT,--behringer port CH3
+            IN_BTN_DN = 16 + CH_COUNT,--behringer port CH4
+            IN_SUS = 17 + CH_COUNT,   --FC port
+            IN_FSW = 18 + CH_COUNT,   --FC port
+            IN_EXP = 19 + CH_COUNT,   --FC port
+            IN_PED2 = 20 + CH_COUNT,  --FC port
+            IN_AT = 21 + CH_COUNT,    --drawbar port
+            IN_BC = 22 + CH_COUNT,    --drawbar port
+            IN_DRWB = 23 + CH_COUNT,  --drawbar port
+            IN_ORG_CTL = 24 + CH_COUNT,--drawbar port
+        --AUDIO INPUTS
+        IN_AUDIO_LINE = 25 + CH_COUNT,
+        IN_AUDIO_MIC1 = 26 + CH_COUNT,
+        IN_AUDIO_MIC2 = 27 + CH_COUNT,
+        IN_AUDIO_INST = 28 + CH_COUNT,
+        IN_AUDIO_MON = 29 + CH_COUNT
 }
-FIRST_INST_TRACK = 24
 
 INPUT_DEVICE_NAME = 'HD Audio Mic input 1'
 --midi vol Settings
@@ -120,6 +139,7 @@ MCS = {
     PANIC = 28,
 }
 
+--TODO: deprecate storing these in MCS???
 AUDIO_IN = {
     NONE = 0, EXT = 1, MIXER = 2, BOTH = 3
 }
@@ -127,10 +147,10 @@ AUDIO_IN = {
 NS_COUNT = 4
 NS = {KBD = 0, DUAL = 1, ROLI = 2, NONE = 3}
 
---Audio outputs
+--MCS Audio output setting
+OUT_OFFSET = 3 --difference between param#s and track# for outputs
 AUDIO_OUT = {A = 0, B = 1, C = 2, D = 3}
 --track numbers
-OUT_OFFSET = 3 --difference between param#s and track# for outputs
 
 REAPER = {SEND = 0, RCV = -1, STEREO = 1024, MONO = 0 }
 
@@ -153,7 +173,9 @@ function MSG(...)
     if DBG_OFF then return end
     local out = {}
     for _, v in ipairs({...}) do
-      out[#out+1] = tostring(v)
+        local str
+        if v == nil then str = 'NIL' else str = tostring(v) end
+        out[#out+1] = str
     end
     reaper.ShowConsoleMsg(table.concat(out, " ").."\n")
 end
@@ -169,7 +191,7 @@ end
 
 function IncrementValue(value,min,max,wrap,inc)
     inc = inc or 1
-    --MSG('value = '..value)
+    ----MSG('value = '..value)
     if inc < 0 then return DecrementValue(value,min,max,wrap,0 - inc)
     else
         wrap = wrap or true
@@ -177,9 +199,10 @@ function IncrementValue(value,min,max,wrap,inc)
         elseif value == true and wrap then return false
         elseif value == true then return true
         else
-            --MSG('incrementValue:  val=',value,'max=',max)
-            if value < min or value > max then
-                ERR('incrementValue: value must be between min and max')
+            ----MSG('incrementValue:  val=',value,'max=',max)
+
+            if value < min then value = min
+            elseif value > max then value = max
             elseif value < max then
                 return value + inc
             elseif wrap then
@@ -197,8 +220,8 @@ function DecrementValue(value,min,max,wrap,inc)
     elseif value == false and wrap then return true
     elseif value == false then return false
     else
-        if value < min or value > max then
-            MSG('decrementValue: value must be between min and max')
+        if value < min then value = min
+        elseif value > max then value = max
         elseif value > min then
             return value - inc
         elseif wrap then
@@ -212,7 +235,16 @@ function GetRGB(hue,sat,level)
     if not level then level = BRIGHTNESS end
     local color = { hue, sat, level }
     local rgb = hsluv.hpluv_to_rgb(color)
+    --MST(rgb, 'color table')
     return rgb
+end
+
+function GetReaperColor(hue,sat,level)
+    return Color.toNative(GetRGB(hue, sat, level))
+end
+
+function SetChanColor(chan, hue, sat, level)
+    reaper.SetTrackColor(GetTrack(chan), GetReaperColor(hue, sat))
 end
 
 function RandomColor(brightness)
@@ -283,13 +315,10 @@ function GetBankFileTable(path)
     if not path then path = BANK_FOLDER end
     local table = {}
     for i,filename in pairs(GetFileList(path)) do
-        --MSG('file = '..name)
         local parts = StringSplit(filename,'.')
-        --TStr(parts,'parts')
-        table[i] = { name = parts[1], vst = parts[2] }
-        --MSG('part 1 = '..parts[1]..',part 2 = '..parts[2])
+        table[parts[1]] = parts[2]
     end
-    --TStr(table,'bank folder')
+    --MST(table,'bank folder')
     return table
 end
 
@@ -300,14 +329,25 @@ function GetPluginDisplayName(plugName, path)
     return plugName --if no bank file, just use the dll filename2
 end
 
+function GetPlugName(chan, slot)
+    local track = GetTrack(chan)
+    if not slot then slot = INSTRUMENT_SLOT end
+    ----MSG('GetPlugName, tracknum = '..tracknum)
+    local done,name = reaper.BR_TrackFX_GetFXModuleName(track,slot,"",128)--NOT SHOWN IN API DOCS!
+    if done then ----MSG('getting fx name: '..name)
+    elseif track then ERR('MU.GetPlugName--fx name failed at track,slot: ',chan,slot)
+    end
+    return GetFilename(name)  --strip off .dll
+end
+
 -- Creates simple options from the files or the subfolders for a particular path
 function OptionsFromPath(path, useFoldersNotFiles)
     local options = {}
     if useFoldersNotFiles then options = GetSubFolderList(path) else options = GetFileList(path) end
-    --TStr(options, 'options')
+    --MST(options, 'options')
     for i,filename in ipairs(options) do
         options[i] = { index = i, name = filename }
-        --MSG('added item: '..filename)
+        ----MSG('added item: '..filename)
     end
     return options
 end
@@ -322,7 +362,7 @@ end
 
 function CloseWindow(window)
     local title = window.name
-    --MSG('window title = '..title)
+    ----MSG('window title = '..title)
     local hWnd = reaper.JS_Window_Find(title, true) -- find window by title bar text
     if hWnd ~=nil then reaper.JS_WindowMessage_Post(hWnd, "WM_CLOSE", 0,0,0,0) end
 end
@@ -336,8 +376,8 @@ function Fullscreen(window, off)
             style = style & (0xFFFFFFFF - 0x00C40000) --removes window frame
             reaper.JS_Window_SetLong(win, "STYLE", style)
         end
-        reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - 200)
-    else window:reopen({})
+        reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+    else --need to figure out this code...
     end
 end
 
@@ -349,7 +389,7 @@ function ResizeWindow(window, x, y, w, h)
 end
 
 function GetLayoutXandY(i,x,y,w,h,rows)
-    --MSG("layout: x = "..x)
+    ----MSG("layout: x = "..x)
     local xadj = math.floor((i - 1)/rows)
     local yadj = (i-1) % rows
     local xpos = x + (xadj * w)
@@ -358,41 +398,37 @@ function GetLayoutXandY(i,x,y,w,h,rows)
 end
 
 --------------------------------------OPEN FX WINDOWS------------------------------------------
-function OpenPlugin(chanNum,fxnum, useReaperIDX)
-    reaper.TrackFX_Show( GetTrack(chanNum, useReaperIDX), fxnum, 3 )  --fx zero-based again...
+function OpenPlugin(chan,fxnum)
+    reaper.TrackFX_Show( GetTrack(chan), fxnum, 3 )  --fx zero-based again...
 end
 
-function OpenVST(chanNum)
-    OpenPlugin(chanNum, INSTRUMENT_SLOT)
+function OpenVST(chan)
+    OpenPlugin(chan, INSTRUMENT_SLOT)
 end
 
-function OpenMidiChStrip(chanNum,open)
-    OpenPlugin(chanNum, MCS.SLOT)
+function OpenMidiChStrip(chan,open)
+    OpenPlugin(chan, MCS.SLOT)
 end
 
-function OpenMidiVol(chanNum,open)
-    OpenPlugin(chanNum, MIDIVOL.SLOT)
+function OpenMidiVol(chan,open)
+    OpenPlugin(chan, MIDIVOL.SLOT)
 end
 
-function GetFocusedFX(useReaperIDX)
-    local chanNum
-    local found,tracknum,_,fxnum = reaper.GetFocusedFX() --ignore item number
+function GetFocusedFX()
+    local found,chan,_,fxnum = reaper.GetFocusedFX() --ignore item number
     if found == 1 then found = true end
-    if not useReaperIDX then chanNum = ChanOfTrack(tracknum) end
-    return found, chanNum, fxnum
+    return found, chan, fxnum
 end
 
-function GetLastTouchedFX(useReaperIDX)
-    local chanNum
-    local found, _, tracknum, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
-    if not useReaperIDX then chanNum = ChanOfTrack(tracknum) end
-    return found, chanNum, fxnum, paramnum
+function GetLastTouchedFX()
+    local found, _, chan, fxnum, paramnum, _, _ = ultraschall.GetLastTouchedFX()
+    return found, chan, fxnum, paramnum
 end
 ----------------------------------------------------------------------------------------------------------
 ------------------------------------------------------TABLE UTILITIES-------------------------------------
-function TStr(table,str)
+function MST(table,str)
     if not str then local str = 'table unknown' end
-    if not table then return MSG('-----------TStr, table is nil: '..str) end
+    if not table then return MSG('-----------MST, table is nil: '..str) end
     local val = nil
     if not str then str = table.name or 'TABLE' end
     if type(table) ~= 'table' then val = 'not a table' else val = Table.stringify(table) end
@@ -453,18 +489,18 @@ function ArraySortByField(array, field)
     if not field then field = 'name' end
     local names = {}
     for i, element in ipairs(array) do
-        TStr(element, 'element table')
+        MST(element, 'element table')
         --if type(element) == 'table' then names[element.name] = element
         if type(element) == 'table' then names[element[field]] = element or ''
         elseif type(element) == 'string' then names[element] = element or ''
         end
     end
-    --TStr(names,'names')
+    --MST(names,'names')
     local sorted =  TableSort(names)
-    TStr(sorted,'sorted')
+    MST(sorted,'sorted')
     for i, element in ipairs(sorted) do
         sorted[i] = names[element]
-        --TStr(names[element])
+        --MST(names[element])
     end
     return sorted
 
@@ -479,7 +515,7 @@ function StartsWith(sourceString, start)
 
 function EndsWith(sourceString, ending)
     local endString = sourceString:sub(string.len(sourceString) - string.len(ending) + 1, string.len(sourceString))
-    --MSG('end string = '..endString..', ending = '..ending)
+    ----MSG('end string = '..endString..', ending = '..ending)
     return endString == ending
 end
 
@@ -506,55 +542,49 @@ function Pad_zeros(str, places)
     end
 end
 
-function Esc(str) return ("%q"):format(str) end
+function Esc(val)
+    if type(val) == 'string' then return ("%q"):format(val) else return val end
+end
 
 function CleanComma(s)  return s:sub(1, string.len(s) -2) end
 
 ---------------------------------------------------------------------
 ---------------------------------MOON PARAMS-------------------------
 function PANIC()
-    for i,chanNum in ipairs(GetMoonChans()) do
-        SetMoonParam(chanNum, MCS.PANIC)
+    for i = 1, CH_COUNT do
+        SetMoonParam(i, MCS.PANIC)
     end
 end
 
-function GetMoonParam(chanNum, param, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    MSG('getting Moon param,',param,', track: ',tracknum)
+function GetMoonParam(chan, param)
+    local track = GetTrack(chan)
+    ----MSG('getting Moon param,',param,', track: ',chan)
     local val,_,_ = reaper.TrackFX_GetParam( track, MCS.SLOT, param)
-    MSG('param val = ',val)
     return val
 end
 
-function SetMoonParam(chanNum, param, val, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    --MSG('Setting moon param',param,'to',val)
+function SetMoonParam(chan, param, val)
+    local track = GetTrack(chan)
+    ----MSG('Setting moon param',param,'to',val)
     local _ = reaper.TrackFX_SetParam(track,MCS.SLOT,param,val)
 end
 
-function SetVolPlugParam(chanNum,param, val, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
+function SetVolPlugParam(chan,param, val)
+    local track = GetTrack(chan)
     local _ = reaper.TrackFX_SetParam(track,MIDIVOL.SLOT,param,val)
 end
 
 -------------------------------------------------------------------------------------------------
 -------------------------------------TRACK METHODS-----------------------------------------------
 
-function GetTrack(chanNum, useReaperIDX)
-    local tracknum = IndexOfChan(chanNum, useReaperIDX)
-    return reaper.GetTrack(0, tracknum - 1)
+function GetTrack(chan)
+    ----MSG("GetTrack: TRACK =", chan)
+    return reaper.GetTrack(0, chan - 1)
 end
 
 function GetSelectedTrackNumber()
     local tr = GetSelectedTrack(0,0)
-    return GetNumberOfTrack(tr)
-end
-
-function GetChanNumForSelected()
-    local track = reaper.GetSelectedTrack(0,0)
-    if IsMoonTrack(track) then
-        return reaper.GetMediaTrackInfo_Value( mediatrack,'IP_TRACKNUMBER')
-    end
+    return ChanOfTrack(tr)
 end
 
 function GetSelectedTrack()
@@ -562,15 +592,15 @@ function GetSelectedTrack()
     return track
 end
 
-function SetTrackSelected(chanNum, useReaperIDX)
-    reaper.SetOnlyTrackSelected( GetTrack(chanNum, useReaperIDX))
+function SetTrackSelected(chan)
+    reaper.SetOnlyTrackSelected( GetTrack(chan))
 end
 
 function GetTrackCount()
     return reaper.CountTracks(0)
 end
 
-function GetNumberOfTrack(mediatrack)
+function ChanOfTrack(mediatrack)
     --(returns zero if not found, -1 for master track) (read-only, returns the int directly)
     local num = reaper.GetMediaTrackInfo_Value( mediatrack,'IP_TRACKNUMBER')
     if num == 0 then ERR('GetSelectedTrackNumber: Track Not Found')
@@ -578,31 +608,16 @@ function GetNumberOfTrack(mediatrack)
     end
 end
 
-function GetFXName(chanNum,slot, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
+function GetPresetName(chan, slot)
+    --MSG('Getting fx preset for chan: ', chan)
     if not slot then slot = INSTRUMENT_SLOT end
-    --MSG('GETFXNAME, tracknum = '..tracknum)
-    local done,name = reaper.BR_TrackFX_GetFXModuleName(track,slot,"",128)--NOT SHOWN IN API DOCS!
-    if done then --MSG('getting fx name: '..name)
-    elseif track then ERR('MU.GetFXName--fx name failed at track,slot: ',tracknum,slot)
-    end
-    return GetFilename(name)  --strip off .dll
+    local found, presetname = reaper.TrackFX_GetPreset(GetTrack(chan), slot, "")
+    if found then return presetname else return 'No Preset' end
 end
 
-function ClearFX(chanNum, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    local count = reaper.TrackFX_GetCount(track)
-    if count > 0 then
-        for idx = reaper.TrackFX_GetCount(track) - 1, 0, -1 do
-            reaper.TrackFX_Delete(track, idx)
-        end
-    end
-end
-
-function ChanName(chanNum,name, useReaperIDX)
+function ChanName(chan,name)
     --preset name, presumably...
-    local tracknum = IndexOfChan(chanNum, useReaperIDX)
-    local track = GetTrack(tracknum)
+    local track = GetTrack(chan)
     if not name then
         _, name = reaper.GetTrackName(track,'')
         return name
@@ -610,98 +625,64 @@ function ChanName(chanNum,name, useReaperIDX)
     end
 end
 
---seems redundant to just return index, but it will clarify the code
-function IndexOfChan(index, useReaperIDX)
-    MSG('checking index of chan',index)
-    if not useReaperIDX then
-        local tracknum = index + FIRST_INST_TRACK - 1
-        return  tracknum    --GetMoonChans()[index]
-    else return index
-    end
-end
-
-function ChanOfTrack(tracknum)
-    local chanNum = tracknum - FIRST_INST_TRACK + 1
-    if chanNum > 0 then return chanNum else MSG('No Channel for Track: '..tracknum) return nil end
-end
-
---really just part of a check of conformity of the wkp
-function IsMoonTrack(chanNum, useReaperIDX)
-    --MSG('IsMoonTrack:  checking track:', chanNum)
-    local track = GetTrack(chanNum, useReaperIDX)
-    --GetTrack(tracknum)
-    local fxSlot = MCS.SLOT
-    local found,fxname = reaper.TrackFX_GetFXName(track, fxSlot, '')
-    if found and fxnam == MCS.NAME then return true else return false end
-end
--- For now we will assume we're not adding or removing moon tracks during use.
-function GetMoonChans()
-    if not moonTracks then  --create the moontracks table
-        moonTracks = {}
-        for i = 1, GetTrackCount() do
-            if IsMoonTrack(i, true) then
-                table.insert(moonTracks, ChanOfTrack(i))
-                MSG('track is moon track: ', i, 'chan = ',ChanOfTrack(i))
-            end
-        end
-    end
-    return moonTracks
-end
-
-function EnableChan(chanNum,set, useReaperIDX)
+function EnableChan(chan,set)
     if set == nil then
-        return GetMoonParam(chanNum, MCS.MIDI_ON, useReaperIDX)
+        return GetMoonParam(chan, MCS.MIDI_ON)
     else
-        SetMoonParam(chanNum, MCS.MIDI_ON, set, useReaperIDX)
+        SetMoonParam(chan, MCS.MIDI_ON, set)
     end
 end
 
-function ToggleTrackEnable(chanNum, useReaperIDX)
-    if EnableChan(chanNum, useReaperIDX) == 0 then EnableChan(chanNum, 1, useReaperIDX)
-    else EnableChan(tracknum, 0, useReaperIDX)
+function ToggleTrackEnable(chan)
+    if EnableChan(chan) == 0 then EnableChan(chan, 1)
+    else EnableChan(tracknum, 0)
     end
 end
 --################################################################################################################--
---------------------------------------------SEND AND REcEIVE--------------------------------------------------------
-
-function GetSendDest(chanNum,index, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    local desttr =  reaper.BR_GetMediaTrackSendInfo_Track( track, REAPER.SEND, index-1, 1)
-    local destChan =  ChanOfTrack(GetNumberOfTrack(desttr))
-    --MSG('GetSendDest: dest track = ',dest)
-    return destChan
+--------------------------------------------SEND AND RECEIVE--------------------------------------------------------
+--TODO: we have an issue with send indexes, maybe?  We need to get the send numbers for audio outs, which are not moontracks.
+--Can we deal with that okay???
+function GetSendDest(chan,index)
+    local track = GetTrack(chan)
+    local dest = reaper.BR_GetMediaTrackSendInfo_Track( track, REAPER.SEND, index-1, 1)
+    local destCh = ChanOfTrack(dest)
+    return destCh
 end
 
-function GetSendCount(chanNum, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    return reaper.GetTrackNumSends( GetTrack(tracknum), REAPER.SEND )
+function GetSendCount(chan)
+    local track = GetTrack(chan)
+    local count = reaper.GetTrackNumSends( track, REAPER.SEND )
+    --Msg('GetSendCount:chan',chan,'count',count)
+    return count
 end
 
-function GetReceiveCount(chanNum, useReaperIDX)
-    return reaper.GetTrackNumSends( GetTrack(chanNum, useReaperIDX), REAPER.RCV )
+function GetReceiveCount(chan)
+    return reaper.GetTrackNumSends( GetTrack(chan), REAPER.RCV )
 end
 
-function GetReceive(chanNum,index, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
+function GetReceive(chan, index)
+    local track = GetTrack(chan)
     local srcTrack = reaper.BR_GetMediaTrackSendInfo_Track( track, REAPER.RCV, index-1, 0)
-    return ChanOfTrack(GetNumberOfTrack( srcTrack ))
+    return ChanOfTrack( srcTrack )
 end
 
-function RemoveReceive(chanNum,idx, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    --MSG('removing receive '..idx..' from fx track '..tracknum)
+function RemoveReceive(chan, idx)
+    local track = GetTrack(chan)
+    ----MSG('removing receive '..idx..' from fx track '..tracknum)
     reaper.RemoveTrackSend( track, REAPER.RCV, idx-1 )
 end
 
-function RemoveSend(chanNum,idx, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    reaper.RemoveTrackSend( track, REAPER.SEND, idx-1 )
+function RemoveSend(chan,destCh)
+    local idx = GetSendIndex(chan, destCh)
+    local track = GetTrack(chan)
+    --if the send doesn't exist, quietly fail
+    if idx then reaper.RemoveTrackSend( track, REAPER.SEND, idx-1 ) end
 end
 
-function AddReceive(desttrack,srctrack, useReaperIDX)
-    MSG('addReceive: adding receive to track ',srctrack,'from track ',srctrack)
-    local mediatrack = GetTrack(srctrack, useReaperIDX)
-    local mediaFxTrack = GetTrack(desttrack, useReaperIDX)
+function AddReceive(desttrack, srctrack)
+    ----MSG('addReceive: adding receive to track ',srctrack,'from track ',srctrack)
+    local mediatrack = GetTrack(srctrack)
+    local mediaFxTrack = GetTrack(desttrack)
     if mediatrack and mediaFxTrack then
         reaper.CreateTrackSend( mediatrack, mediaFxTrack )
     else ERR('AddReceive, no track found: ', desttrack, srctrack)
@@ -712,85 +693,100 @@ function AddSend(srctrack,desttrack)
     AddReceive(desttrack,srctrack)
 end
 
-function IsReceiveMuted(chanNum,index, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
+function IsReceiveMuted(chan, index)
+    local track = GetTrack(chan)
     local _, mute = reaper.GetTrackReceiveUIMute( track, index - 1)
     return IntToBool(mute)
 end
 
-function IsSendMuted(chanNum,index, useReaperIDX)
-    local track = GetTrack(chanNum, useReaperIDX)
-    MSG('IsSendMuted:  index =',index)
-    --indices are zero based here :^P
-    local _, mute = reaper.GetTrackSendUIMute( track , index - 1 )
-    MSG('IsSendMuted: tracknum',chanNum, 'mute status = ', mute)
-    return IntToBool(mute)
-end
-
-function GetSendIndex(chanNum,destChan, useReaperIDX)
-    MSG('GetSendIndex:  chan =',chanNum,'dest chan =',destChan)
-    for i = 1,GetSendCount(chanNum, useReaperIDX) do
-        local dest = GetSendDest(chanNum,i, useReaperIDX)
+function GetSendIndex(chan, destChan)
+    ----MSG('GetSendIndex:  chan =', chan, 'dest chan =', destChan)
+    for i = 1, GetSendCount(chan) do
+        local dest = GetSendDest(chan, i)
         if dest == destChan then
+            ----MSG('GetSendIndex:  chan =', chan,'send index =', i)
             return i
         end
     end
+    --quietly fail
+    return nil
+    --ERR('GetSendIndex: dest', destChan, 'not found for chan', chan)
 end
 
---Get/Set method
-function MuteSend(chanNum, destChan, Setmute, useReaperIDX)
-    local source = IndexOfChan(chanNum, useReaperIDX)
-    local dest = IndexOfChan(destChan, useReaperIDX)
-    MSG('MuteSend: Set mute = ',Setmute,'dest = ',dest)
-    if source == dest then return end  --thought we checked thIs elsewhere, but we'll do it again here!
-    local index = GetSendIndex(source, dest, useReaperIDX)
-    if index then
-        MSG('MuteSend: found index = ',index,'dest = ',dest)
-        if Setmute then reaper.SetTrackSendInfo_Value( GetTrack(source), REAPER.SEND, index-1,'B_MUTE', BoolToInt(Setmute))
-        else return IsSendMuted(chanNum,index, useReaperIDX) end
+function IsSendMuted(chan, destCh)
+    local track = GetTrack(chan)
+    local index = GetSendIndex(chan, destCh)
+    --indices are zero based here :^P
+    local _, mute = reaper.GetTrackSendUIMute( track , index - 1 )
+    ----MSG('IsSendMuted: tracknum',chan,'index',index , 'mute status = ', mute)
+    return IntToBool(mute)
+end
+
+function MidiIN(chan, inputNum, enable)
+    if not enable then --get status
+        return IsSendMuted(inputNum, chan)
+    else --set mute input
+        local mute = not enable
+        MuteSend(inputNum, chan, mute)
     end
 end
 
-function SetSendPreFader(chanNum,destChan, useReaperIDX)
-    local idx = GetSendIndex(chanNum,destChan, useReaperIDX)
-    local worked = reaper.SetTrackSendInfo_Value( GetTrack(chanNum, useReaperIDX), REAPER.SEND, idx-1, 'I_SENDMODE',3 )
-    --MSG('SetSendPreFader: Success=',worked,'dest=',dest)
+--SET MUTE.  Silently fails if send does not exist
+function MuteSend(chan, destChan, Setmute)
+    if Setmute == nil then Setmute = true end
+    local index = GetSendIndex(chan, destChan)
+    if index then
+        reaper.SetTrackSendInfo_Value( GetTrack(chan), REAPER.SEND, index-1,'B_MUTE', BoolToInt(Setmute))
+    end
 end
 
-function SetSendPhase(chanNum, destChan, flipped, useReaperIDX)
-    --MSG('SetSendPhase: track=',tracknum,'ph=',flipped)
-    local idx = GetSendIndex(chanNum,destChan, useReaperIDX)
-    local worked = reaper.SetTrackSendInfo_Value( GetTrack(chanNum, useReaperIDX), REAPER.SEND,idx-1, 'B_PHASE', BoolToInt(flipped))
+function SetSendPreFader(chan, destChan)
+    local index = GetSendIndex(chan, destChan)
+    if index then
+        local worked = reaper.SetTrackSendInfo_Value( GetTrack(chan), REAPER.SEND, index-1, 'I_SENDMODE',3 )
+        ----MSG('SetSendPreFader: Success=',worked,'dest=',dest)
+    end
 end
 
-function GetSendPhase(chanNum, dest, useReaperIDX)
-    local idx = GetSendIndex(chanNum, dest, useReaperIDX)
-    local flipped = reaper.GetTrackSendInfo_Value(GetTrack(tracknum, useReaperIDX), REAPER.SEND,idx-1, 'B_PHASE')
-    return flipped
+function SetSendPhase(chan, destChan, flipped)
+    ----MSG('SetSendPhase: track=',tracknum,'ph=',flipped)
+    local idx = GetSendIndex(chan,destChan)
+    local worked = reaper.SetTrackSendInfo_Value( GetTrack(chan), REAPER.SEND,idx-1, 'B_PHASE', BoolToInt(flipped))
 end
 
-function SetOutputSend(chanNum,outputnum, useReaperIDX)
+function IsPhaseFlipped(chan, destCh)
+    local idx = GetSendIndex(chan, destCh)
+    local flipped = reaper.GetTrackSendInfo_Value(GetTrack(chan), REAPER.SEND,idx-1, 'B_PHASE')
+    return flipped > 0
+end
+
+function SetOutputSend(chan,outputnum)
     for i = TRACKS.OUT_A,TRACKS.OUT_D do
         if outputnum == i then
-            MuteSend(chanNum, outputnum, false, useReaperIDX)
-        else MuteSend(chanNum, outputnum, true, useReaperIDX)
+            MuteSend(chan, outputnum, false)
+        else MuteSend(chan, outputnum, true)
         end
     end
 end
-
-function GetOutputSend(chanNum, useReaperIDX)
-    local send = GetMoonParam(chanNum ,MCS.AUDIO_OUT, useReaperIDX )
-    return send + OUT_OFFSET
+---rewrite to look to ns
+function GetOutputSend(chan)
+    for i = TRACKS.OUT_A,TRACKS.OUT_D do
+        if not IsSendMuted(chan,i) or
+            (IsSendMuted(chan, i) and IsPhaseFlipped(chan, i) )
+            then return i end
+    end
+    ERR("Get output send: Bad Output Mute State")
 end
 
---for cueing: mute the send to current output buss
-function Cue(chanNum,SetCue)
+--for cueing: mute the send to current output buss and flip its phase
+function Cue(chan,SetCue)
+    local send = GetOutputSend(chan)
+    ----MSG('Checking output send', send)
     if SetCue then
-        local send = GetOutputSend(chanNum)
-        MSG('cue-muting send: ',send,', SetCue = ', SetCue)
-        MuteSend(chanNum,send,SetCue)
-    elseif IsSendMuted(chanNum,GetOutputSend(chanNum)) then return 1
-    else return 0
+        ----MSG('cue-muting send: ',send,', SetCue = ', SetCue)
+        MuteSend(chan, send, SetCue)
+        SetSendPhase(chan, send, SetCue)
+    else return IsSendMuted(chan,send)
     end
 end
 ----------------------------------------------------------------------------------------------
@@ -798,13 +794,13 @@ end
 ---------------------------------------EXPRESSION CONTROL-------------------------------------
 --we should turn off expression, NOT by muting the midi rcv, but by BYPASSING THE MIDI VOL FX!!!
 --thIs way, we don't have to worry about reSetting the value to max.
-function ExpOn(chanNum, on, useReaperIDX)
+function ExpOn(chan, on)
     --reaper.TrackFX_SetOffline(trk, MIDIVOL.SLOT,not on)
-    reaper.TrackFX_SetEnabled(  GetTrack(chanNum, useReaperIDX), MIDIVOL.SLOT, on )  --what's the difference???
+    reaper.TrackFX_SetEnabled(  GetTrack(chan), MIDIVOL.SLOT, on )  --what's the difference???
 end
 
-function IsExpOn(chanNum, useReaperIDX)
-    return reaper.TrackFX_GetEnabled(  GetTrack(chanNum, useReaperIDX), MIDIVOL.SLOT )
+function IsExpOn(chan)
+    return reaper.TrackFX_GetEnabled(  GetTrack(chan), MIDIVOL.SLOT )
 end
 
 -----------------------------------------------------------------------------------------------
@@ -818,139 +814,292 @@ function GetTempo()
     return  reaper.Master_GetTempo()
 end
 
+--------------------------------------------------------------------------------------------------------------
+------#######################################################################################################
+------------------------------------------------ FX LOADING ---------------------------------------------
+--When we load an instrument, we need to first remove all its receives from other channels
+--Then we need to check if the new instrument is an effect.  If so, add the receives back.
+
+function LoadInstrument(chan,vstname)
+    --defer???
+    --we will have to select a bank before re-adding the sends
+    reaper.PreventUIRefresh(1)
+    SetChanToFX(chan, false)
+    local oldName = GetPlugName(chan, INSTRUMENT_SLOT)
+    ----MSG('new fx name = '..vstname, 'old name = '..oldName)
+    if vstname ~= oldName then
+        local track = GetTrack(chan)
+        reaper.TrackFX_Delete( track, INSTRUMENT_SLOT )
+        reaper.TrackFX_AddByName(track, vstname, false, -1)
+        reaper.TrackFX_CopyToTrack( track, reaper.TrackFX_GetCount(track) - 1, track, 1, true )
+        ----MSG('adding vst:'..vstname)
+    end
+    reaper.PreventUIRefresh(-1)
+end
+
+
 -----------------------------------------------------------------------------------------------
 --###########################################################################################--
 ----------------------------------------EFFECT SWITCHING-------------------------------------
---Need to look at thIs code again
---when we Set the effect, we are looking for a number from 1-n of available effect tracks
---for an instrument track thIs will be the fxtrack count.  for an effect track it will be COUNT- 1!!
---because it will not include the effect itself.
---so when Getting the lIst of available effects, we need to know who Is asking!!
-function IsEffectCh(chanNum)
-    --local IsFX = GetMoonParam(chanNum,MCS.AUDIO_IN)
-    --return IsFX > 1  --0 no input, 1 exernal input
-    --TODO:  need a bank to query for this.  No need to put it in MCS
-    return true
-end
+--ROUTING:  inst -> prefader sends (to fxchans) ^ dryLevel(track fader) -> postfader sends(to outputs)
 
 --an array of all the channels with mixer inputs, i.e. effects
 local function getFxList()
     if not currentFxList then
         currentFxList = {}
-        for i, moonChanNum in ipairs(GetMoonChans()) do
-            if IsEffectCh(moonChanNum) then table.insert(currentFxList, moonChanNum) end
+        for i = 1, CH_COUNT do
+            if IsEffectCh(i) then table.insert(currentFxList,i) end
         end
     else return currentFxList
     end
     return currentFxList
 end
 
-function SetEffect(chanNum,fxIdx)
-    local tracknum = IndexOfChan(chanNum)
-    MSG('SetEffect: tracknum =',tracknum,'fx idx=',fxIdx)
-    local phMute = IsTrackEffectMuted(tracknum)
-    for i,track in ipairs(GetEffectsForCh(tracknum)) do
-        local active = (i ~= fxIdx)
-        --MSG('SetEffect: track=',track,'active=',active)
-        MuteSend(tracknum,track, active )
-        --only mute the active effect, and only if it was muted before...
-        SetSendPhase(tracknum, track, phMute and active)
+function ResetSends()
+    for send = 1, CH_COUNT do
+        for i, rcv in ipairs(getFxList()) do
+            RemoveSend(send, rcv)
+            AddSend(send, rcv)
+            SetSendPreFader(send, rcv)
+            MuteSend(send, rcv)
+        end
+        MuteSend(send, GetChFxList(send)[1], false)
     end
 end
---need to include the channel, so it won't send to itself
-function GetEffectsForCh(chanNum)
-    local chFX = {}
-    for i, moonChanNum in ipairs(getFxList()) do
-        if moonChanNum ~= chanNum then
-            table.insert(chFX, moonChanNum)
+
+function IsEffectCh(chan)
+    local testCh = 1
+    if chan == 1 then testCh = 2 end --just make sure the test channel is not the same as the channel
+    for i = 1, GetSendCount(testCh) do
+        if GetSendDest(testCh, i) == chan then
+            MSG('found effect channel', chan)
+            return true end
+    end
+    return false --chan is not a send for testCh...
+end
+--returns fx channel, fxch mute status, fx index. Also makes sure fx settings are conformant
+function GetFxChan(chan)
+    --conformant settings:  all muted and one phased, or one unmuted and no phased
+    local fxList = GetChFxList(chan)
+    local unmuted = 0
+    local flipped = 0
+    local fxChan = 0
+    local fxIdx = 0
+    local chanFxMuted = false
+    for i,dest in ipairs(fxList) do
+        if not IsSendMuted(chan, dest) then
+            unmuted = unmuted + 1
+            --if an fxsend is already unmuted, mute all others
+            if unmuted > 1 then MuteSend(chan,dest)
+            else fxChan = dest fxIdx = i
+            end
         end
     end
-    return chFX
+    if unmuted == 0 then--should be one chan with a flipped phase
+        chanFxMuted = true
+        for i,dest in ipairs(fxList) do
+            if IsPhaseFlipped(chan, dest) then
+                flipped = flipped + 1
+                if flipped > 1 then SetSendPhase(chan, dest, false)
+                else fxChan = dest fxIdx = i
+                end
+            end
+        end
+    end
+    return fxChan, chanFxMuted, fxIdx
 end
 
-function GetFxChanName(chanNum)
-    return GetFxPresetName(GetFxChan(chanNum))
+function SetFxChan(chan, destCh)
+    local prevFx, fxMuted = GetFxChan(chan)
+    if fxMuted then --turn off phase for prev and enable for new
+        SetSendPhase(chan, prevFx, false)
+        SetSendPhase(chan, destCh, true)
+    else
+        MuteSend(chan, prevFx, true)
+        MuteSend(chan, destCh, false)
+    end
 end
 
-function SetFxChanByName(name, chanNum)
+function SetFxByIdx(chan,fxIdx)
+    local fxCh = GetFxForIndex(chan, fxIdx)
+    --MSG('setting fx chan to', fxCh)
+    SetFxChan(chan, fxCh)
+end
+
+--remove the old send, and rebuild, in case there are non-conforming settings
+function SetChanToFX(chan, enable)
+    for dest = 1, CH_COUNT do
+        if dest ~= chan then
+            local muted = IsSendMuted(chan, dest)
+            RemoveSend(chan, dest)
+            if enable then  else
+                AddSend(chan, dest)
+                SetSendPreFader(chan, dest)
+                MuteSend(chan, dest, muted)
+            end
+        end
+    end
+    currentFxList = nil --force a rescan of the effects
+end
+
+--need to include the channel, so it won't send to itself
+function GetChFxList(chan)
+    local chFX = {}
+    for i, moonchan in ipairs(getFxList()) do
+        if moonchan ~= chan then
+            --MSG('Get chan fx list, adding',moonchan)
+            table.insert(chFX, moonchan)
+        end
+    end
+    return chFX, #chFX
+end
+
+function ClearFX(chan)
+    local track = GetTrack(chan)
+    local count = reaper.TrackFX_GetCount(track)
+    if count > 0 then
+        for idx = reaper.TrackFX_GetCount(track) - 1, 0, -1 do
+            reaper.TrackFX_Delete(track, idx)
+        end
+    end
+end
+
+function GetChFxName(chan)
+    local fxChan = GetFxChan(chan)
+    ----MSG('found fx chan for chan:', fxChan, chan )
+    if fxChan then  return GetPresetName(fxChan) else ERR('GetChFxName: No Fx for chan num', chan) end
+end
+
+function SetFxChanByName(name, chan)
     local idx
-    local fx = GetEffectsForCh(chanNum)
+    local fx = GetChFxList(chan)
     if #fx > 0 then
         for i, fxChan in ipairs(fx) do
-            MSG('checking fx slot: '..i)
-            if GetFxPresetName(fxChan) == name then idx = i end
+            ----MSG('checking fx slot: '..i)
+            if GetPresetName(fxChan) == name then idx = i end
         end
         if not idx then idx = 1 end
-        SetEffect(chanNum, idx)
-    else SetEffect(chanNum,1)
+        SetFxByIdx(chan, idx)
+    else SetFxByIdx(chan, 1)
     end
 end
 
-function IncrementEffect(ChanNum,dec)
-    local tracknum = IndexOfChan(chanNum)
-    local idx,count = GetIndexForEffect(tracknum)
-    MSG('IncrementEffect: count=',count,'idx=',idx)
-    local inc = IncrementValue(idx,1,count,true)
-    local dec = DecrementValue(idx,1,count,true)
-    MSG('IncrementEffect: inc=',inc)
-    if dec  then SetEffect(tracknum, dec)
-            else SetEffect(tracknum, inc)
-    end
+function IncFxNum(chan,inc)
+    local idx = GetFxIndex(chan)
+    local count = #GetChFxList(chan)
+    --MSG('IncFxNum: count=',count,'fx index=',idx, 'increment =',inc)
+    local newVal = IncrementValue(idx,1,count,true,inc)
+    --MSG('IncFxNum: inc, new val=', newVal)
+    SetFxByIdx(chan, newVal)
 end
 
-function SetTrackEffectMuted(chanNum,mute)
-    local tracknum = IndexOfChan(chanNum)
-    --keep track of the last muted fx by reversing its phase
-    local dest = GetFxChan(tracknum)
-    MSG('SetTrackEffectMuted: tracknum=',tracknum,'dest=',dest)
-    --muted =  IsSendMuted(tracknum,dest) --TODO: do we need thIs check?
-    SetSendPhase(tracknum,dest,mute)
-    MuteSend(tracknum,dest,mute)
+function Test()
+    IncFxNum(1,1)
 end
+
+function GetFxForIndex(chan,index)
+    local tracks,count = GetChFxList(chan)
+    --MST(tracks, 'fx track table')
+    --MSG('GetFxForindex ',index)
+    return tracks[index],count
+end
+
+function GetFxIndex(chan)
+    local _,_,fxIndex = GetFxChan(chan)
+    return fxIndex
+end
+
 
 --###########################################################################################--
 -------------------------------------FX LEVEL CONTROL-----------------------------------------
---all done by send levels, either to effects or to outputs.
---sends are all pre-fader
-function SetWetDryLevels(chanNum,fader, useReaperIDX)
-    --MSG('SetWetDryLevels: track#=',tracknum,'fader val =',fader)
+--THE VALUES OF VOLUME AND PAN ARE NOT THOSE SHOWING IN THE WKP.  THEY REPRESENT SEND LEVELS AND PANS!!!
+--TODO!!!!!!!!   VALUES SHOULD BE STORED AS DB IN PRESETS AND IN THE INTERFACE.
+
+
+--okay, seems like we could make the output sends post fader, and use the fader for this volume adjustment
+--so we can store both the main volume, and the fx adjustment volume in the project.
+local function setVolume(chan, level, useDB)
+    if not useDB then -- do nothing
+    else level = ultraschall.DB2MKVOL(level) end
+    reaper.SetMediaTrackInfo_Value(GetTrack(chan), 'D_VOL', level)
+end
+
+local function getVolume(chan, useDB)
+    local _, vol, pan = reaper.GetTrackUIVolPan(GetTrack(chan))
+    if not useDB then return vol else return ultraschall.MKVOL2DB end
+end
+--fx sends are pre-fader, outputs are post fader
+function SetFxLevel(chan, fader)
+    --MSG('SetFxLevel: track#=', chan,'fader val =',fader)
+    local fxChan = GetFxChan(chan)
+    --MSG('fx channel = ', fxChan)
     local wetlevel = math.min(fader * 2, 1)
     local drylevel = math.min(2 - (fader * 2), 1)
-    local sendIdx = GetSendIndex(chanNum,GetFxChan(chanNum), useReaperIDX)
-    reaper.SetTrackSendUIVol( GetTrack(chanNum, useReaperIDX), MIDIVOL.SLOT, sendIdx-1, wetlevel*wetlevel, 0)
-    Volume(chanNum,drylevel)
+    SetSendLevel(chan, GetFxChan(chan), fader)
+    --local sendIdx = GetSendIndex(chan, GetFxChan(chan))
+    --reaper.SetTrackSendUIVol( GetTrack(chan), MIDIVOL.SLOT, sendIdx-1, reaper.SLIDER2DB(wetlevel), 0)
+    setVolume(chan,drylevel)
 end
 
 --need to reverse the math above...
-function GetEffectLevel( chanNum, useReaperIDX)
-    --TODO: SetWetDryLevelFader
-    --wet =
+function GetFxLevel(chan)
+    --get the fx send level as param. if it is less than 1, then return half its value
+    local fxSendLevel = GetSendLevel(chan, GetFxChan(chan))
+    if fxSendLevel < 1 then return fxSendLevel / 2 end
+    --get the track volume, which is the fx adjustment for full wet, as param. return half its value + .5
+    local dryLevel = getVolume(chan)
+    return ( (1- dryLevel) / 2 ) + .5
 end
 
-function Volume(chanNum, fader, useReaperIDX)
-    if not fader then
-        local _,vol,pan = reaper.GetTrackSendUIVolPan(GetTrack(chanNum, useReaperIDX), TRACKS.OUT_MON) --should be the same as the others
-        MSG('track,vol,pan = ',chanNum, vol, pan)
-        return vol/vol, pan
+function SetSendLevel(chan, destCh, level, useDB)
+    local sendIdx = GetSendIndex(chan, destCh)
+    if not useDB then --do nothing
+    else level = ultraschall.DB2MKVOL(level) end
+    reaper.SetTrackSendUIVol(GetTrack(chan), sendIdx-1, level, 0)
+end
+
+function GetSendLevel(chan, destCh, returnDB)
+    local sendIdx = GetSendIndex(chan, destCh)
+    local _,vol,pan = reaper.GetTrackSendUIVolPan(GetTrack(chan), sendIdx - 1)
+
+    --MSG('getting send vol = ',vol, 'chan',chan,'dest chan',destCh)
+    if not returnDB then return vol else return ultraschall.MKVOL2DB(vol) end
+end
+--trim is in db +-
+--should take or return a paramVal
+function Output(chan, paramVal, trim)
+    if not trim then trim = 0 end
+    if not paramVal then return math.exp((OutputDB(chan) - trim) / 20)
+    else OutputDB(chan, (20 * math.log(paramVal)) + trim)
+    end
+end
+--lets try storing values as db, which is more readable and meaningful
+function OutputDB(chan, db)
+    if not db then
+        local _,vol,pan = reaper.GetTrackSendUIVolPan(GetTrack(chan), TRACKS.OUT_MON) --should be the same as the others
+        --MSG('track,vol,pan = ', chan, vol, pan)
+        return ultraschall.MKVOL2DB(vol)
     else
+        local fader = ultraschall.DB2MKVOL(db)
         for output = TRACKS.OUT_MON,TRACKS.OUT_D do
-            --MSG('SetWetDryLevels: Setting level',fader)
-            local sendIdx = GetSendIndex(tracknum,output)
-            --MSG('SetWetDryLevels: Setting level for index',sendIdx,'vol=',dryVol)
-            reaper.SetTrackSendUIVol(GetTrack(chanNum, useReaperIDX), sendIdx-1, fader*fader, 0)
+            --SetSendLevel(tracknum, output, fader, true)
+            ----MSG('SetFxLevel: track',output,', Setting level',fader)
+            local sendIdx = GetSendIndex(chan, output, true) --using reaper idx now
+            ----MSG('SetFxLevel: Setting level for index',sendIdx,'vol=', fader)
+            reaper.SetTrackSendUIVol(GetTrack(chan), sendIdx-1, fader, 0)
         end
     end
 end
 
-
-function Pan(chanNum, fader, useReaperIDX)
+--panning is done at the output send
+function Pan(chan, fader)
     if not fader then
-        local _, pan = Volume(chanNum, fader, useReaperIDX)
+        local _, vol, pan = reaper.GetTrackSendUIVolPan(GetTrack(chan), TRACKS.OUT_MON)
         return pan
     else
         for output = TRACKS.OUT_MON,TRACKS.OUT_D do
-            local sendIdx = GetSendIndex(chanNum, output, useReaperIDX)
-            reaper.SetTrackSendUIPan(GetTrack(chanNum, useReaperIDX), sendIdx - 1, fader, 0)
+            local sendIdx = GetSendIndex(chan, output)
+            reaper.SetTrackSendUIPan(GetTrack(chan), sendIdx - 1, fader, 0)
         end
     end
 end
@@ -962,103 +1111,100 @@ function GetMeter(tracknum,chan)
     --peak_in_dB = amp_dB*log(peak);
     local track = GetTrack(tracknum)
     local level = reaper.Track_GetPeakInfo( track, chan )
-    --MSG('level =',level,'chan = ',chan)
+    ----MSG('level =',level,'chan = ',chan)
     return level
 end--]]
 --------------------------------------------------------------------------------------------
----------------------------------KEYB_TYPE SWITCHING---------------------------------------
-
-function Notesource(chanNum,nsindex, useReaperIDX) --Get or Set
-    local tracknum = useReaperIDX or IndexOfChan(chanNum)
+---------------------------------NOTESOURCE SWITCHING---------------------------------------
+--hopefully we can use MCS to make banks work equally well with roli or keyboard control
+--Get or Set
+function Notesource(chan,nsindex)
     if nsindex then
         --Set midiChStrip value for input type
-        SetMoonParam(tracknum,MCS.KEYB_TYPE,nsindex)
-        SetOutputByNotesource(tracknum,nsindex)
-        MuteSendsByNotesource(tracknum,nsindex)
-    else return GetMoonParam(tracknum,MCS.KEYB_TYPE, useReaperIDX)
+        SetMoonParam(chan,MCS.KEYB_TYPE,nsindex)
+        SetOutputByNotesource(chan,nsindex)
+        MuteSendsByNotesource(chan,nsindex)
+    else return GetMoonParam(chan,MCS.KEYB_TYPE)
     end
 end
 
-function SetOutputByNotesource( chanNum, nsindex, useReaperIDX)
-    MSG('SetOutputByNotesource: nsindex=',nsindex)
+function SetOutputByNotesource( chan, nsindex)
+    --MSG('SetOutputByNotesource: nsindex=',nsindex)
     --If an inst has output D, it should NOT change with ns!
-    local output = GetMoonParam(chanNum, MCS.AUDIO_OUT, useReaperIDX)
-    MSG('SetOutputByNotesource: output=',output)
+    --TODO: don't use MCS for this value--query NS
+    local output = GetMoonParam(chan, MCS.AUDIO_OUT)
+    --MSG('SetOutputByNotesource: output=',output)
     if output ~= AUDIO_OUT.D then
-        MSG('SetOutputByNotesource: Setting by notesource',nsindex)
+        --MSG('SetOutputByNotesource: Setting by notesource',nsindex)
         if nsindex == NS.KBD then
-            SetOutputSend(chanNum, TRACKS.OUT_A, useReaperIDX)
-            SetMoonParam(chanNum,MCS.AUDIO_OUT,AUDIO_OUT.A, useReaperIDX)
+            SetOutputSend(chan, TRACKS.OUT_A)
+            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.A)
         elseif nsindex == NS.ROLI then
-            SetOutputSend(chanNum,TRACKS.OUT_B, useReaperIDX)
-            SetMoonParam(chanNum,MCS.AUDIO_OUT,AUDIO_OUT.B, useReaperIDX)
+            SetOutputSend(chan,TRACKS.OUT_B)
+            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.B)
         elseif nsindex == NS.DUAL then
-            SetOutputSend(chanNum,TRACKS.OUT_A, useReaperIDX)
-            SetMoonParam(chanNum,MCS.AUDIO_OUT,AUDIO_OUT.A, useReaperIDX)
+            SetOutputSend(chan,TRACKS.OUT_A)
+            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.A)
         elseif nsindex == NS.NONE then
-            SetOutputSend(chanNum,TRACKS.OUT_C, useReaperIDX)
-            SetMoonParam(chanNum,MCS.AUDIO_OUT,AUDIO_OUT.C, useReaperIDX)
+            SetOutputSend(chan,TRACKS.OUT_C)
+            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.C)
         end
-    else SetOutputSend(chanNum,TRACKS.OUT_D)
-        MSG('SetOutputByNotesource: Setting by output D:', output)
+    else SetOutputSend(chan,TRACKS.OUT_D)
+        --MSG('SetOutputByNotesource: Setting by output D:', output)
     end
 end
 
-function MuteSendsByNotesource(tracknum,nsIndex, useReaperIDX)
-    local tracknum = useReaperIDX or IndexOfChan(chanNum)
+function MuteSendsByNotesource(chan,nsIndex)
     if nsIndex == NS.KBD then
-        MuteSend(TRACKS.IN_KEYB,tracknum,false)
-        MuteSend(TRACKS.IN_ROLI,tracknum,true)
+        MuteSend(TRACKS.IN_KEYB,chan,false)
+        MuteSend(TRACKS.IN_ROLI,chan,true)
     elseif nsIndex == NS.ROLI then
-        MuteSend(TRACKS.IN_KEYB,tracknum,true)
-        MuteSend(TRACKS.IN_ROLI,tracknum,false)
+        MuteSend(TRACKS.IN_KEYB,chan,true)
+        MuteSend(TRACKS.IN_ROLI,chan,false)
     elseif nsIndex == NS.DUAL then
-        MuteSend(TRACKS.IN_KEYB,tracknum,false)
-        MuteSend(TRACKS.IN_ROLI,tracknum,true)
+        MuteSend(TRACKS.IN_KEYB,chan,false)
+        MuteSend(TRACKS.IN_ROLI,chan,true)
     elseif nsIndex == NS.NONE then
-        MuteSend(TRACKS.IN_KEYB,tracknum,true)
-        MuteSend(TRACKS.IN_ROLI,tracknum,true)
+        MuteSend(TRACKS.IN_KEYB,chan,true)
+        MuteSend(TRACKS.IN_ROLI,chan,true)
     end
 end
 
-function IncrementNotesource(tracknum, useReaperIDX)
-    local tracknum = useReaperIDX or IndexOfChan(chanNum)
-    local nsIndex = Notesource(tracknum)
+function IncrementNotesource(chan)
+    local nsIndex = Notesource(chan)
     --increment it
     nsIndex = IncrementValue(nsIndex,0,NS_COUNT-1)
     Notesource(tracknum,nsIndex)
 end
 
-function DecrementNotesource(tracknum, useReaperIDX)
-    local tracknum = IndexOfChan(chanNum, useReaperIDX)
-    local nsIndex = Notesource(tracknum)
+function DecrementNotesource(chan)
+    local nsIndex = Notesource(chan)
     --decrement it
     nsIndex = DecrementValue(nsIndex,0,NS_COUNT-1)
     Notesource(tracknum,nsIndex)
 end
 -------------------------------------------------------------------------------------
 ---------------------------------------NOTE SOURCE SOLOING----------------------------
---none of these need to deal with reaper indexes....
-function TrackLimits(chanNum, lo, hi)
+function TrackLimits(chan, lo, hi)
     if not lo or hi then
-        return GetMoonParam(chanNum,MCS.LO_NOTE), GetMoonParam(chanNum, MCS.HI_NOTE) end
-    if lo then SetMoonParam(chanNum,MCS.LO_NOTE,lo) end
-    if hi then SetMoonParam(chanNum,MCS.HI_NOTE,hi) end
+        return GetMoonParam(chan,MCS.LO_NOTE), GetMoonParam(chan, MCS.HI_NOTE) end
+    if lo then SetMoonParam(chan,MCS.LO_NOTE,lo) end
+    if hi then SetMoonParam(chan,MCS.HI_NOTE,hi) end
 end
 
-function NotesoloLimits(chanNum, lo, hi)
+function NotesoloLimits(chan, lo, hi)
     if not lo or hi then
-        return GetMoonParam(chanNum,MCS.NS_MUTE_LO), GetMoonParam(chanNum, MCS.NS_MUTE_HI) end
-    if lo then SetMoonParam(chanNum,MCS.NS_MUTE_LO,lo) end
-    if hi then SetMoonParam(chanNum,MCS.NS_MUTE_HI,hi) end
+        return GetMoonParam(chan,MCS.NS_MUTE_LO), GetMoonParam(chan, MCS.NS_MUTE_HI) end
+    if lo then SetMoonParam(chan,MCS.NS_MUTE_LO,lo) end
+    if hi then SetMoonParam(chan,MCS.NS_MUTE_HI,hi) end
 end
 
 function GetNotesoloChans(nsNum)
     local nsTracks = {}
-    for i, chanNum in ipairs(GetMoonChans()) do
-        local chanNS = GetMoonParam( chanNum, MCS.KEYB_TYPE)
+    for i = 1, CH_COUNT do
+        local chanNS = GetMoonParam( i, MCS.KEYB_TYPE)
         if chanNS == nsNum then
-            table.insert(nsTracks, chanNum)
+            table.insert(nsTracks, i)
         end
     end
     return nsTracks
@@ -1067,45 +1213,41 @@ end
 function GetNsSoloMuteRange(nsNum)
     local low = 127
     local high = 0
-    for i,chanNum in ipairs(GetNotesoloChans(nsNum)) do
-        MSG('GetNsSoloMuteRange: checking track', chanNum)
-        if GetMoonParam(chanNum, MCS.NS_SOLO) == 1 then --look for nsoloed insts
-            MSG('GetNsSoloMuteRange: track', chanNum)
-            high = math.max(high, GetMoonParam(chanNum,MCS.HI_NOTE))
-            low = math.min(low, GetMoonParam( chanNum,MCS.LO_NOTE))
-            MSG('GetNsSoloMuteRange: low = ',low,'high=',high)
+    for i,chan in ipairs(GetNotesoloChans(nsNum)) do
+        --MSG('GetNsSoloMuteRange: checking track', chan)
+        if GetMoonParam(chan, MCS.NS_SOLO) == 1 then --look for nsoloed insts
+            --MSG('GetNsSoloMuteRange: track', chan)
+            high = math.max(high, GetMoonParam(chan,MCS.HI_NOTE))
+            low = math.min(low, GetMoonParam( chan,MCS.LO_NOTE))
+            --MSG('GetNsSoloMuteRange: low = ',low,'high=',high)
         end
     end
     return low,high
 end
 
-function NsSolo(chanNum, solo)
+function NsSolo(chan, solo)
     if solo then
-        SetMoonParam(chanNum,MCS.NS_SOLO,solo)
-        MSG('SetNsSolo: Setting nss to',solo,'track', chanNum)
-        local nsNum = GetMoonParam(chanNum, MCS.KEYB_TYPE)
+        SetMoonParam(chan,MCS.NS_SOLO,solo)
+        --MSG('SetNsSolo: Setting nss to',solo,'track', chan)
+        local nsNum = GetMoonParam(chan, MCS.KEYB_TYPE)
         local low, high = GetNsSoloMuteRange(nsNum)
-        MSG('SetNsSolo: low =',low,'high=',high)
-        for i, chanNum in ipairs(GetNotesoloChans(nsNum)) do
-            if GetMoonParam(chanNum, MCS.NS_SOLO) ~= 1 then
-                MSG('SetNsSolo: found non-soloed track',tracknum)
+        --MSG('SetNsSolo: low =',low,'high=',high)
+        for i, chan in ipairs(GetNotesoloChans(nsNum)) do
+            if GetMoonParam(chan, MCS.NS_SOLO) ~= 1 then
+                --MSG('SetNsSolo: found non-soloed track',tracknum)
                 if high > low then
-                    SetMoonParam(chanNum, MCS.NS_MUTED,1)
-                    SetMoonParam(chanNum, MCS.NS_MUTE_HI, high)
-                    SetMoonParam(chanNum, MCS.NS_MUTE_LO, low)
+                    SetMoonParam(chan, MCS.NS_MUTED,1)
+                    SetMoonParam(chan, MCS.NS_MUTE_HI, high)
+                    SetMoonParam(chan, MCS.NS_MUTE_LO, low)
                 else --no note solo
-                    SetMoonParam(chanNum, MCS.NS_SOLO,0)
+                    SetMoonParam(chan, MCS.NS_SOLO,0)
                 end
             end
         end
-    else return GetMoonParam(chanNum, MCS.NS_SOLO)
+    else return GetMoonParam(chan, MCS.NS_SOLO)
     end
 end
 
---###########################################################################################--
---------------------------------------- ADDING FX SENDS--------------------------------------
---After loading a new instrument (fxchain) we need to add a send for every effect in the mixer
---if the new inst Is an effect, we need to add every (other!) moon track in the mixer as a (muted) receive.
 --###########################################################################################--
 ---------------------------------------AUDIO INPUT CONTROL------------------------------------
 --when we load a template we will read the Setting of the audio input and configure the chan inputs
@@ -1113,30 +1255,29 @@ end
 --it does insure that the track Setting matches what Is in midiChStrip
 --  Set track to audio input
 
-function SetAudioInput(tracknum,stereo, dev_name, useReaperIDX)
+function SetAudioInput(tracknum,stereo, dev_name)
     local dev_id
     for i = 1,  reaper.GetNumAudioInputs() do
         local nameout =  reaper.GetInputChannelName( i-1 )
-        --MSG('SetAudioInput:  Device name =',nameout)
+        ----MSG('SetAudioInput:  Device name =',nameout)
         if nameout:lower():match(dev_name:lower()) then dev_id = i-1 end
     end
     if not dev_id then ERR("SetAudioInput: Device Not Found: ", dev_name) return end
-    reaper.SetMediaTrackInfo_Value( GetTrack(chanNum, useReaperIDX), 'I_RECINPUT',stereo + dev_id)
+    reaper.SetMediaTrackInfo_Value( GetTrack(chan), 'I_RECINPUT',stereo + dev_id)
 end
 
-function RemoveAudioInput(tracknum, useReaperIDX)
-    reaper.SetMediaTrackInfo_Value( GetTrack(tracknum, useReaperIDX), 'I_RECINPUT', -1)
+function RemoveAudioInput(tracknum)
+    reaper.SetMediaTrackInfo_Value( GetTrack(tracknum), 'I_RECINPUT', -1)
 end
 
-function ClearRouting(chanNum, useReaperIDX)
-    SetTrackSelected( IndexOfChan(chanNum, useReaperIDX) )
+function ClearRouting(chan)
+    SetTrackSelected(chan)
     local commandID = reaper.NamedCommandLookup("_S&M_SENDS6") --remove sends
     reaper.Main_OnCommand(commandID, 0)
     local commandID = reaper.NamedCommandLookup("_S&M_SENDS5") --remove receives
     reaper.Main_OnCommand(commandID, 0)
 end
-
---when loading a new fxchain...
+--Only used when creating a wkp from scratch.  Still probably useful, but needs work.
 function ConfigureTrack(chan)
     --clear any fx sends or returns
     ClearRouting(chan)
@@ -1153,123 +1294,92 @@ function ConfigureTrack(chan)
     --MuteSend(TRACKS.IN_SUS,chan,false)
     --enable drawbars
     if GetMoonParam(chan,MCS.USE_DRAWBARS) == 1 then
-        MuteSend(chan,TRACKS.IN_DRWB)
+        MuteSend(chan,TRACKS.IN_DRWB, true)
     end
     --add sends for all effects tracks
-    for i,effect in pairs(GetEffectsForCh(chan)) do
-        MSG('ConfigureTrack: adding send to new track',effect)
+    for i,effect in pairs(GetChFxList(chan)) do
+        --MSG('ConfigureTrack: adding send to new track',effect)
         AddSend(chan,effect)
-        MuteSend(chan,effect,true)
+        MuteSend(chan,effect, true)
         SetSendPreFader(chan,effect)
     end
     --Is thIs an effect track???
     local input = GetMoonParam(chan,MCS.AUDIO_IN)
     if input == AUDIO_IN.MIXER or input == AUDIO_IN.BOTH then
-        --add thIs track as muted send to every moon channel
-        for i,chanNum in ipairs(GetMoonChans()) do
-            if chanNum ~= chan then
-                AddSend(chanNum,chan)
-                MuteSend(chanNum,chan,true)
-                SetSendPreFader(chanNum,chan)
-                MSG('ConfigureTrack, adding send: ',track)
+        --add this track as muted send to every moon channel
+        for i = 1, CH_COUNT do
+            if i ~= chan then
+                AddSend(chan,i)
+                MuteSend(chan,i)
+                SetSendPreFader(chan, i)
+                --MSG('ConfigureTrack, adding send: ',track)
             end
         end
         --for sure effects will go out output C.  A or B will Get Set if NS changes
         SetMoonParam(chan, MCS.AUDIO_OUT, AUDIO_OUT.C)
     end
     if input == AUDIO_IN.EXT or input == AUDIO_IN.BOTH then
-        MSG('ConfigureTrack: Setting audio input',input)
+        --MSG('ConfigureTrack: Setting audio input',input)
         SetAudioInput(chan,REAPER.STEREO,INPUT_DEVICE_NAME)
     end
     if input == AUDIO_IN.NONE or input == AUDIO_IN.MIXER then
-        MSG('ConfigureTrack: removing audio input',input)
+        --MSG('ConfigureTrack: removing audio input',input)
         RemoveAudioInput(chan)
     end
     --Inst will have a preferred NS
     local ns = GetMoonParam(chan,MCS.KEYB_TYPE)
-    MSG('ConfigureTrack: ns=',ns)
+    --MSG('ConfigureTrack: ns=',ns)
     MuteSendsByNotesource(chan,ns)
     SetOutputByNotesource(chan,ns)
     --Set effect to idx1, Volume off
     --if idx1 Is ourselves, thIs will fail. kludgey...but
-    local fx = GetEffectForIndex(1)
-    if fx == chan then fx = GetEffectForIndex(2) end
+    local fx = GetFxForIndex(1)
+    if fx == chan then fx = GetFxForIndex(2) end
     MuteSend(chan,fx,false)
-    SetWetDryLevels(chan,0)
-end
-
-
-
---------------------------------------------------------------------------------------------------------------
-------#######################################################################################################
------------------------------------------------- FX LOADING ---------------------------------------------
-
-function LoadInstrument(chanNum,vstname)
-    --defer???
-    reaper.PreventUIRefresh(1)
-    local oldName = GetFXName(chanNum, INSTRUMENT_SLOT)
-    MSG('new fx name = '..vstname, 'old name = '..oldName)
-    if vstname ~= oldName then
-        local track = GetTrack(chanNum)
-        reaper.TrackFX_Delete( track, INSTRUMENT_SLOT )
-        reaper.TrackFX_AddByName(track, vstname, false, -1)
-        reaper.TrackFX_CopyToTrack( track, reaper.TrackFX_GetCount(track) - 1, track, 1, true )
-        --MSG('adding vst:'..vstname)
-    end
-    reaper.PreventUIRefresh(-1)
-end
-
-function SaveInstrument(chanNum, useReaperIDX)
-    ClearRouting(chanNum, useReaperIDX)
-    local name = GetInstName( chanNum, useReaperIDX)
-    MSG('saveInstrument: name=',name)
-end
-
-function GetInstName()
-    --todo
+    SetFxLevel(chan,0)
 end
 
 ---------------------------------------------------------------------------------------------------------------
 --#############################################################################################################
 -------------------------------------------------PRESETS-----------------------------------------------
 
-function incFxPreset(chanNum, fx, useReaperIDX)
+function incFxPreset(chan, fx)
     if not fx then fx = INSTRUMENT_SLOT end
     local presetmove = 1
-    reaper.TrackFX_NavigatePresets( GetTrack(chanNum, useReaperIDX), fx, presetmove )
+    reaper.TrackFX_NavigatePresets( GetTrack(chan), fx, presetmove )
 end
 function decFxPreset(tracknum, fx)
     local track = GetTrack(tracknum)
     local presetmove = -1
-    reaper.TrackFX_NavigatePresets( GetTrack(chanNum, useReaperIDX), fx, presetmove )
+    reaper.TrackFX_NavigatePresets( GetTrack(chan), fx, presetmove )
 end
-function SelectPreset(chanNum, presetname, useReaperIDX) --Test:  if RPL and built-in have same name, RPL is chosen??
-    local trackNum = IndexOfChan(chanNum)
-    reaper.TrackFX_SetPreset( GetTrack(trackNum, useReaperIDX), INSTRUMENT_SLOT, presetname )
+function SelectPreset(chan, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
+    reaper.TrackFX_SetPreset( GetTrack(chan), INSTRUMENT_SLOT, presetname )
 end
 
-function GetParamName(tracknum,fxnum, paramnum, useReaperIDX)
-    local _, name = reaper.TrackFX_GetParamName( GetTrack(chanNum, useReaperIDX), fxnum, paramnum - 1, "" )--wtf? here the fx are zero based!  so are params.
-    --MSG('param name is'..name)
+function GetParamName(tracknum,fxnum, paramnum)
+    local _, name = reaper.TrackFX_GetParamName( GetTrack(chan), fxnum, paramnum - 1, "" )--wtf? here the fx are zero based!  so are params.
+    ----MSG('param name is'..name)
     return name
 end
-
+-----------------------------------------------------------PRESET CONVERSION-----------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------
 local fxpText = '----  VST built-in programs  ----'
 local rplText = '----  User Presets (.rpl)  ----'
 local defaultText = 'Reset to factory default'
 
-local function GetPresetList(chanNum, ignoreName, fxnum, useReaperIDX )
+local function GetPresetList(chan, ignoreName, fxnum )
     if not fxnum then fxnum = INSTRUMENT_SLOT end
     if not ignoreName then ignoreName = '' end
-    if not chanNum then chanNum = 1 end
+    if not chan then chan = 1 end
     --if not factoryPresets then factoryPresets = false end
     local writeFile = true
-    OpenPlugin(chanNum,fxnum, useReaperIDX)
+    OpenPlugin(chan,fxnum)
     local fxName
     if GetFocusedFX() then
-        --MSG('chan num ='..chanNum, 'fx num '..fxnum)
-        fxName = GetFXName(chanNum, useReaperIDX)
-        --MSG('fx name = '..fxName)
+        ----MSG('chan num ='..chan, 'fx num '..fxnum)
+        fxName = GetPlugName(chan)
+        ----MSG('fx name = '..fxName)
     end
     local vstWindowTitle = reaper.JS_Localize(fxName, "common")
     local hwnd = reaper.JS_Window_Find(vstWindowTitle, false)
@@ -1290,9 +1400,9 @@ local function GetPresetList(chanNum, ignoreName, fxnum, useReaperIDX )
     local fxps = {}
     local onToFXPs = false
     for i, line in ipairs(presetLines) do
-        if line == defaultText then MSG(i,': ignoring default line')--do nothing
-        elseif line ~= fxpText and line ~= rplText and not onToFXPs then  table.insert(rpls, line) --MSG(i,': adding to rpls')
-        elseif line == fxpText then onToFXPs = true --MSG(i,': on to fxps')
+        if line == defaultText then --MSG(i,': ignoring default line')--do nothing
+        elseif line ~= fxpText and line ~= rplText and not onToFXPs then  table.insert(rpls, line) ----MSG(i,': adding to rpls')
+        elseif line == fxpText then onToFXPs = true ----MSG(i,': on to fxps')
         elseif line ~= ignoreName and line ~= rplText then table.insert(fxps, line)
         end
     end
@@ -1300,15 +1410,15 @@ local function GetPresetList(chanNum, ignoreName, fxnum, useReaperIDX )
     reaper.JS_WindowMessage_Send(presetWindow, "CB_SETCURSEL", cur_index, 0,0,0)
     rpls =  RemoveDuplicates(ArraySort(rpls))
     fxps = RemoveDuplicates(ArraySort(fxps))
-    ShowFX(chanNum, true)
+    ShowFX(chan, true)
     --reaper.TrackFX_Show(track, INSTRUMENT_SLOT, 2) --close the fx float
     return rpls, fxps
 end
 
-function ShowFX(chanNum, hide, slot)
+function ShowFX(chan, hide, slot)
     if not slot then slot = INSTRUMENT_SLOT end
     if not hide then hide = 3 else hide = 2 end
-    return reaper.TrackFX_Show(GetTrack(IndexOfChan(chanNum)), slot, hide)
+    return reaper.TrackFX_Show(GetTrack(chan), slot, hide)
 end
 
 function GetFXPs(tracknum, ignore, fxNum)
@@ -1318,35 +1428,28 @@ function GetFXPs(tracknum, ignore, fxNum)
     return fxps
 end
 
-function GetRPLs(chanNum)
-    return GetPresetList(chanNum)
-end
-
-function GetFxPresetName(chanNum, fxNum, useReaperIDX)
-    if not fxNum then fxNum = INSTRUMENT_SLOT end
-    local found, presetname = reaper.TrackFX_GetPreset(GetTrack(chanNum, useReaperIDX), fxNum, "")
-    if found then return presetname else return 'No Preset' end
+function GetRPLs(chan)
+    return GetPresetList(chan)
 end
 
 --This will overwrite rpls with vsts....
-function WritePreset(chanNum, fxNum, presetName, useReaperIDX)
+function WritePreset(chan, fxNum, presetName)
     if not fxNum then fxNum = INSTRUMENT_SLOT end
-    if not presetName then presetName = GetFxPresetName(chanNum, fxNum) end
-    local vstName = GetFXName(chanNum, fxNum)
-    local trackNum = IndexOfChan(chanNum, useReaperIDX)
+    if not presetName then presetName = GetPresetName(chan, fxNum) end
+    local vstName = GetPlugName(chan, fxNum)
     --get track data
-    local found, chunk = ultraschall.GetTrackStateChunk_Tracknumber(trackNum)
-    if not found then ERR('Track chunk not found: ',trackNum, fxNum) end
+    local found, chunk = ultraschall.GetTrackStateChunk_Tracknumber(chan)
+    if not found then ERR('Track chunk not found: ',chan, fxNum) end
     local data1 = ultraschall.GetFXStateChunk(chunk)
     local data2 = ultraschall.GetFXFromFXStateChunk(data1, fxNum + 1)  --ultraschall fx are 1-based
     local data3 = ultraschall.GetFXSettingsString_FXLines(data2)
     local data4 = ultraschall.Base64_Decoder(data3)
     local data = ultraschall.ConvertAscii2Hex(data4)
-    --MSG('data',data)
-    --local data = getPresetHex(chanNum, fxNum)
+    ----MSG('data',data)
+    --local data = getPresetHex(chan, fxNum)
     --prepare for writing file
     local presetFile = reaper.GetResourcePath()..'/presets/vst-'..vstName..'.ini'
-    --MSG('path = ', presetFile)
+    ----MSG('path = ', presetFile)
     local presetCount, key, section
     if reaper.file_exists(presetFile) then
         ultraschall.GetIniFileValue()
@@ -1356,7 +1459,7 @@ function WritePreset(chanNum, fxNum, presetName, useReaperIDX)
     end
     presetCount = math.tointeger(presetCount + 1)
     --Update/write number of presets
-    --MSG("GOT HERE")
+    ----MSG("GOT HERE")
     ultraschall.SetIniFileValue('General', 'NbPresets', presetCount, presetFile)
     local presetLength = #data
     local stringPos = 1
@@ -1368,62 +1471,62 @@ function WritePreset(chanNum, fxNum, presetName, useReaperIDX)
         sum = string.sub( string.format("%X", sum), -2, -1 )
         ultraschall.SetIniFileValue(section, key, chunk..sum, presetFile)
         stringPos = stringPos + 32768
-        MSG('written: '..i)
+        --MSG('written: '..i)
     end
     ultraschall.SetIniFileValue(section,'Name', presetName, presetFile)
     ultraschall.SetIniFileValue(section,'Len', presetLength//2, presetFile)
-    reaper.TrackFX_SetPreset(GetTrack(trackNum, useReaperIDX), fxNum, presetName)
+    reaper.TrackFX_SetPreset(GetTrack(chan), fxNum, presetName)
 end
 
-local function loadFXPsForConversion(chanNum, fxNum, overwrite, ignore)
-    --MSG('loading fx for ch',chanNum,'fx',fxNum)
+local function loadFXPsForConversion(chan, fxNum, overwrite, ignore)
+    ----MSG('loading fx for ch',chan,'fx',fxNum)
     if not fxNum then fxNum = INSTRUMENT_SLOT end
-    local rpls,fxps = GetPresetList(chanNum, ignore, fxNum)
-    --TStr(rpls, 'rpls')
+    local rpls,fxps = GetPresetList(chan, ignore, fxNum)
+    --MST(rpls, 'rpls')
     local convert = {}
     for i, name in ipairs(fxps) do
-        --MSG('checking fxp',name)
+        ----MSG('checking fxp',name)
         if name ~= ignore then
             local presetExists = ArrayContains(rpls, name)
-            --if presetExists then MSG('preset exists: ',name) end
+            --if presetExists then --MSG('preset exists: ',name) end
             if overwrite or (not overwrite and not presetExists) then
-                table.insert(convert, {name = name, chan = chanNum, fx = fxNum})
+                table.insert(convert, {name = name, chan = chan, fx = fxNum})
             end
         end
     end
-    --TStr(convert,'convert')
+    --MST(convert,'convert')
     return convert
 end
 
 local function convertNextPreset(presetList, waitTime, presetNumber)
     local preset = presetList[presetNumber]
     local deferID = "PresetConversion"
-    MSG('Saving Preset: ', preset.name)
+    --MSG('Saving Preset: ', preset.name)
     for i, preset in ipairs(presetList) do
     WritePreset(preset.chan, preset.fx, preset.name) end
     --[[if presetNumber < #presetList then
-        --MSG('preset number', presetNumber)
+        ----MSG('preset number', presetNumber)
         ultraschall.Defer(convertNextPreset(presetList, waitTime, presetNumber + 1), deferID, 2, waitTime)
     else ultraschall.StopDeferCycle(deferID)
     end--]]
 end
 
-function ConvertPresets(chanNum, fxNum, overwrite, ignorePresetsNamed, waitTime)
-    local presetList = loadFXPsForConversion(chanNum, fxNum, overwrite, ignorePresetsNamed)
+function ConvertPresets(chan, fxNum, overwrite, ignorePresetsNamed, waitTime)
+    local presetList = loadFXPsForConversion(chan, fxNum, overwrite, ignorePresetsNamed)
     convertNextPreset(presetList, waitTime, 1)
 end
 
 function Get_Strings_Until(stringTable, index, test)
-    --MSG('checking string: '..stringTable[index]..'index: '..index)
+    ----MSG('checking string: '..stringTable[index]..'index: '..index)
     if StartsWith(stringTable[index], test) then return index
     elseif index == #stringTable then return -1
     else return Get_Strings_Until(stringTable, index + 1, test)
     end
 end
 
-local function getFXLines(chanNum, fxNum, useReaperIDX)
+local function getFXLines(chan, fxNum)
     if not fxNum then fxNum = INSTRUMENT_SLOT end
-    local track = GetTrack(chanNum, useReaperIDX)
+    local track = GetTrack(chan)
     local ret, Track_Chunk =  reaper.GetTrackStateChunk(track,"",false)
     local lines = {}
     for s in Track_Chunk:gmatch("[^\r\n]+") do
@@ -1441,15 +1544,15 @@ local function getFXLines(chanNum, fxNum, useReaperIDX)
     return lines, fxIDX, lastIDX, chainIDX
 end
 
-function SaveMoonPreset(chanNum, fxNum)
-    local lines, first, last  = getFXLines(chanNum, fxNum)
-    local presetName = GetFxPresetName(chanNum, fxNum)
-    local vstName = GetFXName(chanNum, fxNum)
+function SaveMoonPreset(chan, fxNum)
+    local lines, first, last  = getFXLines(chan, fxNum)
+    local presetName = GetPresetName(chan, fxNum)
+    local vstName = GetPlugName(chan, fxNum)
     local filename = BANK_FOLDER..vstName..'/'..presetName..'.MPF'
-    --MSG('file = '..filename)
+    ----MSG('file = '..filename)
     CreateFolder(BANK_FOLDER..vstName)
     local file = io.open(filename,'w+')
-    --MSG('writing to file: '..filename)
+    ----MSG('writing to file: '..filename)
     --local chunkTable = {}
     for i = first,last do
         file:write(lines[i],'\n')
@@ -1457,15 +1560,15 @@ function SaveMoonPreset(chanNum, fxNum)
     file:close()
 end
 
-function LoadMoonPreset(chanNum, fxNum, presetName)
+function LoadMoonPreset(chan, fxNum, presetName)
     if not fxNum then fxNum = INSTRUMENT_SLOT end
     local fxLines = {}
-    local track = GetTrack(chanNum)
-    local fileName = BANK_FOLDER..GetFXName(chanNum, fxNum)..'/'..presetName..'.MPF'
+    local track = GetTrack(chan)
+    local fileName = BANK_FOLDER..GetPlugName(chan, fxNum)..'/'..presetName..'.MPF'
     for line in io.lines(fileName) do
         fxLines[#fxLines + 1] = line
     end
-    local trackChunkLines, first, last = getFXLines(chanNum, fxNum)
+    local trackChunkLines, first, last = getFXLines(chan, fxNum)
     local lastPart = {}
     local fxPart= {}
     local firstPart = {}
@@ -1477,7 +1580,7 @@ function LoadMoonPreset(chanNum, fxNum, presetName)
     table.insert(bits,table.concat(fxPart,'\n'))
     table.insert(bits,table.concat(lastPart,'\n'))
     local str = table.concat(bits,'\n')
-    --MSG('writing to ch '..str)
+    ----MSG('writing to ch '..str)
     reaper.SetTrackStateChunk(track, str, false)
 end
 
@@ -1485,8 +1588,7 @@ end
 --#############################################################################################################
 -------------------------------------------------TESTING METHODS-----------------------------------------------
 
-function Test()
-    MSG('testing')
+--function Test()
     --SaveMoonPreset(1)
     --LoadMoonPreset(1,INSTRUMENT_SLOT,'Black Market 0')
     --GetPresetList(1,'<empty>')
@@ -1500,94 +1602,38 @@ function Test()
         {name ='piece', color = 'green'},
         {name = 'bit', color = 'cyan' }
     }
-    TStr(ArraySortByField(table, 'color'),'sorted')
+    MST(ArraySortByField(table, 'color'),'sorted')
     --]]
 
     --ends = 'test'
     --notend = 'west'
     --string = 'thisisatest'
-    --MSG('string end test: '..tostring(EndsWith(string,ends)))
-    --MSG('string end fail: '..tostring(EndsWith(string,notend)))
+    ----MSG('string end test: '..tostring(EndsWith(string,ends)))
+    ----MSG('string end fail: '..tostring(EndsWith(string,notend)))
 
     --GetTrackChunk(1)
     --SavePreset(1,2,'TEST')
-    --MSG('test: Setting wet level',20)
-    --SetWetDryLevels(20,.3)
-    --ConfigureTrack(GetSelectedTrackNumber())
-
-    --ClearRouting(GetSelectedTrackNumber())
-    --loadInstrument(22,'MT-Guitar Rig')
-    --loadInstrument(GetSelectedTrackNumber(),'Kontakt')
-    --loadInstrument(GetSelectedTrackNumber(),'PrIsm')
-    --loadInstrument(GetSelectedTrackNumber(),'Guitar Rig')
-
-    --SetWetDryLevels(GetSelectedTrackNumber(),.1)
-    --SetWetDryLevels(GetSelectedTrackNumber(),.3)
-    --SetWetDryLevels(GetSelectedTrackNumber(),.5)
-    --SetWetDryLevels(GetSelectedTrackNumber(),.7)
-    --SetWetDryLevels(GetSelectedTrackNumber(),.9)
+    ----MSG('test: Setting wet level',20)
+    --SetFxLevel(20,.3)
 
     --cue(21,0)
-    --IncrementEffect(21)
-    --SetTrackEffectMuted(21,true)
-    --SetTrackEffectMuted(21,false)
+    --IncFxNum(21)
+    --SetTrackFxMuted(21,true)
+    --SetTrackFxMuted(21,false)
     --GetRGB()
     --GetMeter(22,1)
 
-end
+    --MSG('testing')
+    --Output(1, 1, 0)
+    --SetFxLevel(1,.75)
+    ----MSG('fxlevel = ', GetFxLevel(1))
 
-function GetFxChan(chanNum)
-    for i = 1,GetSendCount(chanNum) do
-        MSG('GetFxChan: sendcount = ',GetSendCount(chanNum))
-        local dest = GetSendDest(chanNum,i)
-        MSG('GetFxChan: index',i,'destination Is',dest)
-        local muted = IsSendMuted(chanNum,i)
-        if IsMoonTrack(dest) and not muted then
-            MSG('GetFxChan: dest =',dest)
-            return ChanOfTrack(dest)
-        end
-    end
-    --if the send has been muted, then the recently muted track will have been put out of phase
-    for i = 1,GetSendCount(chanNum) do
-        local dest = GetSendDest(chanNum,i)
-        local phaseFlipped = GetSendPhase(chanNum,dest)
-        if IsMoonTrack(dest) and phaseFlipped then
-            return ChanOfTrack(dest)
-        end
-    end
-    return GetSendDest(chanNum,1) --nothing selected at all, return first fx
-end
 
-function GetEffectForIndex(chanNum,index)
-    --MSG('GetEffectForIndex: Get for index: ',index)
-    local tracks,count = GetEffectsForCh(chanNum)
-    MSG('GetEffectForIndex:  effect track = ',tracks[index])
-    return tracks[index],count
-end
-
-function GetIndexForEffect(chanNum)
-    local tracks,count = GetEffectsForCh(chanNum)
-    for i, chan in ipairs(tracks) do
-        MSG('GetIndexForEffect: i = ',i,', track = ',track)
-        if chan == GetFxChan(chanNum) then
-            MSG('GetIndexForEffect: returning index = ',i)
-            return i,count
-        end
-    end
-    if GetEffectForIndex(1) ~= chanNum then return 1,count
-    else return 2,count
-    end
-end
-
-function IsTrackEffectMuted(chanNum)
-    for i,chan in ipairs(GetEffectsForCh(chanNum)) do
-        if GetSendPhase(chanNum,chan) then return true
-        end
-    end
-    return false
-end
+--end
 
 
 
---Test()
+
+
+Test()
 --reaper.Track_GetPeakInfo( track, chan ) --use for meters

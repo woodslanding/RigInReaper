@@ -170,6 +170,10 @@ function MButtonPanel:getOption(idx)
     if self.options[idx] then return self.options[idx] else return nil end
 end
 
+function MButtonPanel:getSelectedOption(idx)
+    return self:getOption(self:getSelection())
+end
+
 function MButtonPanel:clearSelection()
     MSG(self.name..': resetting switches')
     for i,option in ipairs(self.options) do option.state = 0 end
@@ -184,7 +188,7 @@ function MButtonPanel:getSelectionData(field)
     if not self.multi then
         if not field then return self.selection.name else return self.selection[field] end
     end
-    --TStr('selection',self.selection))
+    --MST('selection',self.selection))
     local data = {}
     for i,option in pairs(self.selection) do
         if not field then data[i] = option.name
@@ -210,7 +214,7 @@ function MButtonPanel:select(index,doNotRun)
         local sw = self:getButtonForOption(index)
         MSG('found button '..sw.name)
         local option = self.options[index]
-        --TStr(option,'selected option')
+        --MST(option,'selected option')
         if option then   --some buttons may not have options...
             --in multi mode we generally just add or subtract from the selection.  If we want to do something, index 'run' to true
             if self.multi then   --in multimode we ignore everything in options except state
@@ -235,7 +239,7 @@ function MButtonPanel:select(index,doNotRun)
                         if not self.momentary then sw.frame = 1 end
                         option.state = 1
                         self.selection = option
-                        TStr(option,'selected option')
+                        MST(option,'selected option')
                         option:func()
                     else sw.frame = 0
                     end
@@ -269,7 +273,7 @@ end
 function MButtonPanel:pageToSelection()
     if self.multi then return 1 end
     local option = self:getSelection()
-    --TStr(option,'option')
+    --MST(option,'option')
     if not option then return 1 end
     local idx = option.index
     local page = math.floor(idx / (self.rows * self.cols))

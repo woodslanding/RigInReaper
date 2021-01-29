@@ -203,6 +203,8 @@ end
 ]]
 
 function MButton:val(set)
+    if set == false then set = 0 end
+    if set == true then set  = 1 end
     --if set then MSG('setting val to '..set..' for '..self.name)end
     if not set and self.vals then return self.vals[self.value]
     elseif not set and self.min and self.max then return self.value
@@ -273,7 +275,7 @@ function createSwitch(i)
         name = "switch"..i,
         type = "MButton",
         labelX = 0, labelY = 0,
-        image =  imageFolder.."Notesource.png",
+        image =  nil,
         func = function(self) MSG('setting track'..i.. 'to '..self.value) TrackName(i,"track "..self.value) end,
         params = {"a", "b", "c"}
     })
@@ -293,7 +295,7 @@ function MSpinnerTest()
         caption = '1',
         value = 1,
         min = 1, max = 3,
-        image = imageFolder.."EffectSpin.png",
+        image = nil,
         func = function(self) switches[1]:val(self.value) self.caption = self:val() MSG('function called:'..self.value) end,
     })
     return spinner
@@ -301,11 +303,27 @@ end
 ------------------------------------
 -------- Window settings -----------
 ------------------------------------
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1280
+
+function Fullscreen(window, off)
+    local title = window.name
+    local win = reaper.JS_Window_Find(title, true)
+    if not off then
+        local style = reaper.JS_Window_GetLong(win, 'STYLE')
+        if style then
+            style = style & (0xFFFFFFFF - 0x00C40000) --removes window frame
+            reaper.JS_Window_SetLong(win, "STYLE", style)
+        end
+        reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+    else --need to figure out this code...
+    end
+end
 
 local window = GUI.createWindow({
   name = "MButton Test",
-  w = 600,
-  h = 500
+  w = 1920,
+  h = 1280
 })
 ------------------------------------
 -------- GUI Elements --------------
@@ -318,6 +336,6 @@ end
 layer:addElements(MSpinnerTest())
 window:addLayers(layer)
 window:open()
-
+Fullscreen(window)
 GUI.Main()
 --]]

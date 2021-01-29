@@ -5,7 +5,7 @@ return {
     banks = {
         { name = "test", hue = 0, lokey = 1, hikey = 127, sat = 0,
             params = {},
-            presets = {}
+            presets = {"Record Player Music Box", "Woodwinds"}
         }
     }
 }

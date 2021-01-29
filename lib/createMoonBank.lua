@@ -118,6 +118,15 @@ function Bank:getPresets()
     return presets--]]
 end
 
+function Bank:presetsAsOptions()
+    local options = {}
+    --if #self:getPresets() == 0 then return options end
+    for i, preset in ipairs(self:getPresets()) do
+        options[i] = { name = preset }
+    end
+    return options
+end
+
 ---------------------------PLUGIN METHODS --------------------------
 Plugin = {}
 Plugin.__index = Plugin
@@ -139,7 +148,7 @@ function Plugin:getPresetString()
     local retStr = ''
     --MSG('GETTING MASTER PRESET LIST: presets unsorted'..Table.stringify(self.presets))
     local sorted = TableSort(Table.invert(self.presets))
-    --TStr(sorted, 'SORTED INVERTED TABLE OF PRESETS')
+    --MST(sorted, 'SORTED INVERTED TABLE OF PRESETS')
     for i,val in ipairs(sorted) do
         retStr = retStr..Esc(val)..', '
     end
@@ -161,7 +170,7 @@ function Plugin:getBankList()
     for i, bank in ipairs(self.banks) do
         table.insert(nameTable,bank.name)
     end
-    TStr(nameTable,'nameTable')
+    --MST(nameTable,'nameTable')
     local sorted = TableSort(Table.invert(nameTable))
     return sorted
 end
@@ -204,7 +213,7 @@ function Plugin:addBank(bankName,properties)
         end
     end
     table.insert(self.banks,bank)
-    TStr(bank,'bank created')
+    --MST(bank,'bank created')
 end
 
 function Plugin:containsPreset(presetName)
@@ -240,7 +249,7 @@ function Plugin:getIndicesOfBanksContaining(presetName)
 end
 
 function Plugin:addPresetToBanks(presetName,banks)
-    --MSG('adding preset '..presetName, 'to banks: '..TStr(banks))
+    --MSG('adding preset '..presetName, 'to banks: '..MST(banks))
     for i, bank in pairs(banks) do
         self:getBank(bank.name):addPreset(presetName)
     end
@@ -266,7 +275,7 @@ end
 function Plugin:getBank(bankName)
     --MSG('bankname = ')
     for i, bank in ipairs(self.banks) do
-        MSG('Checking '..self.name..' for bank '..bank.name)
+        --MSG('Checking '..self.name..' for bank '..bank.name)
         if bank.name == bankName then return bank end
     end
     MSG('createMoonBank, bank not found: ',bankName)
@@ -289,14 +298,14 @@ end
 function Plugin.load(name)
     local filename = GetFileStartingWith(name)
     if not filename then return end
-    MSG('loading file: ',PATH..filename)
+    --MSG('loading file: ',PATH..filename)
     local f = assert(loadfile(PATH..filename..'.lua'))
     local data = f()
     local self = setmetatable(data,Plugin)
     --MSG('initializing banks')
     for i,bank in ipairs(self.banks) do
         self.banks[i] = Bank.init(bank)
-        MSG('init bank'..Table.stringify(self.banks[i]))
+        --MSG('init bank'..Table.stringify(self.banks[i]))
     end
     return self
 end

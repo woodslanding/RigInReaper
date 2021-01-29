@@ -48,7 +48,7 @@
         1. AT --> CC and TOGGLE/ threshold
         2. MPE or NORMAL?
         3. MPE voice count
-        4. AUDIO INPUT (NONE, EXT, MIXER, BOTH)
+        4. AUDIO INPUT (line, mic1, mic2, inst)
         5.
 
 
@@ -102,7 +102,7 @@ MODES = {BANK = 'Bank Mode', PRESET = 'Preset Mode'}
 local PRESET = {NORMAL = 1, NO_RPL_FOR_FXP = 2, FXP_ONLY = 3, MISSING_RPL = 4 }
 
 local channel = 1  --We will get this from the main window
-local channelCount = #GetMoonTracks()  --TODO: query moonutils to get this
+local channelCount = CH_COUNT  --TODO: query moonutils to get this
 --------------------------------------------------------------------------------------------------------------------
 ------------------------------------------------------ FUNCTIONS ---------------------------------------------------
 --------------------------------------------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ function Map(ctl)
         local _, _, paramNum = GetLastTouchedFX()
         if paramNum then
             local paramName = GetParamName(channel,INSTRUMENT_SLOT,paramNum)
-            TStr(ctl,'Mapping Control:')
+            MST(ctl,'Mapping Control:')
             Bank:setParam(ctl.name,paramNum)
             SavePlug()
             ctl:setCaption(paramName)
@@ -127,7 +127,7 @@ end
 
 function RefreshChannels()
     for i = 1,channelCount do
-        Options.chanPanel:setOption(i, { name = GetPluginDisplayName(GetFXName(i)),
+        Options.chanPanel:setOption(i, { name = GetPluginDisplayName(GetPlugName(i)),
                                         color = 'gray',
                                         func = function(self) channel = self.index
                                             SetTrackSelected(channel)
@@ -141,7 +141,7 @@ end
 
 function RefreshBanks()
     local i = 1
-    local plugName = GetFXName(channel,INSTRUMENT_SLOT)
+    local plugName = GetPlugName(channel)
     --[[for name,vst in pairs(GetBankFileTable()) do
         MSG('setting option '..name..' to '..vst)
         VSTPanel:setOption(i,{
@@ -196,12 +196,12 @@ function LoadPlug()
         end
     end
     Presets = ArraySortByField(Presets, 'textColor')
-    TStr(Presets,'ALL PRESETS')
+    MST(Presets,'ALL PRESETS')
     --Presets = ArraySort(Presets)
     --Plug.presets = Presets
-    --TStr(Plug,'plug')
+    --MST(Plug,'plug')
     --Plug:save()
-    --TStr(Presets,'presets: ')
+    --MST(Presets,'presets: ')
     PresetPanel:setOptions(Presets)
     PresetPanel:setPage(1)
     RefreshChannels()
@@ -299,7 +299,7 @@ Options = {
             {name = 'New VST',func = function(self)
                                     Keyboard:visible(true)
                                     Keyboard.func = function()
-                                        local vstName = GetFXName(channel,INSTRUMENT_SLOT)
+                                        local vstName = GetPlugName(channel)
                                         Keyboard:setTitle('Set Display Name for '..vstName..':')
                                         Plug = Plugin.new(vstName,Keyboard.text,{})
                                         Plug:save()
@@ -319,7 +319,7 @@ Options = {
         {name = 'presets',rows = 8, cols = 5, icon = 'ComboRev',func = function(self)
             if Mode == MODES.BANK then
                 local presetNums = PresetPanel:getSelectionData('index')
-                TStr(presetNums,'preset nums')
+                MST(presetNums,'preset nums')
                 Plug:setPresetsForBank(Bank.name,presetNums)
                 SavePlug()
             elseif Mode == MODES.PRESET then
@@ -330,7 +330,7 @@ Options = {
                 --go through all the bankpanel's options
                 --for each one, get the bank name, and query the plug to determine if the preset is in it
                 for i,option in ipairs(BankPanel.options) do
-                    --TStr(option,'add option')
+                    --MST(option,'add option')
                     BankPanel:select(i,true)
                     --[[if Plug:bankContainsPreset(option.name,Preset) then
                         local button = BankPanel:getButtonForOption(i)
@@ -343,7 +343,7 @@ Options = {
         {name = 'banks',rows = 8, cols = 4, icon = 'ComboRev',func = function(self)
             if Mode == MODES.BANK then
                 Bank = Plug:getBank(self.name)
-                --TStr(Bank,'selected bank')
+                --MST(Bank,'selected bank')
                 PresetPanel:clearSelection()
                 SetBankInfo()
                 --might be able to streamline this, now options are indexed....
@@ -361,7 +361,7 @@ Options = {
                 local bankNums = BankPanel:getSelectionData()
                 local preset = PresetPanel:getSelectionData()
                 --MSG('in presetmode:  ',preset)
-                --TStr(bankNums,'bank numbers')
+                --MST(bankNums,'bank numbers')
                 if bankNums and preset then Plug:addPresetToBanks(preset,bankNums) SavePlug() end
             end
         end },
@@ -643,7 +643,7 @@ for i,submenu in ipairs(Options.menu) do
         window = BankWindow,
         options = {},
     })
-    TStr(menu, 'menu')
+    MST(menu, 'menu')
     --MSG(Table.stringify(menu))
     x = x + pad + ((#submenu) *  w)
     --do we need this?  check later...
@@ -741,7 +741,7 @@ RefreshChannels()
 
 --[[function RefreshChannels()
     for i = 1, channelCount do
-        Options.chanPanel:setOption(i, {name = GetPluginDisplayName(GetFXName(i)), func = function(self) channel = self.index end  } )
+        Options.chanPanel:setOption(i, {name = GetPluginDisplayName(GetPlugName(i)), func = function(self) channel = self.index end  } )
     end
     Options.chanPanel:setPage(1)
 end--]]

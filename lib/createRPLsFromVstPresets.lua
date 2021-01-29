@@ -109,7 +109,7 @@ end
 if not reaper.APIExists("JS_Localize") then
   reaper.MB("js_ReaScriptAPI extension is required for this script.", "Missing API", 0)
 else
-  TStr(GetVstPresets(1),'PRESETS')
+  MST(GetVstPresets(1),'PRESETS')
 end
 
 -- end
