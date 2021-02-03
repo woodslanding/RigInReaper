@@ -1,4 +1,11 @@
 {
+
+    "editor.acceptSuggestionOnCommitCharacter": false,
+    "editor.quickSuggestions": { "other": false, "comments": false, "strings": false },
+    "editor.quickSuggestionsDelay": 1000,
+    "editor.wordBasedSuggestions": false,
+    "editor.semanticHighlighting.enabled": true,
+
     "Lua.diagnostics.globals": [
         "gfx",
         "reaper",

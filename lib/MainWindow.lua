@@ -1,4 +1,11 @@
-------------------------------MSLIDER--------------------------------
+------------------------------MAIN WINDOW--------------------------------
+--[[
+    startup process:
+    do we want to load the default gpreset before setting up the gui, maybe??
+    But that is not helpful with bank settings--where to store them in the meantime?
+    Okay, we can't
+]]
+-------------------------------------------------------------------------
 -- The core library must be loaded prior to anything else
 local libPath = reaper.GetExtState("Scythe v3", "libPath")
 if not libPath or libPath == "" then
@@ -96,9 +103,9 @@ local function getLayer(z)
     return layers[z]
 end
 -- channel data
-local vsts = nil  --list of all mapped VSTs
-local plugs = nil  --list of selected VSTs by channel
-local gBanks = nil  --list of all global banks
+local vsts = {}  --list of all VSTs with bank files
+local plugs = {}  --list of loaded VSTs by channel
+local gBanks = {}  --list of all global banks
 local gBank = nil  --current global bank name
 local gBankPage = 1  --current global bank page
 local gPresets = nil
@@ -118,12 +125,14 @@ local bankPages = {} --list of bank pages
 
 ]]
 
-local function initPlug(chan)
-    if not plugs then plugs = {} end
-    local vst = GetPlugName(chan)
-    local displayName = GetPluginDisplayName(vst)
-    --MSG('plug name:',displayName)
-    plugs[chan] = Plugin.load(displayName)
+local function sync()
+    --set all gui elements to the reaper value they address
+    for i = 1,channelCount do
+        for name,element in pairs(gui.ch[i]) do
+            MSG('chan',i,'syncing element',name)
+            if element.sync then element:sync() end
+        end
+    end
 end
 
 local function chanColor(chan, hue, sat)
@@ -145,7 +154,7 @@ end
 function GetChFxOptions(chan)
     local options = {}
     for i, fxch in ipairs(GetChFxList(chan)) do
-        MSG('fx chan = ',fxch)
+        --MSG('fx chan = ',fxch)
         options[i] = {name = GetPresetName(fxch), color = chanColor(fxch), chan = fxch,
                     func = function(self)
                         local option = gui.fxSelect:getOption(self.index)
@@ -162,38 +171,54 @@ function GetChFxOptions(chan)
     return options
 end
 
+local function initPlug(chan)
+    local ch = gui.ch[chan]
+    local vstName = GetPluginDisplayName(GetPlugName(chan))
+    MSG('vst name', vstName, 'chan',chan)
+    plugs[chan] = Plugin.load(vstName)
+    banks[chan] = plugs[chan]:getBanks()
+    MST(banks[chan], 'banks for chan'..chan)
+    local bankName = banks[chan][1].name
+    MSG('bankname',bankName)
+    local currentBank = plugs[chan]:getBank(bankName)
+    ch.bank:val(currentBank.name)
+    chanColor(chan, currentBank.hue, currentBank.sat)
+    presets[chan] = currentBank:presetsAsOptions()
+end
+
 local function initTables()
     vsts = GetBankFileTable()
     for chan = 1, channelCount do
-        local ch = gui.ch[chan]
         initPlug(chan)
-        banks[chan] = plugs[chan]:getBanks()
-        local firstBank = banks[chan][1]
-        ch.bank:val(firstBank.name)
-        chanColor(chan, firstBank.hue, firstBank.sat)
-        presets[chan] = firstBank:presetsAsOptions()
     end
     SetPanelsPRESETS()
 end
 --called by the bank panel when a button is selected
-local function selectBank()
+function SelectBank()
+    local bank = gui.banks:getSelectedOption()
     if PanelDisplay == GLOBAL then
-        --gBank = bankName
+        gBank = bank.name
     elseif PanelDisplay == VST then
     elseif PanelDisplay == PRESET then
-        banks[iCh] = gui.banks:getSelectedOption()
-        ch().bank:val(banks[iCh].name)
-        chanColor(iCh, banks[iCh].hue, banks[iCh].sat )
-        gui.presets:select(1)
+        banks[iCh] = bank
+        ch().bank:val(bank.name)
+        chanColor(iCh, bank.hue, bank.sat )
+        ---ToDo:  need to check if it is an fx, and update fxNames
+        ---maybe use the sync methods for this sort of thing?
+        gui.presets:select(1) --eventually, maybe a bank stores a default preset
     end
 end
-
+--called by the preset panel when a button is selected
 function selectPreset()
+    local preset = gui.presets:getSelectedOption()
     if PanelDisplay == PRESET then
-        ch().presetName:val(name)
-        SelectPreset(ch(), name)
+        presets[iCh] = preset
+        ch().presetName:val(preset.name)
+        gui.trackTitle:val(preset.name)
+        SelectPreset(iCh, preset.name)
+        --if the bank isFx, then update send labels
     elseif PanelDisplay == GLOBAL then
-        GlobalRecall(name)
+        GlobalRecall(preset.name)
     elseif PanelDisplay == VST then
     end
 end
@@ -211,7 +236,7 @@ end
 
 -----------------------------------------------------------------------------------------------------------------
 -------------------------------------------SWITCH PANEL DISPLAYS ------------------------------------------------
-local function setPanelsGLOBAL()
+function SetPanelsGLOBAL()
     PanelDisplay = GLOBAL
     if not gBanks then gBanks = OptionsFromPath(PRESET_FOLDER) end
     gui.banks:setOptions(gBanks)
@@ -228,7 +253,7 @@ local function setPanelsGLOBAL()
     end
 end
 
-local function setPanelsVST()
+function SetPanelsVST()
     PanelDisplay = VST
     gui.banks:setOptions(vsts)
     gui.banks:selectByName(ch().vst:val())
@@ -240,27 +265,8 @@ function SetPanelsPRESETS()
     gui.banks:setOptions(banks[iCh])
     gui.presets:setOptions(presets[iCh])
 end
-
 -- DEPRECATE
---[[function ShowPresets(vst, chan)
-    PanelDisplay = PRESET
-    local i
-    if chan then i = chan else i = ch() end
-    if not vst then vst = vsts[i] end  --we should fill this table before loading any banks, I think
-    if not plugs[i] or plugs[i].vstName ~= vst then plugs[i] = Plugin.load(vst) end  --don't want to re-read every time we switch channels
-    local banks = plugs[i]:getBankList()
-    gui.banks:setColor('gray', true)
-    for i,bankName in ipairs(banks) do
-        local bank = plugs[i]:getBank(bankName)
-        gui.banks:setOption(i, {index = i, name = bankName, bank = bank, color = GetRGB(bank.hue,bank.sat,BRIGHTNESS)})
-    end
-    if not gBank then gBank = GetFileList(PRESET_FOLDER)[1] end
-    gui.banks:setPage(bankPages[i] or 1)
-    Presets = Plug:getPresetList()
-    for i,preset in ipairs(Presets) do Presets[i] = { name = preset } end
-    gui.presets:setOptions(Presets)
-    gui.presets:setPage(presetPages[i] or 1)
-end
+--[[
 
 function ShowVsts()
     PanelDisplay = VST
@@ -281,7 +287,7 @@ function ShowGlobalPanel()
     if not gBanks then gBanks = OptionsFromPath(PRESET_FOLDER, true) end
     gui.banks:setOptions(gBanks)
     if not gBank then gBank = gui.banks:getOption(1).name end
-    selectBank(gBank)
+    SelectBank(gBank)
 end]]
 
 
@@ -342,14 +348,17 @@ function GlobalRecall(presetName)
                 MSG('Channel: '..i)
                 for name, val in pairs(chan) do
                     --check for obselete fields....
-                    local field = gui.ch[i][name]
-                    if field then
-                        MSG('setting field: '..name..', value = '..val)
-                        gui.ch[i][name]:val(val) end
+                    local elm = gui.ch[i][name]
+                    if elm then
+                        MSG('loading element: '..name..', value = '..val)
+                        elm:val(val) --update control
+                        elm:func()  --update reaper
+                    end
                 end
             end
         else
             gui[name]:val(gval)
+            gui[name]:func()
         end
     end
     for i,channel in ipairs(gui.ch) do
@@ -357,17 +366,24 @@ function GlobalRecall(presetName)
         plugs[i] = Plugin.load(vst)
         MST(plugs[i],'plugin')
         MSG("loading vst: "..plugs[i].vstName)
-        --LoadInstrument(i, vstName)
-        MSG('getting bank: '..channel.bank:val())
-        banks[i] = plugs[i]:getBank(channel.bank:val())
-        presets[i] = banks[i]:getPresets()
-        MSG('setting preset to: '..channel.preset:val())
-        SelectPreset(i, channel.preset:val())
+        LoadInstrument(i, vst)
+        initBank(i) --don't sync yet
     end
-
+    --set all sends at once after loading everything
+    sync()
 end
 
-
+--called anytime a bank is changed. use update except for global recall
+function initBank(chan, update)
+    local channel = gui.ch[chan]
+    MSG('getting bank: ',channel.bank:val())
+    banks[chan]  =  plugs[chan]:getBank(channel.bank:val())
+    SetChanFxStatus(chan, banks[chan].isfx)
+    presets[chan] = banks[chan]:getPresets()
+    MSG('setting preset to: '..channel.preset:val())
+    SelectPreset(chan, channel.preset:val())
+    if update then sync() end
+end
 
 --------------------------------------------------------------------------------------------------
 --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{          LAYOUT CONSTANTS            }}}}}}}}}}}}}}}}}}}}}}}}}}}}}
@@ -429,17 +445,6 @@ local window = GUI.createWindow({
 Keyboard = MText.new({ x = 100, y = 100, window = window, z = 2 })
 Keyboard:visible(false)
 
-local function sync()
-    --query all ui elements for the reaper value they address
-    for i = 1,channelCount do
-        for name,element in pairs(gui.ch[i]) do
-            --MSG('updating control: ', element.name)
-            --MSG('element.sync = ', element.sync)
-            if element.sync then element:sync() end
-        end
-    end
-end
-
 local function setBackdrop()
     local bkdp = GUI.createElement({
         type = "Frame",
@@ -478,11 +483,14 @@ end
 
 local function createTitle(props,ch)
     if not ch then ch = '' end
+    local icon = props.icon or nil
+    if icon then icon = imageFolder..icon..'.png' end
     local fontSize = props.fontSize or 32
     local font = {'Calibri', fontSize,"b"}
     local title = GUI.createElement ({
         type = "MButton",
         name = props.name..'_'..ch,
+        image = icon or nil,
         momentary = props.momentary or true,
         multi = props.multi or false,
         caption = props.caption or props.name,
@@ -655,21 +663,21 @@ end
 
 gui = {
     leftMenu = {  x = leftPad, y = 0, options = {
-            { name = 'Presets', momentary = true, func = function() end },
-            { name = 'Banks', momentary = true, func = function() end},
-            { name = 'VSTs', momentary = true, func = function() end},
+            { name = 'Global', momentary = true, func = function() setPanelsGLOBAL() end },
+            { name = 'Banks', momentary = true, func = function() SetPanelsPRESETS() end},
+            { name = 'VSTs', momentary = true, func = function() SetPanelsVST() end},
             { name = 'Scroll Left', momentary = true, func = function(self) leftPad = -300
                                             ResizeWindow(window, leftX, 0, 1000, SCREEN_HEIGHT) window:redraw() end },
             { name = 'Quit', momentary = true, func = function(self) CloseWindow(window) end },
             { name = 'FullScreen', momentary = false, func = function(self) Fullscreen(window, self:val() == 0) end },
         },
     },
-    globalBank = { name = 'globalBank', save = true, multi = false,  fontSize = 18, x = bankX - (btnW * 4), y = 0, w = 4 * btnW, func = function(self) end}, -- show global banks in preset panel, and vsts in bank panel
-    globalPreset = { name = 'globalPreset', save = true, x = bankX - btnW, y = 0, w = 4 * btnW, color = 'gray', func = function(self) end}, --show global presets in preset panel
+    globalBank = { name = 'gBank', save = true, multi = false,  fontSize = 18, x = bankX - (btnW * 4), y = 0, w = 4 * btnW, sync = function(self)  end},
+    globalPreset = { name = 'gPreset', save = true, x = bankX - btnW, y = 0, w = 4 * btnW, color = 'gray', func = function(self) end},
     rightMenu = { x = transportX, y = 0, options =  {
-            { name = 'Edit Banks',momentary = true, func = function(self) OpenBankEditor() end},
-            { name = 'GlobalSave Preset', momentary = true, func = function(self) GlobalSave(gui.globalPreset.caption) end},
-            { name = 'GlobalSave As', momentary = true, func = function(self) GlobalSaveAs()  end }
+            { name = 'BankEditor',momentary = true, func = function(self) OpenBankEditor() end},
+            { name = 'gSave', momentary = true, func = function(self) GlobalSave(gui.globalPreset.caption) end},
+            { name = 'gSave As', momentary = true, func = function(self) GlobalSaveAs()  end }
         }
     },
     masterVol = {   name = 'masterVol', save = true, icon = 'masterVol', color = 'blue', x = masterVolX, y = 0, h = paramsY,  frames = 108,
@@ -687,10 +695,10 @@ gui = {
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ ROW 2 }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
-    fxLevel =  {   name = 'fxLevel', x = leftPad, y = paramsY ,frames = 72, max = 99, h = 5 * btnH, func = function(self) end},
+    fxLevel =  {   name = 'fxLevel', x = leftPad, y = paramsY ,frames = 72, max = 99, h = 5 * btnH, func = function(self) SetFxLevel(iCh, self:val()) ch().send:val(self:val()) end},
     fxLabel =  {   name = 'fxLabel', x = leftPad + pad, y = paramsY + 55, fontSize = 24, h = 5 * btnH},
     panFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true,
-                    w = 2 * inspBtnW, h = btnH, func =  function(self) ch().pan:val(self:val()) end },
+                    w = 2 * inspBtnW, h = btnH, func =  function(self) ch().pan:val(self:val()) Pan(iCh, self:val()) end },
     trackTitle = {  name = 'trackTitle', x = paramsX, y = paramsY, w = btnW * 3, func = function(self) OpenPlugin(iCh) end },  --show vst
     paramTabs = { name = 'paramTabs',x = paramsX + (5 * btnW), y = paramsY, rows = 1, cols = 2, color = GetRGB(0,0,75), options = {
             { name = 'Params', func = function(self) gui.params.layer:show() gui.mappings.layer:hide()  end },
@@ -705,13 +713,13 @@ gui = {
             { name = 'MuteFx', func = function(self) ch().MuteFx:val(self:val())  end },
             { name = 'NsSolo', func = function(self) ch().NsSolo:val(self:val())  end },
             { name = 'Hands', func = function(self)  ch().Hands:val(self:val()) SetMoonParam(iCh, MCS.HANDS, self:val()) end },
-            { name = 'Sharp', momentary = true, func = function(self)   ch().semi:increment(1,false) end },
-            { name = 'Natural', momentary = true, func = function(self) ch().semi:val(0); ch().oct:val(0); ch().octaveSpin:setCaption('') end },
-            { name = 'Flat', momentary = true, func = function(self)    ch().semi:increment(-1,false) end },
+            { name = 'Sharp', momentary = true, func = function(self)   ch().semi:increment(1,false) SetMoonParam(iCh, MCS.SEMI, ch().semi:val()) end },
+            { name = 'Natural', momentary = true, func = function(self) ch().semi:val(0); ch().oct:val(0); ch().octaveSpin:setCaption('') SetMoonParam(iCh, MCS.SEMI, 0) end },
+            { name = 'Flat', momentary = true, func = function(self)    ch().semi:increment(-1,false) SetMoonParam(iCh, MCS.SEMI, ch().semi:val()) end },
             { name = 'Encoders', func = function(self)  ch().Encoders:val(self:val()) MidiIN(iCh, TRACKS.IN_ENC, self:val()) end },
-            { name = 'Switches1', func = function(self) ch().Switches1:val(self:val()) end },
-            { name = 'Switches2', func = function(self) ch().Switches2:val(self:val()) end },
-            { name = 'Drawbars', func = function(self)  ch().Drawbars:val(self:val()) end },
+            { name = 'Switches1', func = function(self) ch().Switches1:val(self:val()) MidiIN(iCh, TRACKS.IN_SW1) end },
+            { name = 'Switches2', func = function(self) ch().Switches2:val(self:val()) MidiIN(iCh, TRACKS.IN_SW2) end },
+            { name = 'Drawbars', func = function(self)  ch().Drawbars:val(self:val()) MidiIN(iCh, TRACKS.IN_DRWB) end },
         },
     },
     params =    {   name = 'params', x = paramsX, y = paramsY + btnH, rows = paramRows, cols = paramCols, chColor = true, func = function(self) end },
@@ -765,8 +773,8 @@ gui = {
     --In most cases, display and proj should agree about sync values, but if not, then the project wins.
 
     -- this data is stored unless save = false
-    send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, self:val()) end, sync = function(self) self:val(GetFxLevel(self.ch)) self:setColor(chanColor(GetFxChan(self.ch))) end},
-    sendLabel =  { name = 'sendLabel', x = leftPad + 4, y = fxSendY + 8, w = 120, h = 20, fontSize = 18, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
+    send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, self:val()) gui.fxLevel:val(self:val()) end, sync = function(self) self:val(GetFxLevel(self.ch)) self:setColor(chanColor(GetFxChan(self.ch))) end},
+    sendLabel =  { name = 'sendLabel', x = leftPad + 4, y = fxSendY + 12, w = 120, h = 20, fontSize = 18, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
     semi =     { name = 'Semi', bg = true, x = semiX, y = fxSendY, displayOnly = true, wrap = false, z = 4,
                                     w = 16, h = spinnerH, frames = 15, min = -7, max = 7, sync = function(self) self:val(GetMoonParam(self.ch, MCS.SEMI))  end }, -- stores semi data
     oct  =     { name = 'Oct', bg = true, x = semiX, y = octY, displayOnly = true, wrap = false, z = 4,
@@ -793,7 +801,7 @@ gui = {
     meterR = { name = 'meterR', bg = true, save = false, x = leftPad, y = chanY - (meterH/2), h = panH/2, w = chanW, horizontal = true,
                                     displayOnly = true, frames = 25, chColor = true },
 
-    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 88, fontSize = 28,  sync = function(self) self:val(GetPresetName(self.ch)) end  },
+    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 106, fontSize = 26,  sync = function(self) self:val(GetPresetName(self.ch)) end  },
     volume =    { name = 'volume', bg = true, x = leftPad, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) Output(self.ch,self:val()) end ,  sync = function(self) self:val(Output(self.ch)) end },
 
     lights =  { x = leftPad + indX, y = chanY + pad, w = indW, h = indH, displayOnly = true, z = indZ, options = {
@@ -802,10 +810,10 @@ gui = {
             { name = 'MuteFx', sync = function(self) end },
             { name = 'NsSolo', sync = function(self) end },
             { name = 'Hands', sync = function(self) GetMoonParam(self.ch, MCS.HANDS) end },
-            { name = 'Encoders', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_ENC)) end },
-            { name = 'Switches1', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_BTN_UP)) end },
-            { name = 'Switches2', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_BTN_DN)) end },
-            { name = 'Drawbars', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_DRWB)) end },
+            { name = 'Encoders',  sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_ENC)) end },
+            { name = 'Switches1', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_SW1)) end },
+            { name = 'Switches2', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_SW2)) end },
+            { name = 'Drawbars',  sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_DRWB)) end },
         },
     },
     buttons = { x = chanBtnX, y = chanY, w = chBtnW, h = btnH, chColor = true, options =  {
@@ -818,9 +826,9 @@ gui = {
             { name = 'Enable',  bg = true, vals = {1,2,3,4}, frames = 4, func = function(self) end, sync = function(self) end },
         },
     },
-    vst   =  { name = 'vst', caption = '', color = 'black', icon = 'Empty', labelX = .1,
+    vst   =  { name = 'vst', caption = '', color = 'black', icon = 'plain', labelX = .1,
             x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'green', displayOnly = true, sync = function(self) initPlug(self.ch) self:val(plugs[self.ch].name) end },
-    bank  =  { name = 'Bank', color = 'black', caption = '', icon = 'Empty',
+    bank  =  { name = 'Bank', color = 'black', caption = '', icon = 'plain',
             x = leftPad, y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'yellow', displayOnly = true, sync = function(self) self:val(banks[self.ch].name) end },
     nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2}, frames = 3, w = faderW, h = btnH, func = function(self) end, sync = function(self) end },
     select    =  { name = 'Select', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, func = function(self) chChanged(self.ch) end, sync = function(self) end },
@@ -937,7 +945,8 @@ function chChanged(chNum)
     gui.fxLabel:val( ch().sendLabel:val() )
 
     gui.fxSelect:setOptions(GetChFxOptions(iCh))
-    --MST(gui.fxSelect.options, 'OPTIONS')
+
+    MST(gui.fxSelect.options, 'OPTIONS')
 
     gui.fxSelect:select(GetFxChan(iCh),true)
     --should this happpen automatically???

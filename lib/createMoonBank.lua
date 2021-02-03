@@ -273,7 +273,7 @@ function Plugin:setBankPreset(bankName,presetName)
 end
 
 function Plugin:getBank(bankName)
-    --MSG('bankname = ')
+    MSG('bankname = ',bankName)
     for i, bank in ipairs(self.banks) do
         --MSG('Checking '..self.name..' for bank '..bank.name)
         if bank.name == bankName then return bank end

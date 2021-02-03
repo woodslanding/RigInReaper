@@ -78,8 +78,8 @@ TRACKS = {
             IN_MOD = 12 + CH_COUNT,   --Yamaha Port, CH1
             IN_ENC = 13 + CH_COUNT,   --behringer port CH1
             IN_PUSH = 14 + CH_COUNT,  --behringer port CH2
-            IN_BTN_UP = 15 + CH_COUNT,--behringer port CH3
-            IN_BTN_DN = 16 + CH_COUNT,--behringer port CH4
+            IN_SW1 = 15 + CH_COUNT,--behringer port CH3
+            IN_SW2 = 16 + CH_COUNT,--behringer port CH4
             IN_SUS = 17 + CH_COUNT,   --FC port
             IN_FSW = 18 + CH_COUNT,   --FC port
             IN_EXP = 19 + CH_COUNT,   --FC port
@@ -310,21 +310,23 @@ function GetFileStartingWith(startsWith,path)
     ERR('No file found starting with: '..startsWith)
 end
 
---parses bank folder and returns a table with displayName = vstName
+--parses bank folder and returns a table
 function GetBankFileTable(path)
     if not path then path = BANK_FOLDER end
-    local table = {}
+    local files = {}
     for i,filename in pairs(GetFileList(path)) do
         local parts = StringSplit(filename,'.')
-        table[parts[1]] = parts[2]
+        --table[parts[1]] = parts[2]
+        files[i] = { name = parts[1], vst = parts[2]}
     end
-    --MST(table,'bank folder')
-    return table
+    local sorted = ArraySortByField(files)
+    --MST(sorted,'bank file table')
+    return sorted
 end
 
 function GetPluginDisplayName(plugName, path)
-    for name, vst in pairs(GetBankFileTable(path)) do
-        if vst == plugName then return name end
+    for i, plug in pairs(GetBankFileTable(path)) do
+        if plug.vst == plugName then return plug.name end
     end
     return plugName --if no bank file, just use the dll filename2
 end
@@ -376,9 +378,11 @@ function Fullscreen(window, off)
             style = style & (0xFFFFFFFF - 0x00C40000) --removes window frame
             reaper.JS_Window_SetLong(win, "STYLE", style)
         end
-        reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
     else --need to figure out this code...
+
+
     end
+    reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 end
 
 function ResizeWindow(window, x, y, w, h)
@@ -486,21 +490,15 @@ function ArraySortByField(array, field)
     if not field then field = 'name' end
     local names = {}
     for i, element in ipairs(array) do
-        MST(element, 'element table')
-        --if type(element) == 'table' then names[element.name] = element
         if type(element) == 'table' then names[element[field]] = element or ''
         elseif type(element) == 'string' then names[element] = element or ''
         end
     end
-    --MST(names,'names')
     local sorted =  TableSort(names)
-    MST(sorted,'sorted')
     for i, element in ipairs(sorted) do
         sorted[i] = names[element]
-        --MST(names[element])
     end
     return sorted
-
 end
 
 -------------------------------------------------------------------------------------------------------------
@@ -638,8 +636,6 @@ function ToggleTrackEnable(chan)
 end
 --################################################################################################################--
 --------------------------------------------SEND AND RECEIVE--------------------------------------------------------
---TODO: we have an issue with send indexes, maybe?  We need to get the send numbers for audio outs, which are not moontracks.
---Can we deal with that okay???
 function GetSendDest(chan,index)
     local track = GetTrack(chan)
     local dest = reaper.BR_GetMediaTrackSendInfo_Track( track, REAPER.SEND, index-1, 1)
@@ -698,17 +694,14 @@ function IsReceiveMuted(chan, index)
 end
 
 function GetSendIndex(chan, destChan)
-    ----MSG('GetSendIndex:  chan =', chan, 'dest chan =', destChan)
     for i = 1, GetSendCount(chan) do
         local dest = GetSendDest(chan, i)
         if dest == destChan then
-            ----MSG('GetSendIndex:  chan =', chan,'send index =', i)
             return i
         end
     end
     --quietly fail
     return nil
-    --ERR('GetSendIndex: dest', destChan, 'not found for chan', chan)
 end
 
 function IsSendMuted(chan, destCh)
@@ -816,13 +809,13 @@ end
 ------#######################################################################################################
 ------------------------------------------------ FX LOADING ---------------------------------------------
 --When we load an instrument, we need to first remove all its receives from other channels
---Then we need to check if the new instrument is an effect.  If so, add the receives back.
-
+--Edit: isFx is stored in the bank.  When we load an instrument, we load its first (or default) bank,
+--and set the sends accordingly with SetChanFxStatus()
 function LoadInstrument(chan,vstname)
     --defer???
     --we will have to select a bank before re-adding the sends
     reaper.PreventUIRefresh(1)
-    SetChanToFX(chan, false)
+    SetChanFxStatus(chan, false)
     local oldName = GetPlugName(chan, INSTRUMENT_SLOT)
     ----MSG('new fx name = '..vstname, 'old name = '..oldName)
     if vstname ~= oldName then
@@ -926,15 +919,15 @@ function SetFxByIdx(chan,fxIdx)
 end
 
 --remove the old send, and rebuild, in case there are non-conforming settings
-function SetChanToFX(chan, enable)
+function SetChanFxStatus(chan, isfx)
     for dest = 1, CH_COUNT do
         if dest ~= chan then
-            local muted = IsSendMuted(chan, dest)
+            local muted IsSendMuted(chan, dest)
             RemoveSend(chan, dest)
-            if enable then  else
+            if isfx then
                 AddSend(chan, dest)
                 SetSendPreFader(chan, dest)
-                MuteSend(chan, dest, muted)
+                MuteSend(chan, dest, muted) --restore the mute setting
             end
         end
     end
@@ -946,7 +939,7 @@ function GetChFxList(chan)
     local chFX = {}
     for i, fxchan in ipairs(getFxList()) do
         if fxchan ~= chan then
-            --MSG('Get chan fx list, adding',moonchan)
+            MSG('Get chan fx list, adding ch', fxchan,'as fx to chan',chan)
             table.insert(chFX, fxchan)
         end
     end
@@ -1068,22 +1061,28 @@ end
 --should take or return a paramVal
 function Output(chan, paramVal, trim)
     if not trim then trim = 0 end
-    if not paramVal then return math.exp((OutputDB(chan) - trim) / 20)
-    else OutputDB(chan, (20 * math.log(paramVal)) + trim)
+    if not paramVal then
+        MSG('Getting output',chan, 'of', math.exp((OutputDB(chan) - trim) / 20))
+         return math.exp((OutputDB(chan) - trim) / 20)
+    else
+        --MSG('Setting output',chan, 'to',paramVal)
+        OutputDB(chan, (20 * math.log(paramVal)) + trim)
     end
 end
---lets try storing values as db, which is more readable and meaningful
+--lets try storing values as db, which is more readable and meaningful  Edit: maybe eventually.
 function OutputDB(chan, db)
     if not db then
-        local _,vol,pan = reaper.GetTrackSendUIVolPan(GetTrack(chan), TRACKS.OUT_MON) --should be the same as the others
-        --MSG('track,vol,pan = ', chan, vol, pan)
+        MSG('volpan, track = ',chan,'output =',TRACKS.OUT_MON)
+        local sendIdx = GetSendIndex(chan,TRACKS.OUT_MON)
+        local _,vol,pan = reaper.GetTrackSendUIVolPan(GetTrack(chan), sendIdx-1 ) --should be the same as the others
+        MSG('track,vol,pan = ', chan, vol, pan)
         return ultraschall.MKVOL2DB(vol)
     else
         local fader = ultraschall.DB2MKVOL(db)
         for output = TRACKS.OUT_MON,TRACKS.OUT_D do
             --SetSendLevel(tracknum, output, fader, true)
             ----MSG('SetFxLevel: track',output,', Setting level',fader)
-            local sendIdx = GetSendIndex(chan, output, true) --using reaper idx now
+            local sendIdx = GetSendIndex(chan, output) --using reaper idx now
             ----MSG('SetFxLevel: Setting level for index',sendIdx,'vol=', fader)
             reaper.SetTrackSendUIVol(GetTrack(chan), sendIdx-1, fader, 0)
         end

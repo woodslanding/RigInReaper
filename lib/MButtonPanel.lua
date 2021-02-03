@@ -141,6 +141,7 @@ function MButtonPanel:setMomentary(momentary, optionIDX)
 end
 
 function MButtonPanel:setOptions(options)
+    self.options = {}
     for i, option in ipairs(options) do
         self:setOption(i, option)
     end
@@ -168,7 +169,7 @@ end
 function MButtonPanel:getOption(idx)
     if self.options[idx] then return self.options[idx] else return nil end
 end
-
+--idx used with multi-select only
 function MButtonPanel:getSelectedOption(idx)
     return self:getOption(self:getSelection(idx))
 end
