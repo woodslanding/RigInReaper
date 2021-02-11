@@ -29,7 +29,7 @@ MSlider.defaultProps = {
     name = "mslider", type = "MSLIDER", displayOnly = false,
     frames = 20, horizontal = false,
     x = 16, y = 32, w = 24, h = 24,
-    labelX = 0, labelY = 0,
+    captionX = 0, captionY = 0,
     caption = "", font = 3, textColor = "text",
     func = function () end,
     params = {},
@@ -95,8 +95,8 @@ function MSlider:draw()
     local playX = w-strWidth
     local playY = h - strHeight
 
-    gfx.x = x + (playX / 2) + (self.labelX * playX)
-    gfx.y = y + (playY / 2) + (self.labelY * playY)
+    gfx.x = x + (playX / 2) + (self.captionX * playX)
+    gfx.y = y + (playY / 2) + (self.captionY * playY)
     gfx.drawstr(str)
 end
 
@@ -179,7 +179,7 @@ local slider = GUI.createElement({
     type = "MSlider",
     color = 'red',
     w = 180,h = 48,x = 0,y = 0,
-    labelX = 0,labelY = 0,
+    captionX = 0,captionY = 0,
     --image =  "meterL.png",
     image = imageFolder.."SimpleFader.png",
     func = function(self, a, b, c) MSG(self.name, self:val()) end,
@@ -197,7 +197,7 @@ local slider = GUI.createElement({
     color = 'red',
     type = "MSlider",
     w = 64,h = 288,x = 200,y = 10,
-    labelX = 0,labelY = 0,
+    captionX = 0,captionY = 0,
     image =  imageFolder.."Volume.png",
     func = function(self, a, b, c) self.caption = self.value end,
     params = {"a", "b", "c"}

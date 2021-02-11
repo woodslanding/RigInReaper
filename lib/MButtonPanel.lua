@@ -15,6 +15,7 @@ require "moonUtils"
 local GUI = require("gui.core")
 local M = require("public.message")
 local Table = require("public.table")
+local Color = require("public.color")
 local T = Table.T
 
 local function createPager(parent)
@@ -145,6 +146,7 @@ function MButtonPanel:setOptions(options)
     for i, option in ipairs(options) do
         self:setOption(i, option)
     end
+    self:clearSelection()
     self:setPage(1)
 end
 
@@ -160,7 +162,8 @@ function MButtonPanel:setOption(idx,parameters)
             textColor = params.textColor or 'text',
             momentary = params.momentary or self.momentary,
             name = params.name or '???',
-            func = params.func or self.func
+            func = params.func or self.func,
+            image = params.image or nil
         }
     end
     return self.options[idx]
@@ -175,7 +178,7 @@ function MButtonPanel:getSelectedOption(idx)
 end
 
 function MButtonPanel:clearSelection()
-    MSG(self.name..': resetting switches')
+    --MSG(self.name..': resetting switches')
     for i,option in ipairs(self.options) do option.state = 0 end
     if self.multi then self.selection = {} else self.selection = nil end
     for i = 1, self.rows * self.cols do
@@ -183,6 +186,7 @@ function MButtonPanel:clearSelection()
     end
 end
 --defaults to getting the names, but can get any option field
+--in multi mode, returns a table of {optionIndex = fieldData}
 function MButtonPanel:getSelectionData(field)
     if not self.selection then return nil end
     if not self.multi then
@@ -198,21 +202,26 @@ function MButtonPanel:getSelectionData(field)
     return data
 end
 
-function MButtonPanel:selectByName(name)
+function MButtonPanel:selectByName(name, doNotRun)
     --options really shouldn't have duplicate names... but if they do, this returns the first one.
     MSG('setting panel to ',name)
     for i, option in pairs(self.options) do
         if option.name == name then
-            self:select(option.index)
+            self:select(option.index, doNotRun)
             self:pageToSelection()
         end
     end
 end
---returns a table of options (or a single option?)
+--takes and index, or an option.  DoNotRun only updates the display, does not run the action
+--when a button is pressed, the button's func is called, which runs this.  Then, buttonPanel
+--runs (optionally) the option associated with the function, which will be the panel's func method,
+--unless the option has overridden it.
 function MButtonPanel:select(index,doNotRun)
+    MSG('SELECT CALLED: index = ',index)
+    if type(index) == 'table' then index = index.index end
     if index then
         local sw = self:getButtonForOption(index)
-        MSG('found button '..sw.name)
+        --MSG('found button '..sw.name)
         local option = self.options[index]
         --MST(option,'selected option')
         if option then   --some buttons may not have options...
@@ -258,8 +267,16 @@ function MButtonPanel:getSelection(index)
     else return self.selection
     end
 end
+--returns an array of indices, {1 = selectedIndex1} etc.
+function MButtonPanel:getSelectedIndices()
+    local selected = {}
+    for i, option in ipairs(self.options) do
+        if option.state == 1 then table.insert(selected,i) end
+    end
+    return selected
+end
 --val can only get or set one value.  need another mechanism for multi-vals
---wait this will typically be a name
+--wait this will typically be a name.  if you don't want to run the action, use selectByName.
 function MButtonPanel:val(name)
     if name then self:selectByName(name)
     else return self:getSelectionData()
@@ -294,7 +311,12 @@ function MButtonPanel:setPage(page) --pages start at 1
         --don't use setOption,as that will automatically create an option...
         local option = self.options[optionIdx]
         --MSG('option = '..Table.stringify(option))
-        if not option then sw.caption = '---' sw.state = 0
+        if not option then
+            --sw.caption = '---'
+            sw.caption = ''
+            sw.state = 0
+            sw.image = self.image or nil
+            sw.color =  Color.fromRgba(48, 48, 48, 255)
         else
             sw.option = option
             sw.caption = option.name --shouldn't have an option without a name

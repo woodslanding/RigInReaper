@@ -23,17 +23,26 @@ loadfile(libPath .. "scythe.lua")({printErrors = true})
 local M = require("public.message")
 local Table = require("public.table")
 local Color = require("public.color")
+local Math = require("public.math")
 local T = Table.T
 
 local moonTracks = nil
+local gBanks = nil  --list of all global banks
+local gBank = nil
+local gPresets = nil --
 
---require 'Save_VST_Preset'
+
 
 IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
 BANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Banks/"
-PRESET_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Presets/"
+GBANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/GBanks/"
 
 BRIGHTNESS = 50
+
+REAPER_TEMPO = 120
+BEAT = 4  --default to 4/4
+BEAT_MOD = 1
+METER_MOD = 1
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1280
@@ -160,6 +169,7 @@ NOTES = {'C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'}
 local previousNotesourceSetting = 0
 local currentFxList = nil
 local moonTracks = nil
+local fxChannels = {}
 
 function GetNoteName(noteNum)
     noteNum = math.floor(noteNum)
@@ -169,6 +179,7 @@ function GetNoteName(noteNum)
 end
 -----------------------------------------------------------------------------------------------------------
 ---------------------------------------------BASIC UTILITIES-----------------------------------------------
+
 function MSG(...)
     if DBG_OFF then return end
     local out = {}
@@ -266,6 +277,15 @@ function IntToBool(val)
     end
 end
 
+local function getCurrentProject()
+    local _,proj = reaper.EnumProjects(-1)
+    return proj
+end
+
+local function getCurrentProjectFilename()
+    local projectName = ultraschall.GetProjectFilename(getCurrentProject())
+end
+
 ---------------------------------------------------------------------------------------------------------
 -------------------------------------------FILE UTILITIES-----------------------------------------------
 function GetFileList(path)
@@ -310,11 +330,11 @@ function GetFileStartingWith(startsWith,path)
     ERR('No file found starting with: '..startsWith)
 end
 
---parses bank folder and returns a table
-function GetBankFileTable(path)
-    if not path then path = BANK_FOLDER end
+--parses bank folder names and returns a table
+--in the format files[i] = { name =, vst =}
+function GetBankFileTable()
     local files = {}
-    for i,filename in pairs(GetFileList(path)) do
+    for i,filename in pairs(GetFileList(BANK_FOLDER)) do
         local parts = StringSplit(filename,'.')
         --table[parts[1]] = parts[2]
         files[i] = { name = parts[1], vst = parts[2]}
@@ -324,11 +344,29 @@ function GetBankFileTable(path)
     return sorted
 end
 
+function GetGBanks()
+    if not gBanks then gBanks = OptionsFromPath(GBANK_FOLDER, true) end
+    return gBanks
+end
+
+function GetGPresets()
+    if not gBank then gBank = GetGBanks()[1] end
+    if not gPresets then gPresets = OptionsFromPath(GBANK_FOLDER..gBank.name..'/') end
+    return gPresets
+end
+
 function GetPluginDisplayName(plugName, path)
     for i, plug in pairs(GetBankFileTable(path)) do
         if plug.vst == plugName then return plug.name end
     end
     return plugName --if no bank file, just use the dll filename2
+end
+
+function GetPlugFromDisplayName(name, path)
+    for i, plug in ipairs(GetBankFileTable(path)) do
+        if plug.name == name then return plug.vst end
+    end
+    return name
 end
 
 function GetPlugName(chan, slot)
@@ -341,6 +379,8 @@ function GetPlugName(chan, slot)
     end
     return GetFilename(name)  --strip off .dll
 end
+
+
 
 -- Creates simple options from the files or the subfolders for a particular path
 function OptionsFromPath(path, useFoldersNotFiles)
@@ -360,7 +400,7 @@ function CreateFolder(path)
 end
 
 ---------------------------------------------------------------------------------------------------
-----------------------------------------------------WINDOW UTILITIES-------------------------------
+----------------------------------------WINDOW UTILITIES-------------------------------------------
 
 function CloseWindow(window)
     local title = window.name
@@ -369,21 +409,28 @@ function CloseWindow(window)
     if hWnd ~=nil then reaper.JS_WindowMessage_Post(hWnd, "WM_CLOSE", 0,0,0,0) end
 end
 
+local originalStyle = nil
 function Fullscreen(window, off)
+    MSG('Calling fullscreen:',off)
+    --window:init()
     local title = window.name
+    local style
     local win = reaper.JS_Window_Find(title, true)
-    if not off then
-        local style = reaper.JS_Window_GetLong(win, 'STYLE')
-        if style then
-            style = style & (0xFFFFFFFF - 0x00C40000) --removes window frame
-            reaper.JS_Window_SetLong(win, "STYLE", style)
-        end
-    else --need to figure out this code...
-
-
+    if not originalStyle then
+        style = reaper.JS_Window_GetLong(win, 'STYLE')
+        originalStyle = style
+    else style = originalStyle
     end
-    reaper.JS_Window_SetPosition(win, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+    if not off then
+        reaper.JS_Window_Show( win, "RESTORE" )
+        reaper.JS_Window_SetStyle( win, "MAXIMIZE" )
+    else
+        reaper.JS_Window_Show( win, "RESTORE" )
+        reaper.JS_Window_SetLong( win, "STYLE", style )
+    end
+    --window:redraw()
 end
+
 
 function ResizeWindow(window, x, y, w, h)
     local title = window.name
@@ -674,7 +721,7 @@ function RemoveSend(chan,destCh)
 end
 
 function AddReceive(desttrack, srctrack)
-    ----MSG('addReceive: adding receive to track ',srctrack,'from track ',srctrack)
+    --MSG('addReceive: adding receive to track ',srctrack,'from track ',srctrack)
     local mediatrack = GetTrack(srctrack)
     local mediaFxTrack = GetTrack(desttrack)
     if mediatrack and mediaFxTrack then
@@ -707,10 +754,11 @@ end
 function IsSendMuted(chan, destCh)
     local track = GetTrack(chan)
     local index = GetSendIndex(chan, destCh)
+    --MSG('IsSendMuted: tracknum',chan, index)
     --indices are zero based here :^P
-    local _, mute = reaper.GetTrackSendUIMute( track , index - 1 )
-    ----MSG('IsSendMuted: tracknum',chan,'index',index , 'mute status = ', mute)
-    return IntToBool(mute)
+    if index then local _, mute = reaper.GetTrackSendUIMute( track , index - 1 )
+            return IntToBool(mute)
+    end
 end
 
 function MidiIN(chan, inputNum, enable)
@@ -797,12 +845,45 @@ end
 -----------------------------------------------------------------------------------------------
 --#############################################################################################
 ---------------------------------------TRANSPORT CONTROLS -------------------------------------
+
+--probably not to be used by rig, stick to project tempo
+--project tempo doesn't seem to update anything?
 function SetTempo(tempo)
     reaper.SetCurrentBPM( 0, tempo, 1 )
 end
 
 function GetTempo()
     return  reaper.Master_GetTempo()
+end
+
+---------------------------------------------------------------------------------------------------------
+-------------------------------------------TEMPO---------------------------------------------------------
+local function initTempo()
+    --local bpm, beat, denominator = ultraschall.GetProject_Tempo(getCurrentProjectFilename())
+    local bpm = GetTempo()
+    MSG("BPM", bpm)
+    LOCAL_TEMPO = bpm
+    REAPER_TEMPO = bpm
+end
+--get/set. reaper's tempo is a combination of these.
+--LOCAL_TEMPO is the persisted displayTempo
+--quaver is a multiplier of two
+--modifier is for triplet or dotted rhythms
+function Tempo(displayTempo, quaver, modifier )
+    if not displayTempo and not modifier and not quaver then return LOCAL_TEMPO end
+    if quaver then BEAT_MOD = quaver end
+    if modifier then METER_MOD = modifier end
+    if displayTempo then LOCAL_TEMPO = Math.round(displayTempo) end
+    if not REAPER_TEMPO or not LOCAL_TEMPO then initTempo() end
+    REAPER_TEMPO = LOCAL_TEMPO * METER_MOD * BEAT_MOD
+    MSG("Setting reaper tempo to: ", REAPER_TEMPO)
+    ultraschall.SetProject_Tempo(getCurrentProjectFilename(),REAPER_TEMPO,BEATS,4)
+    SetTempo(REAPER_TEMPO)
+end
+--reaper's denominator is always 4, and we can double or halve tempo from app...
+function SetBeat(numerator)
+    BEATS = numerator
+    ultraschall.SetProject_Tempo(getCurrentProjectFilename(),REAPER_TEMPO,BEATS,4)
 end
 
 --------------------------------------------------------------------------------------------------------------
@@ -816,8 +897,8 @@ function LoadInstrument(chan,vstname)
     --we will have to select a bank before re-adding the sends
     reaper.PreventUIRefresh(1)
     SetChanFxStatus(chan, false)
-    local oldName = GetPlugName(chan, INSTRUMENT_SLOT)
-    ----MSG('new fx name = '..vstname, 'old name = '..oldName)
+    local oldName = GetPlugFromDisplayName(GetPlugName(chan, INSTRUMENT_SLOT))
+    MSG('new fx name = '..vstname, 'old name = '..oldName)
     if vstname ~= oldName then
         local track = GetTrack(chan)
         reaper.TrackFX_Delete( track, INSTRUMENT_SLOT )
@@ -835,6 +916,7 @@ end
 --ROUTING:  inst -> prefader sends (to fxchans) ^ dryLevel(track fader) -> postfader sends(to outputs)
 
 --an array of all the channels with mixer inputs, i.e. effects
+--local because there is a dedicated function for getting a version of this for a specific channel
 local function getFxList()
     if not currentFxList then
         currentFxList = {}
@@ -844,6 +926,17 @@ local function getFxList()
     else return currentFxList
     end
     return currentFxList
+end
+--what channels are sending to this chan?? {1 = 10, 2 = 14, 3 = 15, etc.}
+--if it is not an fxChan, we get an empty table
+function GetFxReceives(chan)
+    local channels = {}
+    if IsEffectCh then
+        for i = 1, CH_COUNT do
+            if GetFxChan(i) == chan then table.insert(channels, i) end
+        end
+    end
+    return channels
 end
 
 function ResetSends()
@@ -868,37 +961,55 @@ function IsEffectCh(chan)
     end
     return false --chan is not a send for testCh...
 end
---returns fx channel, fxch mute status, fx index. Also makes sure fx settings are conformant
-function GetFxChan(chan)
-    --conformant settings:  all muted and one phased, or one unmuted and no phased
-    local fxList = GetChFxList(chan)
-    local unmuted = 0
-    local flipped = 0
-    local fxChan = 0
-    local fxIdx = 0
-    local chanFxMuted = false
-    for i,dest in ipairs(fxList) do
-        if not IsSendMuted(chan, dest) then
-            unmuted = unmuted + 1
-            --if an fxsend is already unmuted, mute all others
-            if unmuted > 1 then MuteSend(chan,dest)
-            else fxChan = dest fxIdx = i
-            end
-        end
-    end
-    if unmuted == 0 then--should be one chan with a flipped phase
-        chanFxMuted = true
+-- gets fx chan info.  Also makes sure fx settings are conformant
+local function fxChanInfo(chan)
+    if not fxChannels[chan] then
+        --conformant settings:  all muted and one phased, or one unmuted and no phased
+        local fxList = GetChFxList(chan)
+        local unmuted = 0
+        local flipped = 0
+        local fxChan = 0
+        local fxIdx = 0
+        local chanFxMuted = false
         for i,dest in ipairs(fxList) do
-            if IsPhaseFlipped(chan, dest) then
-                flipped = flipped + 1
-                if flipped > 1 then SetSendPhase(chan, dest, false)
-                else fxChan = dest fxIdx = i
+
+            if not IsSendMuted(chan, dest) then
+                unmuted = unmuted + 1
+                --if an fxsend is already unmuted, mute all others
+                if unmuted > 1 then MuteSend(chan,dest)
+                else fxChan = dest
+                    fxIdx = i
                 end
             end
         end
+        if unmuted == 0 then--should be one chan with a flipped phase
+            MSG('chan',chan,'all fx muted')
+            chanFxMuted = true
+            for i,dest in ipairs(fxList) do
+                if IsPhaseFlipped(chan, dest) then
+                    flipped = flipped + 1
+                    if flipped > 1 then SetSendPhase(chan, dest, false)
+                    else fxChan = dest
+                        fxIdx = i
+                    end
+                end
+            end
+            if flipped == 0 then
+                fxChan = fxList[1]
+                MSG('flipping phase:',chan, fxChan)
+                SetSendPhase(chan, fxChan, true)
+                fxIdx = GetSendIndex(chan, fxChan)
+            end
+        end
+        fxChannels[chan] = { chan = fxChan, mute = chanFxMuted, idx = fxIdx }
     end
-    return fxChan, chanFxMuted, fxIdx
+    return fxChannels[chan]
 end
+
+--returns fx chan, creating the sends if needed
+function GetFxChan(ch)     return fxChanInfo(ch).chan end
+function IsFxMuted(ch)     return  fxChanInfo(ch).mute end
+function GetFxChanIdx(ch)  return  fxChanInfo(ch).fxIdx end
 
 function SetFxChan(chan, destCh)
     local prevFx, fxMuted = GetFxChan(chan)
@@ -912,9 +1023,11 @@ function SetFxChan(chan, destCh)
 end
 
 function SetFxByIdx(chan,fxIdx)
+    MSG('set fx chan',chan,' by index:', fxIdx)
     local fxCh = GetFxForIndex(chan, fxIdx)
     MSG('setting fx chan to', fxCh)
-    if fxCh == nil then return end
+    --possible that a loaded gPreset might have bad values...
+    if fxCh == nil then SetFxChan(chan, GetChFxList(chan)[1]) end
     SetFxChan(chan, fxCh)
 end
 
@@ -925,9 +1038,9 @@ function SetChanFxStatus(chan, isfx)
             local muted IsSendMuted(chan, dest)
             RemoveSend(chan, dest)
             if isfx then
-                AddSend(chan, dest)
-                SetSendPreFader(chan, dest)
-                MuteSend(chan, dest, muted) --restore the mute setting
+                AddReceive(chan, dest)
+                SetSendPreFader(dest,chan)
+                MuteSend(dest,chan, muted) --restore the mute setting
             end
         end
     end
@@ -939,7 +1052,7 @@ function GetChFxList(chan)
     local chFX = {}
     for i, fxchan in ipairs(getFxList()) do
         if fxchan ~= chan then
-            MSG('Get chan fx list, adding ch', fxchan,'as fx to chan',chan)
+            --MSG('Get chan fx list, adding ch', fxchan,'as fx to chan',chan)
             table.insert(chFX, fxchan)
         end
     end
@@ -979,14 +1092,10 @@ end
 function IncFxNum(chan,inc)
     local idx = GetFxIndex(chan)
     local count = #GetChFxList(chan)
-    --MSG('IncFxNum: count=',count,'fx index=',idx, 'increment =',inc)
+    MSG('IncFxNum: count=',count,'fx index=',idx, 'increment =',inc)
     local newVal = IncrementValue(idx,1,count,true,inc)
     --MSG('IncFxNum: inc, new val=', newVal)
     SetFxByIdx(chan, newVal)
-end
-
-function Test()
-    IncFxNum(1,1)
 end
 
 function GetFxForIndex(chan,index)
@@ -1008,7 +1117,7 @@ end
 --TODO!!!!!!!!   VALUES SHOULD BE STORED AS DB IN PRESETS AND IN THE INTERFACE.
 
 
---okay, seems like we could make the output sends post fader, and use the fader for this volume adjustment
+--make the output sends post fader, and use the fader for the volume adjustment
 --so we can store both the main volume, and the fx adjustment volume in the project.
 local function setVolume(chan, level, useDB)
     if not useDB then -- do nothing
@@ -1022,14 +1131,12 @@ local function getVolume(chan, useDB)
 end
 --fx sends are pre-fader, outputs are post fader
 function SetFxLevel(chan, fader)
-    --MSG('SetFxLevel: track#=', chan,'fader val =',fader)
+    --MSG('SetFxLevel: chan ', chan,'fader val =',fader)
     local fxChan = GetFxChan(chan)
-    --MSG('fx channel = ', fxChan)
+    MSG('fx channel = ', fxChan)
     local wetlevel = math.min(fader * 2, 1)
     local drylevel = math.min(2 - (fader * 2), 1)
-    SetSendLevel(chan, GetFxChan(chan), fader)
-    --local sendIdx = GetSendIndex(chan, GetFxChan(chan))
-    --reaper.SetTrackSendUIVol( GetTrack(chan), MIDIVOL.SLOT, sendIdx-1, reaper.SLIDER2DB(wetlevel), 0)
+    SetSendLevel(chan, fxChan, wetlevel)
     setVolume(chan,drylevel)
 end
 
@@ -1045,12 +1152,16 @@ end
 
 function SetSendLevel(chan, destCh, level, useDB)
     local sendIdx = GetSendIndex(chan, destCh)
-    if not useDB then --do nothing
-    else level = ultraschall.DB2MKVOL(level) end
-    reaper.SetTrackSendUIVol(GetTrack(chan), sendIdx-1, level, 0)
+    if sendIdx then
+        if not useDB then --do nothing
+        else level = ultraschall.DB2MKVOL(level) end
+        reaper.SetTrackSendUIVol(GetTrack(chan), sendIdx-1, level, 0)
+    else --MSG('MU--SET SEND LEVEL: chan',chan,'destChan',destCh,'level',level)
+    end
 end
 
 function GetSendLevel(chan, destCh, returnDB)
+    MSG('getting send level, ch',chan, 'to ', destCh)
     local sendIdx = GetSendIndex(chan, destCh)
     local _,vol,pan = reaper.GetTrackSendUIVolPan(GetTrack(chan), sendIdx - 1)
 
@@ -1351,7 +1462,7 @@ function decFxPreset(tracknum, fx)
     local presetmove = -1
     reaper.TrackFX_NavigatePresets( GetTrack(chan), fx, presetmove )
 end
-function SelectPreset(chan, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
+function SetFxPreset(chan, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
     reaper.TrackFX_SetPreset( GetTrack(chan), INSTRUMENT_SLOT, presetname )
 end
 
@@ -1582,6 +1693,11 @@ function LoadMoonPreset(chan, fxNum, presetName)
     reaper.SetTrackStateChunk(track, str, false)
 end
 
+
+---------------------------------------------------------------------------------------------------------------
+--#############################################################################################################
+-------------------------------------------------INITIALIZATION------------------------------------------------
+--initTempo()
 ---------------------------------------------------------------------------------------------------------------
 --#############################################################################################################
 -------------------------------------------------TESTING METHODS-----------------------------------------------
@@ -1633,5 +1749,5 @@ end
 
 
 
-Test()
+--Test()
 --reaper.Track_GetPeakInfo( track, chan ) --use for meters

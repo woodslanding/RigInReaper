@@ -36,7 +36,7 @@ MButton.defaultProps = {
     momentary = false,
     wrap = true, spinner = false, vertical = true,
     x = 16, y = 32, w = 64, h = 48,
-    labelX = 0, labelY = 0,
+    captionX = 0, captionY = 0,
     caption = "", font = 2, textColor = "white",
     captions = {},
     value = 0, --stores tableIndex if using vals{} not actual table val
@@ -91,8 +91,8 @@ function MButton:draw()
         local strWidth, strHeight = gfx.measurestr(str)
         local playX = w-strWidth
         local playY = h - strHeight
-        gfx.x = x + (playX / 2) + (self.labelX * playX)
-        gfx.y = y + (playY / 2) + (self.labelY * playY)
+        gfx.x = x + (playX / 2) + (self.captionX * playX)
+        gfx.y = y + (playY / 2) + (self.captionY * playY)
         gfx.drawstr(str)
     end
 end
@@ -201,7 +201,6 @@ end
     have a value table, however, we'll want to deliver the appropriate value by
     referencing the FrameNumber.
 ]]
-
 function MButton:val(set)
     if set == false then set = 0 end
     if set == true then set  = 1 end
@@ -274,7 +273,7 @@ function createSwitch(i)
         value = 1,
         name = "switch"..i,
         type = "MButton",
-        labelX = 0, labelY = 0,
+        captionX = 0, captionY = 0,
         image =  nil,
         func = function(self) MSG('setting track'..i.. 'to '..self.value) TrackName(i,"track "..self.value) end,
         params = {"a", "b", "c"}

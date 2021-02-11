@@ -35,7 +35,8 @@ MLabel.defaultProps = {
     font = font,
     textColor =   "text",
     color =      "cyan",
-    justify = 0  -- 0 for left, 1 for right
+    justify = 0,  -- 0 for left, 1 for right
+    func = function(self) end --just a dummy method.  there is no mouse support
 }
 
 function MLabel:new(props)

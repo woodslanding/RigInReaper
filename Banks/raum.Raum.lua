@@ -1,9 +1,9 @@
 return {
     vstName = "Raum", name = "raum", emptyPreset = "",
-    presets = {}, 
+    presets = {},
     params = {},
     banks = {
-        { name = "reverb", hikey = 127, sat = 0, lokey = 1, hue = 0, 
+        { name = "reverb", hikey = 127, sat = 0, lokey = 1, hue = 0, isfx = 1,
             params = {},
             presets = {}
         }

@@ -155,7 +155,7 @@ function Plugin:getPresetString()
     --MSG('MASTER:Presets sorted = '..retStr)
     return CleanComma(retStr)
 end
-
+--returns a table of banks
 function Plugin:getBanks() --sorts them also
     local banks = {}
     for i,name in ipairs(self:getBankList()) do

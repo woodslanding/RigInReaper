@@ -591,7 +591,7 @@ for i,s in ipairs(Options.rangeSliders) do
         min = 0, max = 127, sens = 1,
         frames = 128,vertFrames = true,
         func = s.func,
-        labelY = .4,
+        captionY = .4,
         waitToSet = true
     })
     --put them in with the other sliders...
