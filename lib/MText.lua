@@ -135,6 +135,7 @@ function MText:createKeyboard(parent)
     end
     keyboard.pager.color = self.color
     keyboard.pager.vertical = true
+    keyboard.pager.w = 84
     keyboard:setPage(1)
     keyboard.layer:addElements(self:createTextfield())
     keyboard.layer:addElements(self:createTitle())
@@ -173,6 +174,7 @@ function MText:processKey(key)
     if key == "-->" then
         self.func()
         self:setTitle('')
+        self.text = ''
         self.textfield:setCaption('')
         self.keyboard.layer:hide()
     elseif key == "<<" then self.text = self.text:sub(1, string.len(self.text) -1) self.textfield:setCaption(self.text)--trim the last character

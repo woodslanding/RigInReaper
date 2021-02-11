@@ -160,6 +160,12 @@ local function sync(elmName, chan)
     end
 end
 
+function GetText(titleText, func)
+    Keyboard:setTitle('New Bank Name:')
+    Keyboard:visible(true)
+    Keyboard.func = func
+end
+
 function ChanColor(chan, hue, sat)
     MSG('color for chan:',chan, hue, sat)
     if not hue then
@@ -229,17 +235,14 @@ end
 function SelectBank()
     local option = gui.banks:getSelection()
     MST(option, 'found bank')
-    --gui.banks:select(option.index)
-    --local bank = option   --gui.banks:getSelectedOption() or gui.banks.options[1]
-    --MST(bank,'selected bank option')
     if PanelDisplay == GLOBAL then
         gui.presets:setOptions(GetGPresets())
     elseif PanelDisplay == VST then
-        --don't load dll.  load it when a bank is selected
+        --don't load dll yet. wait until a bank is selected, in case user selected the wrong one!
         local plugname = gui.banks:getSelectionData()
         plugs[iCh] = Plugin.load(plugname)
-
-        gui.presets:setOptions()
+        bankLists[iCh] = plugs[iCh]:getBanks()
+        gui.presets:setOptions(bankLists[iCh])
     elseif PanelDisplay == PRESET then
         LoadBank(option.name)
         gui.presets:setOptions(presets[iCh])
@@ -257,7 +260,11 @@ function SelectPreset()
     elseif PanelDisplay == GLOBAL then
         GlobalRecall(option.name, GetGBanks().name)
     elseif PanelDisplay == VST then
-        LoadPlug(option.name)
+        --we've already loaded bank data, but still need to instantiate the vst dll
+        LoadPlug(gui.banks:getSelectionData())
+        selectedBanks[iCh] = option
+        LoadBank(option.name, iCh)
+        SetPanelsPRESETS()
     end
 end
 
@@ -268,14 +275,11 @@ function SetPanelsGLOBAL()
     gui.banks:setOptions(GetGBanks())
     gui.presets:setOptions(GetGPresets())
     gui.presets:select(gPreset, true)
-    --gui.presets:pageToSelection()
 end
 
 function SetPanelsVST()
     PanelDisplay = VST
     gui.banks:setOptions(vsts)
-    --gui.banks:selectByName(ch().vst:val(), true)
-    --gui.banks:pageToSelection()
     gui.presets:setOptions(selectedBanks[iCh])
 end
 
@@ -677,7 +681,9 @@ gui = {
             { name = 'Presets', momentary = true, func = function() SetPanelsPRESETS() end},
             { name = 'VSTs', momentary = true, func = function() SetPanelsVST() end},
             { name = 'Scroll Left', momentary = true, func = function(self) leftPad = -300
+                                            Fullscreen(window, false)
                                             ResizeWindow(window, leftX, 0, 800, SCREEN_HEIGHT) window:redraw() end }
+                { name = '',}  --dummy test
         },
     },
     globalBank = { name = 'gBank', save = true, multi = false,  fontSize = 18, x = bankX - (btnW * 4), y = 0, w = 4 * btnW, sync = function(self)  end},
@@ -704,10 +710,10 @@ gui = {
     bankPager = {  x = bankX - spinnerW, y = paramsY - spinnerH - pad, w = spinnerW, h = spinnerH},
     -------------------------------------------TRANSPORT---------------------------
     -------------------------------------------------------------------------------
-    tempoDec = { name = 'TempoDec', w = tBtnW, x = transportX, y = 0, h = tempoH, momentary = true,  func = function(self) UpdateTempo(LOCAL_TEMPO - 1) end },
+    tempoDec = { name = 'TempoDec', w = tBtnW, x = transportX, y = 0, h = tempoH, momentary = true,  func = function(self) UpdateTempo(Tempo() - 1) end },
     tempo    = { name = 'Tempo', w = tempoW, x = transportX + tBtnW, h = tempoH, y = 0, horizontal = true, min = 50, max = 197, frames = 147, func = function(self) Tempo(self:val()) end },
-    tempoInc = { name = 'TempoInc', x = totalW - tBtnW, y = 0, w = tBtnW, h = tempoH, momentary = true, func = function(self) UpdateTempo(LOCAL_TEMPO + 1) end },
-    hemiola = { name = 'hemiola',  w = tBtnW, h = btnH, x = transportX, y = tempoH + btnH, rows = 1, cols = 2, options = {
+    tempoInc = { name = 'TempoInc', x = totalW - tBtnW, y = 0, w = tBtnW, h = tempoH, momentary = true, func = function(self) UpdateTempo(Tempo() + 1) end },
+    hemiola = { name = 'hemiola',  w = tBtnW, h = btnH, x = transportX, y = tempoH + btnH, rows = 1, cols = 5, options = {
         { name = 'ResetMeter', func = function(self) Tempo(nil, nil, 1) end },
         { name = 'Quint', func = function(self) Tempo(nil, nil, .8) end },
         { name = 'Triplet', func = function(self) Tempo(nil, nil, .75) end },
@@ -825,13 +831,155 @@ gui = {
                 horizontal = true, frames = 97, image = 'OrganFader',  sync = function(self)end, func = function(self) end },
     organReverb = { name = 'reverb', caption = 'reverb', captionY = -.6, x = totalW - (9* dbW) - pad, y = paramsY + (btnH * 4) - pad, z = organZ, w = dbW*9, h = btnH + pad,
                 horizontal = true, frames = 97, image = 'OrganFader', sync = function(self)end, func = function(self) end },
+
+
+    -----------------------------------------------------------------------------------------------------------
+    ---{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ BANK EDITOR  }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+    -----------------------------------------------------------------------------------------------------------
+    --[[
+    BankEditor = {
+        menu = {
+            { --submenu 2
+                {name = 'Save Preset', func = function(self) end
+                },
+                {name = 'Save As',func = function(self) GetText('Save Preset As', function())
+                        Keyboard:visible(true)
+                        Keyboard.func = function()
+                            MSG('Saving preset as '..Keyboard.text)
+                            --local track, fxnum, Preset_Name = Get_LastTouch_FX()
+                            --MSG('effect = '..self.text)
+                            --Save_VST_Preset(track,fxnum,self.text)
+                            Keyboard:visible(false)
+                        end
+                    end
+                }
+
+            },
+            {
+                {name = 'Delete Preset',func = function(self) end   },
+                {name = 'Rename Preset',func = function(self) end   },
+            },
+            {
+                {name = 'New Bank',   func = function(self)
+                    Keyboard:setTitle('New Bank Name:')
+                    Keyboard:visible(true)
+                    Keyboard.func = function()
+                        MSG('Creating New Bank '..Keyboard.text)
+                        plugins[iCh]:addBank(Keyboard.text)
+                        Keyboard:visible(false)
+                        SavePlug()
+                        LoadPlug()
+                    end
+                end  },
+                --{name = 'Rename Bank',func = function(self) end  },
+                --{name = 'Save Banks', func = function(self) end  }, --do this automatically unless there is a performance hit somehow
+                {name = 'Delete Bank',func = function(self) end  },
+            },
+            {
+                {name = 'New VST',func = function(self)
+                                        Keyboard:visible(true)
+                                        Keyboard.func = function()
+                                            local vstName = GetPlugName(channel)
+                                            Keyboard:setTitle('Set Display Name for '..vstName..':')
+                                            Plug = Plugin.new(vstName,Keyboard.text,{})
+                                            Plug:save()
+                                            RefreshBanks()
+                                        end
+                                end
+                },
+                {name = 'ShowVST',func = function(self) OpenPlugin(channel) end },
+                --todo: move and resize
+                -- reaper.TrackFX_GetFloatingWindow( track, index )
+                -- retval, ZOrder, flags = reaper.JS_Window_SetPosition( windowHWND, left, top, width, height, ZOrder, flags )
+                {name = 'Close', func = function(self) CloseWindow(BankWindow.name) end },
+            },
+
+        },
+        panels = {
+            {name = 'presets',rows = 8, cols = 5, icon = 'ComboRev',func = function(self)
+                if Mode == MODES.BANK then
+                    local presetNums = PresetPanel:getSelectionData('index')
+                    MST(presetNums,'preset nums')
+                    Plug:setPresetsForBank(Bank.name,presetNums)
+                    SavePlug()
+                elseif Mode == MODES.PRESET then
+                    --select a single preset, and add it to multiple banks
+                    --first set the bank buttons to the selected preset
+                    Preset = self.name
+                    BankPanel:clearSelection()
+                    --go through all the bankpanel's options
+                    --for each one, get the bank name, and query the plug to determine if the preset is in it
+                    for i,option in ipairs(BankPanel.options) do
+                        --MST(option,'add option')
+                        BankPanel:select(i,true)
+                        --if Plug:bankContainsPreset(option.name,Preset) then
+                           -- local button = BankPanel:getButtonForOption(i)
+                           -- BankPanel:select(button.index,true)
+                       -- end
+                    end
+                    BankPanel:setPage(1)
+                end
+            end },
+            {name = 'banks',rows = 8, cols = 4, icon = 'ComboRev',func = function(self)
+                if Mode == MODES.BANK then
+                    Bank = Plug:getBank(self.name)
+                    --MST(Bank,'selected bank')
+                    PresetPanel:clearSelection()
+                    SetBankInfo()
+                    --might be able to streamline this, now options are indexed....
+                    for i, option in ipairs(PresetPanel.options) do
+                        option.color = Bank:getColor()
+                        for _, name in ipairs(Bank.presets) do
+                            if name == option.name then
+                                --MSG('adding preset '..name..' for option: '..i)
+                                PresetPanel:select(i,true)
+                            end
+                        end
+                    end
+                    PresetPanel:setPage(1)
+                elseif Mode == MODES.PRESET then
+                    local bankNums = BankPanel:getSelectionData()
+                    local preset = PresetPanel:getSelectionData()
+                    --MSG('in presetmode:  ',preset)
+                    --MST(bankNums,'bank numbers')
+                    if bankNums and preset then Plug:addPresetToBanks(preset,bankNums) SavePlug() end
+                end
+            end },
+            {name = 'VSTs',rows = 8, cols = 2, icon = 'ComboRev',func = function()
+                 --self is a button, not a panel.
+                Plug = Plugin.load(VSTPanel:getSelection().name)
+                LoadPlug()
+            end },
+        },
+        --these will display a parameter name, and have an icon to show what they are mapped from
+        controlMappings = {        --(clicking assigns last touched param, if vst window is open)
+            { name = 'ENC',cols = 8,icon = 'EncMap'},
+            { name = 'SWA',cols = 8,icon = 'Sw1Map'},
+            { name = 'SWB',cols = 8,icon = 'Sw2Map'},
+            { name = 'DRB',cols = 9,icon = 'DrawbarMap'},
+            { name = 'TGA',cols = 4,icon = 'UpToggleMap' },
+            { name = 'TGB',cols = 4,icon = 'DnToggleMap' },
+            { name = 'FSW',cols = 4,icon = 'FootswMap'},
+        },
+        controls = {
+            { name = 'MW', icon = 'MWMap'},
+            { name = 'BC', icon = 'BCMap'},
+            { name = 'AT', icon = 'ATMap'},
+            { name = 'EXP', icon = 'ExpMap'},
+            { name = 'PED2', icon = 'Ped2Map'},
+            { name = 'SUS', icon = 'SusMap'},
+        },
+        sliders = {
+            {name = 'sat',title = 'Saturation',min = 0,max = 100,func = function(self) Bank.sat = Int(self) SavePlug() SetBankInfo() end },
+            {name = 'hue',title = 'Hue',min = 0, max = 360,func = function(self) Bank.hue = Int(self) SavePlug() SetBankInfo() end },
+            {name = 'trim',title = 'Trim',min = 0, max = 100,func = function(self) Bank.trim = Int(self) SavePlug() end },
+            {name = 'expcrv',title = 'Exp Curve',min = 0, max = 10, func = function(self) Bank.expcrv = Int(self) SavePlug() end },
+            {name = 'ped2crv',title = 'Ped2 Curve',min = 0, max = 10, func = function(self) Bank.ped2crv = Int(self) SavePlug() end },
+        },
+--]]
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ CHANNELS }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
-
-    --TODO: On startup, SetFxLevel requires all fx sends to be set up...
-
-
     -- this data is stored unless save = false
     send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, self:val()) gui.fxLevel:val(self:val()) end,
                 sync = function(self) self:val(GetFxLevel(self.ch)) self:setColor(ChanColor(self.ch)) end},
@@ -895,6 +1043,8 @@ gui = {
     select    =  { name = 'Select', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, func = function(self) ChChanged(self.ch) end, sync = function(self) end },
     ch = {},  --this is where all the channel components will go
 }
+
+
 -----------------------------------------------------------------------------------------------------------
 ---{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{  CREATE ELEMENTS  }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
 -----------------------------------------------------------------------------------------------------------

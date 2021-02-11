@@ -44,11 +44,11 @@
         2. We will concatenate this file name when saving, and use the first part when filling vst and channel tables
         3. When loading, we need to search for a file whose first part matches the name in the table, and load the second parts
 
-    OTHER BANK SETTINGS
+    OTHER POSSIBLE BANK SETTINGS
         1. AT --> CC and TOGGLE/ threshold
-        2. MPE or NORMAL?
+        2. MPE or NORMAL or BOTH --not stored with bank--set from notesource
         3. MPE voice count
-        4. AUDIO INPUT (line, mic1, mic2, inst)
+        4. AUDIO INPUT (line, mic1, mic2, inst)  -should be a chan option, not stored with bank!
         5.
 
 
@@ -244,6 +244,11 @@ end
 -------------------------------------------------------------------------------------------------------
 --------------------------------------------------------CONTROLS---------------------------------------
 --[[OPTIONS:
+
+FOR NOW: Since bulk conversion of vst presets isn't reliable, let's just deal with existing RPLs.  If we want
+to use vst presets, we will need to convert them to rpls first.
+
+FOR LATER?:
 There are Options for Viewing and Converting Presets:
     View RPL's
     View VST's
@@ -307,7 +312,7 @@ Options = {
                                     end
                             end
             },
-            {name = 'ShowVST',func = function(self) OpenVST(channel) end },
+            {name = 'ShowVST',func = function(self) OpenPlugin(channel) end },
             --todo: move and resize
             -- reaper.TrackFX_GetFloatingWindow( track, index )
             -- retval, ZOrder, flags = reaper.JS_Window_SetPosition( windowHWND, left, top, width, height, ZOrder, flags )

@@ -474,7 +474,11 @@ function GetLastTouchedFX()
 end
 ----------------------------------------------------------------------------------------------------------
 ------------------------------------------------------TABLE UTILITIES-------------------------------------
-function MST(table,str)
+--either table or string can come first
+function MST(arg1,arg2)
+    local str, table
+    if type(arg1) == 'string' then str = arg1 else table = arg1 end
+    if type(arg2) == 'string' then str = arg2 else table = arg2 end
     if not str then local str = 'table unknown' end
     if not table then return MSG('-----------MST, table is nil: '..str) end
     local val = nil
@@ -870,13 +874,14 @@ end
 --quaver is a multiplier of two
 --modifier is for triplet or dotted rhythms
 function Tempo(displayTempo, quaver, modifier )
+    if not LOCAL_TEMPO then initTempo() end
     if not displayTempo and not modifier and not quaver then return LOCAL_TEMPO end
     if quaver then BEAT_MOD = quaver end
     if modifier then METER_MOD = modifier end
     if displayTempo then LOCAL_TEMPO = Math.round(displayTempo) end
     if not REAPER_TEMPO or not LOCAL_TEMPO then initTempo() end
-    REAPER_TEMPO = LOCAL_TEMPO * METER_MOD * BEAT_MOD
-    MSG("Setting reaper tempo to: ", REAPER_TEMPO)
+    REAPER_TEMPO = Math.round(LOCAL_TEMPO * METER_MOD * BEAT_MOD, 1) --round to one decimal place
+    -MSG("Setting reaper tempo to: ", REAPER_TEMPO)
     ultraschall.SetProject_Tempo(getCurrentProjectFilename(),REAPER_TEMPO,BEATS,4)
     SetTempo(REAPER_TEMPO)
 end
@@ -884,6 +889,11 @@ end
 function SetBeat(numerator)
     BEATS = numerator
     ultraschall.SetProject_Tempo(getCurrentProjectFilename(),REAPER_TEMPO,BEATS,4)
+end
+
+function GetTime()
+    local string = ultraschall.SecondsToTime(reaper.time_precise())
+    MSG('time = ',string)
 end
 
 --------------------------------------------------------------------------------------------------------------
@@ -1748,6 +1758,6 @@ end
 
 
 
-
+MSG(GetTime())
 --Test()
 --reaper.Track_GetPeakInfo( track, chan ) --use for meters
