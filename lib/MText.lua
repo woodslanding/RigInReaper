@@ -36,6 +36,7 @@ local font = {'Calibri', 36,"b"}
 ImageFolder = IMAGE_FOLDER
 
 KeyboardText = {
+    '*','[',']','ABC',
     '1','q','a','z',
     '2','w','s','x',
     '3','e','d','c',
@@ -48,6 +49,7 @@ KeyboardText = {
     '0','p','-','_',
     '<<','&','#','-->',
 
+    '!','$','%','abc',
     '1','Q','A','Z',
     '2','W','S','X',
     '3','E','D','C',
@@ -110,17 +112,14 @@ function MText:createKeyboard(parent)
         image = ImageFolder.."Combo.png",
         z = 2,
         rows = 4,
-        cols = 11,
+        cols = 12,
         w = self.w,
         h = self.h,
-        x = self.x + self.w,
+        x = self.x,
         y = self.y + self.h,
         lowerCase = self.useLowerCase,
         font = font,
-        usePager = true,
-        pagerImage = ImageFolder.."Combo.png",
-        pagerX = self.x, pagerY = self.y + (self.h),
-        pagerW = 40, pagerH = self.h * 2,
+        usePager = false,
         momentary = true,
         multi = false,
         window = self.window,
@@ -133,9 +132,6 @@ function MText:createKeyboard(parent)
             momentary = true
         })
     end
-    keyboard.pager.color = self.color
-    keyboard.pager.vertical = true
-    keyboard.pager.w = 84
     keyboard:setPage(1)
     keyboard.layer:addElements(self:createTextfield())
     keyboard.layer:addElements(self:createTitle())
@@ -151,7 +147,7 @@ function MText.new(props)
     self.text = ""
     self.y = 100
     self.color = Color
-    self.func = function(self) end
+    self.func = props.func or function(self) end
     for prop,val in pairs(props) do
         self[prop] = val  --add props from method call
     end
@@ -177,6 +173,8 @@ function MText:processKey(key)
         self.text = ''
         self.textfield:setCaption('')
         self.keyboard.layer:hide()
+    elseif key == "abc" then self.keyboard:setPage(1)
+    elseif key == "ABC" then self.keyboard:setPage(2)
     elseif key == "<<" then self.text = self.text:sub(1, string.len(self.text) -1) self.textfield:setCaption(self.text)--trim the last character
     else self.text = self.text..key MSG('setting caption:'..self.text) self.textfield:setCaption(self.text)
     end

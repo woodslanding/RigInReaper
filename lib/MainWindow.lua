@@ -1,9 +1,19 @@
 ------------------------------MAIN WINDOW--------------------------------
 --[[
-    startup process:
-    do we want to load the default gpreset before setting up the gui, maybe??
-    But that is not helpful with bank settings--where to store them in the meantime?
-    Okay, we can't
+    TODO:
+    METERING!  Need to figure out how to run the meter method in moonutils every half second or so.
+    NOTESOURcE SOLOING: can notesources be presets in MCS??  What would that look like?
+            buttton in interface switches between two (three?) presets.  But others available from preset menu.
+            maybe NS could share the preset menu with VSTs, instead of duplicating bank settings.
+    FX SWITCHING:  find the bug on this.  Why is the inspector fx switcher coming up broken sometimes?
+            have to fix duplicate send issue
+    SPINNERS: not displaying values on startup for octave and fx send
+    BANK EDITOR:  figure out layout, and integrate in main window.
+    MPanel.lua:  Write a simple panel widget that can take a texture and/or color.
+    PAN: better channel display graphic--wait for meters to work.
+    METRONOME: this should be updated more often than the meters.
+    DRAWBARS:  why don't they hide?  could just cover them up with the other tab(s)
+    OTHER DRAWBAR TABS: Eventual support for midi input effects (arpeggiator, etc.)
 ]]
 -------------------------------------------------------------------------
 -- The core library must be loaded prior to anything else
@@ -88,8 +98,15 @@ local PanelDisplay = 3
 
     2.VST MODE:     Left panel shows banks for selected vst, Right panels shows master VST list
     3.CHANNEL MODE: Left panel shows presets for current channel, Right panel shows banks for current VST
-
 ]]
+
+local function Update()
+    --update metronome/20x sec
+    --scan all externally controlled parameters and update as needed 5x/sec
+    --update meters 5x/sec
+    --eventually increment fader to new values as needed
+end
+
 local function getColor(hue, sat)
     local saturation = sat or 60
     hue = hue or 0
@@ -106,6 +123,7 @@ end
 local vsts = nil  --list of all VSTs with bank files
 local plugs = {}  --list of loaded VSTs by channel
 local gBankPage = 1  --current global bank page
+local gBankname = 'default'
 local presets = {}  --table of tables of presets by channel
 local presetPages = {} --table of preset pages
 local bankLists = {}  -- list of banks for selected vst by channel
@@ -206,19 +224,17 @@ function GetChFxOptions(chan)
     end
     return options
 end
-
 --called to load a new bank.
 function LoadBank(bankname, chan)
     if not chan then chan = iCh end
     local bank
-    if bankname then bank = plugs[chan]:getBank(bankname)
+    if bankname then bank = plugs[chan]:getBank(bankname) or plugs[chan].banks[1] --in case 'bankname is invalid'
     else bank = plugs[chan].banks[1]  end --if no bank indicated, use the first one
     selectedBanks[chan] = bank
     SetChanFxStatus(chan, bank.isfx)                            --MSG('bank is fx',bank.isfx)
     presets[chan] = bank:presetsAsOptions()
     ChanColor(chan, bank.hue, bank.sat)                         --MSG('finished loading chan'..chan)
 end
-
 --called to load a new plugin on a channel
 --defaults to iCh, and bank #1
 function LoadPlug(vstname, chan)
@@ -229,24 +245,26 @@ function LoadPlug(vstname, chan)
     for i, bank in pairs(bankLists[chan]) do
         bank.color = GetRGB(bank.hue, bank.sat, BRIGHTNESS)
     end
-end
 
+end
 --called by the bank panel when a button is selected. name is the buttonName
 function SelectBank()
     local option = gui.banks:getSelection()
     MST(option, 'found bank')
     if PanelDisplay == GLOBAL then
-        gui.presets:setOptions(GetGPresets())
+        gBankname = option.name
+        gui.globalBank:setCaption(gBankname)
+        gui.presets:setOptions(GetGPresets(gBankname))
     elseif PanelDisplay == VST then
         --don't load dll yet. wait until a bank is selected, in case user selected the wrong one!
-        local plugname = gui.banks:getSelectionData()
+        local plugname = option.name
         plugs[iCh] = Plugin.load(plugname)
         bankLists[iCh] = plugs[iCh]:getBanks()
         gui.presets:setOptions(bankLists[iCh])
     elseif PanelDisplay == PRESET then
         LoadBank(option.name)
         gui.presets:setOptions(presets[iCh])
-        gui.presets:select(1) --eventually, maybe a bank stores a default preset
+        gui.presets:select(1) --eventually, maybe a bank stores a default preset--for now make sure preset1 is cheap or free
     end
 end
 --called by the preset panel when a button is selected
@@ -258,7 +276,7 @@ function SelectPreset()
         SetFxPreset(iCh,option.name)
         PresetChanged(iCh)
     elseif PanelDisplay == GLOBAL then
-        GlobalRecall(option.name, GetGBanks().name)
+        GlobalRecall(option.name, gBankname)
     elseif PanelDisplay == VST then
         --we've already loaded bank data, but still need to instantiate the vst dll
         LoadPlug(gui.banks:getSelectionData())
@@ -267,13 +285,12 @@ function SelectPreset()
         SetPanelsPRESETS()
     end
 end
-
 -----------------------------------------------------------------------------------------------------------------
 -------------------------------------------SWITCH PANEL DISPLAYS ------------------------------------------------
 function SetPanelsGLOBAL()
     PanelDisplay = GLOBAL
     gui.banks:setOptions(GetGBanks())
-    gui.presets:setOptions(GetGPresets())
+    gui.presets:setOptions(GetGPresets(gBankname))
     gui.presets:select(gPreset, true)
 end
 
@@ -378,6 +395,7 @@ function GlobalRecall(presetName, gBankname)
         PresetChanged(i)
     end
     --set all sends at once after loading everything
+    ResetSends()
     --sync()
 end
 
@@ -406,7 +424,8 @@ local semiPad = 42
 local totalW = 1536
 local totalH = 1200
 local panH = 12
-local dbW = 20
+local dbW = 28
+local oBtnW = 50
 local dbH = btnH * 3 - pad - pad
 
 local presetCols = 8
@@ -415,11 +434,11 @@ local paramCols = 8
 local paramRows = 4
 local bankCols = 3
 local inspectorRows = 3
-local inspBtnW = btnW * .75
+local inspBtnW = 44
 local inspectorW = inspBtnW * inspectorRows
 local chanBtnRows = 7
 
-local indH, indW, indX = 17, 17, 32
+local indH, indW, indX = 18, 18, 32
 
 --x positions
 local presetX = faderW + leftPad
@@ -467,20 +486,23 @@ end
 
 local function createMenu(props)
     local z = ctlLayerZ
+    local w = props.w or btnW
     local items = {}
     for i,option in ipairs(props.options) do
-        local image = option.image or "Combo.png"
-        local x, y = GetLayoutXandY(i, props.x, props.y, btnW, btnH, props.rows or 1)
+        local image = option.image or "Combo"
+        local text = ''
+        if not option.image then text = option.name end
+        local x, y = GetLayoutXandY(i, props.x, props.y, w, btnH, props.rows or 1)
         local item = GUI.createElement({
             name = option.name,
-            caption = option.name,
+            caption = text,
             type = 'MButton',
             wrap = true,
-            color = GetRGB(0,0,20),
+            color = props.color or GetRGB(0,0,20),
             momentary = option.momentary or false,
-            w = btnW, h = btnH, x = x, y = y, z = z,
+            w = w, h = btnH, x = x, y = y, z = z,
             frames = 2, min = 0, max = 1,
-            image = imageFolder.."Combo.png",
+            image = imageFolder..image..'.png',
             func = option.func,
         })
         getLayer(z):addElements(item)
@@ -501,6 +523,7 @@ local function createTitle(props,ch)
         image = image or nil,
         momentary = props.momentary or true,
         caption = props.caption or props.name,
+        captionY = props.captionY or 0,
         textColor = props.textColor or 'black',
         color = props.color or nil,
         font = font,
@@ -550,7 +573,7 @@ local function createPanel(props, pager, options)
         py = pager.y
         pw = pager.w or spinnerW
         ph = pager.h or spinnerH
-        pImage = pager.image or 'Spinner.png'
+        pImage = pager.image..'.png' or 'Spinner.png'
         usePager = true
     end
     if pImage then pImage = imageFolder..pImage end
@@ -559,6 +582,8 @@ local function createPanel(props, pager, options)
         horizontal = false,
         multi = props.multi or false,
         image = imageFolder.."Combo.png",
+        textColor = 'text',
+        selTextColor = 'black',
         rows = props.rows, cols = props.cols,
         x = props.x, y = props.y, w = props.w or btnW, h = props.h or comboH, z = panelZ,
         usePager = usePager or false,
@@ -673,21 +698,20 @@ end
 --------------------------------------------------------------------------------------------------------------------
 
 gui = {
-    fullscreen = { name = 'FullScreen', x = 0, y = 0, w = presetX - pad, h = btnH, func = function(self) Fullscreen(window, self:val() == 1) end },
-    leftMenu = {  x = presetX, y = 0, color = 'blue', options = {
-            { name = 'Quit', momentary = true, func = function(self) CloseWindow(window) end },
-            { name = 'Console', momentary = true, func = function() ultraschall.BringReaScriptConsoleToFront() end },
-            { name = 'Global', momentary = true, func = function() SetPanelsGLOBAL() end },
-            { name = 'Presets', momentary = true, func = function() SetPanelsPRESETS() end},
-            { name = 'VSTs', momentary = true, func = function() SetPanelsVST() end},
-            { name = 'Scroll Left', momentary = true, func = function(self) leftPad = -300
-                                            Fullscreen(window, false)
-                                            ResizeWindow(window, leftX, 0, 800, SCREEN_HEIGHT) window:redraw() end }
-                { name = '',}  --dummy test
+    fullscreen = { name = 'FullScreen', x = 0, y = 0, w = chBtnW, h = btnH, color = 'gray', func = function(self) Fullscreen(window, self:val() == 1) end },
+    presetMenu = { name = 'PresetsMenu', x = presetX, y = 0, w = chBtnW, cols = 3, rows = 1, options = {
+            { name = 'GlobalPage', image = 'Global', func = function() SetPanelsGLOBAL() end },
+            { name = 'PresetsPage', image = 'Presets', func = function() SetPanelsPRESETS() end},
+            { name = 'VstPage', image = 'Vst', func = function() SetPanelsVST() end},
         },
     },
-    globalBank = { name = 'gBank', save = true, multi = false,  fontSize = 18, x = bankX - (btnW * 4), y = 0, w = 4 * btnW, sync = function(self)  end},
-    globalPreset = { name = 'gPreset', save = true, x = bankX - btnW, y = 0, w = 4 * btnW, color = 'gray', func = function(self) end},
+    leftMenu = {  x = presetX + (2 * btnW), y = 0, color = 'gray', w = chBtnW, options = {
+            { name = 'Quit', image = 'Quit', momentary = true, func = function(self) CloseWindow(window) end },
+            { name = 'Console', image = 'Console', momentary = false, func = function() ultraschall.BringReaScriptConsoleToFront() end },
+        },
+    },
+    globalBank = { name = 'gBank', save = true, multi = false, h = 12,  fontSize = 18, x = bankX - btnW, y = 0, w = 4 * btnW, textColor = 'gray', sync = function(self)  end},
+    globalPreset = { name = 'gPreset', save = true, x = bankX - btnW, y = 0, w = 4 * btnW, textColor = 'white', captionY = 1, func = function(self) end},
     rightMenu = { x = totalW - btnW - faderW - pad, y = (tempoH * 3) + pad, rows = 3, options =  {
             { name = 'BankEditor',momentary = true, func = function(self) OpenBankEditor() end},
             { name = 'gSave', momentary = true, func = function(self) GlobalSave(gui.globalPreset.caption) end},
@@ -705,13 +729,13 @@ gui = {
 
     presets =   {   name = 'presetPanel', x = presetX, y = presetY, rows = presetRows, cols = presetCols, chColor = true,
                 func = function(self) SelectPreset() end},
-    presetPager = {  x = bankX - spinnerW - pad, y = presetY, w = spinnerW, h = spinnerH, chColor = true},
+    presetPager = {  x = bankX - spinnerW - pad, y = presetY, w = spinnerW, h = spinnerH, chColor = true, image = 'SpinnerDark'},
     banks =     {   name = 'bankPanel', x = bankX, y = presetY, rows = presetRows, cols = bankCols, func = function(self) SelectBank() end },
-    bankPager = {  x = bankX - spinnerW, y = paramsY - spinnerH - pad, w = spinnerW, h = spinnerH},
+    bankPager = {  x = bankX - spinnerW, y = paramsY - spinnerH - pad, w = spinnerW, h = spinnerH, image = 'SpinnerDark'},
     -------------------------------------------TRANSPORT---------------------------
     -------------------------------------------------------------------------------
     tempoDec = { name = 'TempoDec', w = tBtnW, x = transportX, y = 0, h = tempoH, momentary = true,  func = function(self) UpdateTempo(Tempo() - 1) end },
-    tempo    = { name = 'Tempo', w = tempoW, x = transportX + tBtnW, h = tempoH, y = 0, horizontal = true, min = 50, max = 197, frames = 147, func = function(self) Tempo(self:val()) end },
+    tempo    = { name = 'Tempo', w = tempoW, x = transportX + tBtnW, h = tempoH, y = 0, horizontal = true, save = true, min = 50, max = 197, frames = 147, func = function(self) Tempo(self:val()) end },
     tempoInc = { name = 'TempoInc', x = totalW - tBtnW, y = 0, w = tBtnW, h = tempoH, momentary = true, func = function(self) UpdateTempo(Tempo() + 1) end },
     hemiola = { name = 'hemiola',  w = tBtnW, h = btnH, x = transportX, y = tempoH + btnH, rows = 1, cols = 5, options = {
         { name = 'ResetMeter', func = function(self) Tempo(nil, nil, 1) end },
@@ -735,15 +759,16 @@ gui = {
     fxLevel =  {   name = 'fxLevel', image = 'send', x = leftPad, y = paramsY ,frames = 72, h = 5 * btnH, func = function(self) SetFxLevel(iCh, self:val()) CH().send:val(self:val()) end},
     fxLabel =  {   name = 'fxLabel', x = leftPad + pad, y = paramsY + 55, fontSize = 24, h = 5 * btnH, },
     panFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true, caption = 'pan', captionY = -.7,
-                    w = 2 * inspBtnW, h = btnH, func =  function(self) CH().pan:val(self:val()) Pan(iCh, self:val()) end },
-    trackTitle = {  name = 'trackTitle', x = paramsX, y = paramsY, w = btnW * 3, func = function(self) OpenPlugin(iCh) end },  --show vst
+                    w = 3 * inspBtnW, h = btnH, func =  function(self) CH().pan:val(self:val()) Pan(iCh, self:val()) end },
+    bankTitle = { name = 'bankTitle', h = 20, x = paramsX + btnW, y = paramsY-12, w = btnW * 3, fontSize = 16, displayOnly = true, textColor = 'gray' },
+    trackTitle = {  name = 'trackTitle', x = paramsX + btnW, y = paramsY, w = btnW * 3, func = function(self) OpenPlugin(iCh) end },  --show vst
     paramTabs = { name = 'paramTabs',x = paramsX + (5 * btnW), y = paramsY, rows = 1, cols = 2, color = GetRGB(0,0,75), options = {
-            { name = 'Params', func = function(self) gui.params.layer:show() gui.mappings.layer:hide()  end },
+            { name = 'Params', func = function(self) gui.params.layer:show() gui.mappings.layer:hide() end },
             { name = 'Mappings', func = function(self) gui.params.layer:hide() gui.mappings.layer:show() end },
         },
     },
     fxSelect =  {   name = 'fxSelect', x = chanBtnX, y = paramsY + btnH, rows = paramRows, cols = 1, func = function(self) end },
-    fxSelectPager = {  x = faderW + leftPad, y = paramsY, w = btnW, h = btnH, image = "HorizSpin.png" , horizontal = true},
+    fxSelectPager = {  x = faderW + leftPad, y = paramsY, w = btnW, h = btnH, image = "HorizSpin" , horizontal = true},
     inspector = {   x = inspectorX, y = paramsY + btnH, w = inspBtnW, h = btnH, chColor = true, options = {
             { name = 'Cue', func = function(self)    CH().Cue:val(self:val()) Cue(iCh, self:val()) end },
             { name = 'Solo', func = function(self)   CH().Solo:val(self:val())  end },
@@ -804,7 +829,7 @@ gui = {
             { name = 'Mods', func = function(self) ShowOrganCtl(false) end },
         },
     },
-    organControls = { name = 'organControls', x = organX, y = paramsY + btnH, h = dbH/2, w = btnW/2, rows = 2, cols = 4, multi = true, options =  {
+    organControls = { name = 'organControls', x = organX, y = paramsY + btnH, h = dbH/2, w = oBtnW, rows = 2, cols = 4, multi = true, options =  {
             { name = 'ch vib',   sync = function(self) end, func = function(self) end },
             { name = 'leslie',    sync = function(self) end, func = function(self) end },
             { name = 'vib UP', sync = function(self) end, func = function(self) end },
@@ -827,9 +852,10 @@ gui = {
             { name = 'drawbar9', sync = function(self) end, func = function(self) end },
         },
     },
-    organDrive =  { name = 'drive', caption = 'drive', captionY = -.6, x = organX, y = paramsY + (btnH * 4) - pad, z = organZ, w = btnW*2, h = btnH + pad,
+    organDrive =  { name = 'drive', caption = 'drive', captionY = -.6, x = organX, y = paramsY + (btnH * 4) - pad, z = organZ, w = oBtnW * 4, h = btnH + pad,
                 horizontal = true, frames = 97, image = 'OrganFader',  sync = function(self)end, func = function(self) end },
-    organReverb = { name = 'reverb', caption = 'reverb', captionY = -.6, x = totalW - (9* dbW) - pad, y = paramsY + (btnH * 4) - pad, z = organZ, w = dbW*9, h = btnH + pad,
+    leslie = { name = 'leslie', y = paramsY + (btnH * 4) - pad, w = (2 * dbW) - pad, x = totalW - (9 * dbW) - pad, h = btnH + pad, color = organColor() },
+    organReverb = { name = 'reverb', caption = 'reverb', captionY = -.6, x = totalW - (7* dbW) - pad, y = paramsY + (btnH * 4) - pad, z = organZ, w = dbW*9, h = btnH + pad,
                 horizontal = true, frames = 97, image = 'OrganFader', sync = function(self)end, func = function(self) end },
 
 
@@ -992,6 +1018,7 @@ gui = {
     fxSpin =   { name = 'fxSpin', bg = true, save = false, x = leftPad + faderW, y = fxSendY, sync = function(self) self.caption = GetFxChan(self.ch) end,
                                                                         func = function(self)
                                                                             local chan = CH(self.ch)
+                                                                            MSG('self.ch--',self.ch,'self.val--', self:val())
                                                                             IncFxNum(self.ch,self:val())
                                                                             self.caption = GetFxChan(self.ch)
                                                                             chan.send:setColor(ChanColor(GetFxChan(self.ch)))
@@ -1048,17 +1075,8 @@ gui = {
 -----------------------------------------------------------------------------------------------------------
 ---{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{  CREATE ELEMENTS  }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
 -----------------------------------------------------------------------------------------------------------
---setBackdrop()
-gui.fullscreen = createButton(gui.fullscreen)
-gui.leftMenu = createMenu(gui.leftMenu)
-gui.globalPreset = createTitle(gui.globalPreset)
-gui.globalBank = createTitle(gui.globalBank)
-gui.tempoDec = createButton(gui.tempoDec)
-gui.tempo = createFader(gui.tempo)
-gui.tempoInc = createButton(gui.tempoInc)
-MSG('got here')
 
-local function tempoOptions(options)
+local function menuOptions(options)
     local opts = {}
     for i,option in ipairs(options) do
         local newOption = { name = '', image = imageFolder..option.name..'.png', func = option.func }
@@ -1066,8 +1084,18 @@ local function tempoOptions(options)
     end
     return opts
 end
-gui.hemiola = createPanel(gui.hemiola, nil, tempoOptions(gui.hemiola.options))
-gui.quaver = createPanel(gui.quaver, nil, tempoOptions(gui.quaver.options))
+--setBackdrop()
+gui.fullscreen = createButton(gui.fullscreen)
+gui.presetMenu = createPanel(gui.presetMenu, nil, menuOptions(gui.presetMenu.options))
+gui.leftMenu = createMenu(gui.leftMenu)
+gui.globalPreset = createTitle(gui.globalPreset)
+gui.globalBank = createTitle(gui.globalBank)
+gui.tempoDec = createButton(gui.tempoDec)
+gui.tempo = createFader(gui.tempo)
+gui.tempoInc = createButton(gui.tempoInc)
+
+gui.hemiola = createPanel(gui.hemiola, nil, menuOptions(gui.hemiola.options))
+gui.quaver = createPanel(gui.quaver, nil, menuOptions(gui.quaver.options))
 
 gui.rightMenu = createMenu(gui.rightMenu)
 
@@ -1091,6 +1119,7 @@ function gui.panFader:onMouseUp(state)
     self.hasBeenDragging = false
 end
 
+gui.bankTitle = createTitle(gui.bankTitle)
 gui.trackTitle = createTitle(gui.trackTitle)
 --INSPECTOR-----------------------------------------------------------
 for i, btn in ipairs(gui.inspector.options) do
@@ -1123,6 +1152,7 @@ end
 gui.organControls = createPanel(gui.organControls, nil, gui.organControls.options)
 gui.organControls:setColor(organColor(), true)
 gui.organDrive = createFader(gui.organDrive) gui.organDrive:setColor(organColor())
+gui.leslie = createButton(gui.leslie)
 gui.organReverb = createFader(gui.organReverb) gui.organReverb:setColor(organColor())
 
 function ShowOrganCtl(on)
@@ -1201,6 +1231,7 @@ end
 --update the gui when a bank is changed
 function BankChanged(chNum)
     local name = selectedBanks[chNum].name
+    gui.bankTitle:val(name)
     CH().bank:val(name)
     for i, rcvCh in ipairs(GetFxReceives(chNum)) do
         gui.ch[rcvCh].send:setColor(ChanColor(chNum))
@@ -1216,16 +1247,17 @@ function ChChanged(chNum)
     iCh = chNum
     local color = ChanColor(chNum)
     if PanelDisplay == PRESET then
-        gui.presets:setColor(color, true)
         gui.presets:setOptions(presets[iCh])
+        gui.presets:setColor(color, true)
         gui.banks:setOptions(bankLists[iCh])
         gui.banks:selectByName(selectedBanks[iCh].name, true) --select the button, but don't reload the bank...
         gui.banks:pageToSelection()
     end
     --get preset list
+    gui.bankTitle:setCaption(CH().bank:val())
     gui.trackTitle.textColor = color
     gui.trackTitle:setCaption(CH().preset:val())
-    gui.paramTabs:setColor(color, true)
+    gui.params:setColor(color, true)
     --fx
     gui.fxLabel:val( CH().sendLabel:val() )
     gui.fxLevel:val( CH().send:val())
@@ -1275,12 +1307,14 @@ end
 for _,layer in pairs(layers) do window:addLayers(layer) end
 
 --GlobalSave('test')
+InitOutputRouting() --verify output sends exist.
 window:open()
 Fullscreen(window)
-ResetSends()
 --initTables()
-GlobalRecall('default','default')
+GlobalRecall('default', gBankname)
+
 --sync()
 --ChChanged(1)
-SetPanelsPRESETS()
+--SetPanelsPRESETS()
+GUI.func = Update()
 GUI.Main()

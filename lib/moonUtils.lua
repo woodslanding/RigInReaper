@@ -41,8 +41,8 @@ BRIGHTNESS = 50
 
 REAPER_TEMPO = 120
 BEAT = 4  --default to 4/4
-BEAT_MOD = 1
-METER_MOD = 1
+QUAVER = 1
+HEMIOLA = 1
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1280
@@ -336,7 +336,7 @@ function GetBankFileTable()
     local files = {}
     for i,filename in pairs(GetFileList(BANK_FOLDER)) do
         local parts = StringSplit(filename,'.')
-        --table[parts[1]] = parts[2]
+        table[parts[1]] = parts[2]
         files[i] = { name = parts[1], vst = parts[2]}
     end
     local sorted = ArraySortByField(files)
@@ -349,10 +349,8 @@ function GetGBanks()
     return gBanks
 end
 
-function GetGPresets()
-    if not gBank then gBank = GetGBanks()[1] end
-    if not gPresets then gPresets = OptionsFromPath(GBANK_FOLDER..gBank.name..'/') end
-    return gPresets
+function GetGPresets(bankname)
+    return OptionsFromPath(GBANK_FOLDER..bankname..'/')
 end
 
 function GetPluginDisplayName(plugName, path)
@@ -364,6 +362,7 @@ end
 
 function GetPlugFromDisplayName(name, path)
     for i, plug in ipairs(GetBankFileTable(path)) do
+        MSG('plugname = ',plug.name, ', plugvst = ', plug.vst)
         if plug.name == name then return plug.vst end
     end
     return name
@@ -687,6 +686,14 @@ function ToggleTrackEnable(chan)
 end
 --################################################################################################################--
 --------------------------------------------SEND AND RECEIVE--------------------------------------------------------
+function InitOutputRouting()
+    for chan = 1, CH_COUNT do
+        for out = TRACKS.OUT_MON, TRACKS.OUT_D do
+            AddSend(chan, out)
+        end
+    end
+end
+
 function GetSendDest(chan,index)
     local track = GetTrack(chan)
     local dest = reaper.BR_GetMediaTrackSendInfo_Track( track, REAPER.SEND, index-1, 1)
@@ -717,25 +724,39 @@ function RemoveReceive(chan, idx)
     reaper.RemoveTrackSend( track, REAPER.RCV, idx-1 )
 end
 
+function GetNumberOfTrack(track)
+    return reaper.GetMediaTrackInfo_Value( track, 'IP_TRACKNUMBER' )
+end
+
 function RemoveSend(chan,destCh)
-    local idx = GetSendIndex(chan, destCh)
+    --removes ALL routing between two channels!
+    --MSG('REMOVING SEND: Source, Destination for Removal: ', chan, destCh )
     local track = GetTrack(chan)
-    --if the send doesn't exist, quietly fail
-    if idx then reaper.RemoveTrackSend( track, REAPER.SEND, idx-1 ) end
+    local sendCount =  reaper.GetTrackNumSends( track, REAPER.SEND )
+    --MSG('Number of sends:', sendCount)
+    for idx = 1, sendCount do
+        local destTrack = reaper.BR_GetMediaTrackSendInfo_Track( track, REAPER.SEND, idx - 1, 1 )
+        local dest = GetNumberOfTrack(track)
+        MSG('checking idx:',idx, 'track:', dest)
+        if dest == destCh then
+            MSG('Removing send: ', chan, dest)
+            reaper.RemoveTrackSend( track, REAPER.SEND, idx-1 )
+        end
+    end
 end
 
 function AddReceive(desttrack, srctrack)
-    --MSG('addReceive: adding receive to track ',srctrack,'from track ',srctrack)
+
+end
+
+function AddSend(srctrack,desttrack)
+    RemoveSend(srctrack, desttrack)
     local mediatrack = GetTrack(srctrack)
     local mediaFxTrack = GetTrack(desttrack)
     if mediatrack and mediaFxTrack then
         reaper.CreateTrackSend( mediatrack, mediaFxTrack )
     else ERR('AddReceive, no track found: ', desttrack, srctrack)
     end
-end
-
-function AddSend(srctrack,desttrack)
-    AddReceive(desttrack,srctrack)
 end
 
 function IsReceiveMuted(chan, index)
@@ -811,7 +832,7 @@ function SetOutputSend(chan,outputnum)
         end
     end
 end
----rewrite to look to ns
+---query reaper for selected output
 function GetOutputSend(chan)
     for i = TRACKS.OUT_A,TRACKS.OUT_D do
         if not IsSendMuted(chan,i) or
@@ -850,64 +871,68 @@ end
 --#############################################################################################
 ---------------------------------------TRANSPORT CONTROLS -------------------------------------
 
---probably not to be used by rig, stick to project tempo
 --project tempo doesn't seem to update anything?
 function SetTempo(tempo)
-    reaper.SetCurrentBPM( 0, tempo, 1 )
+    reaper.SetCurrentBPM( 0, tempo, 0 )
 end
 
 function GetTempo()
     return  reaper.Master_GetTempo()
 end
 
----------------------------------------------------------------------------------------------------------
--------------------------------------------TEMPO---------------------------------------------------------
 local function initTempo()
     --local bpm, beat, denominator = ultraschall.GetProject_Tempo(getCurrentProjectFilename())
     local bpm = GetTempo()
     MSG("BPM", bpm)
     LOCAL_TEMPO = bpm
     REAPER_TEMPO = bpm
+    HEMIOLA = 1
+    QUAVER = 1
 end
 --get/set. reaper's tempo is a combination of these.
 --LOCAL_TEMPO is the persisted displayTempo
 --quaver is a multiplier of two
 --modifier is for triplet or dotted rhythms
-function Tempo(displayTempo, quaver, modifier )
-    if not LOCAL_TEMPO then initTempo() end
-    if not displayTempo and not modifier and not quaver then return LOCAL_TEMPO end
-    if quaver then BEAT_MOD = quaver end
-    if modifier then METER_MOD = modifier end
+function Tempo(displayTempo, quaver, hemiola )
+    MSG("calling tempo: display = ", displayTempo, ', quaver = ',quaver,', modifier = ', hemiola)
+    if LOCAL_TEMPO and REAPER_TEMPO then  --do nothing
+    else initTempo() end
+    if not displayTempo and not hemiola and not quaver then return LOCAL_TEMPO end
+    if quaver then QUAVER = quaver end
+    if hemiola then HEMIOLA = hemiola end
     if displayTempo then LOCAL_TEMPO = Math.round(displayTempo) end
-    if not REAPER_TEMPO or not LOCAL_TEMPO then initTempo() end
-    REAPER_TEMPO = Math.round(LOCAL_TEMPO * METER_MOD * BEAT_MOD, 1) --round to one decimal place
-    -MSG("Setting reaper tempo to: ", REAPER_TEMPO)
-    ultraschall.SetProject_Tempo(getCurrentProjectFilename(),REAPER_TEMPO,BEATS,4)
+    MSG('meter mod = ', HEMIOLA, ', beat mod = ', QUAVER)
+    REAPER_TEMPO = Math.round(LOCAL_TEMPO * HEMIOLA * QUAVER * 10) / 10 --round to one decimal place
+    MSG("Setting reaper tempo to: ", REAPER_TEMPO)
+    MSG("local tempo = ", LOCAL_TEMPO)
+    --ultraschall.SetProject_Tempo(getCurrentProjectFilename(),REAPER_TEMPO,BEATS,4)
     SetTempo(REAPER_TEMPO)
 end
---reaper's denominator is always 4, and we can double or halve tempo from app...
+--reaper's denominator is always set to 4, and we can double or halve tempo from app...
 function SetBeat(numerator)
     BEATS = numerator
-    ultraschall.SetProject_Tempo(getCurrentProjectFilename(),REAPER_TEMPO,BEATS,4)
+    reaper.SetTempoTimeSigMarker(getCurrentProject(), 0, 0, -1,-1, GetTempo(),BEATS,4, true )
 end
-
+--not the actual time :(
 function GetTime()
     local string = ultraschall.SecondsToTime(reaper.time_precise())
     MSG('time = ',string)
+end
+--might someday want to be able to locate to the nearest beat.
+--Still don't know if beat fx work with transport stopped
+function Home()
+    reaper.Main_OnCommandEx( 40042, 0, -1 )
+    --commandID: 40042
 end
 
 --------------------------------------------------------------------------------------------------------------
 ------#######################################################################################################
 ------------------------------------------------ FX LOADING ---------------------------------------------
---When we load an instrument, we need to first remove all its receives from other channels
---Edit: isFx is stored in the bank.  When we load an instrument, we load its first (or default) bank,
---and set the sends accordingly with SetChanFxStatus()
 function LoadInstrument(chan,vstname)
     --defer???
     --we will have to select a bank before re-adding the sends
     reaper.PreventUIRefresh(1)
-    SetChanFxStatus(chan, false)
-    local oldName = GetPlugFromDisplayName(GetPlugName(chan, INSTRUMENT_SLOT))
+    local oldName = GetPluginDisplayName(GetPlugName(chan, INSTRUMENT_SLOT))
     MSG('new fx name = '..vstname, 'old name = '..oldName)
     if vstname ~= oldName then
         local track = GetTrack(chan)
@@ -949,10 +974,18 @@ function GetFxReceives(chan)
     return channels
 end
 
+function ClearChanSends()
+    for send = 1, CH_COUNT do
+        for rcv = 1, CH_COUNT do
+            RemoveSend(send, rcv)
+        end
+    end
+end
+
 function ResetSends()
+    ClearChanSends()
     for send = 1, CH_COUNT do
         for i, rcv in ipairs(getFxList()) do
-            RemoveSend(send, rcv)
             AddSend(send, rcv)
             SetSendPreFader(send, rcv)
             MuteSend(send, rcv)
@@ -982,7 +1015,6 @@ local function fxChanInfo(chan)
         local fxIdx = 0
         local chanFxMuted = false
         for i,dest in ipairs(fxList) do
-
             if not IsSendMuted(chan, dest) then
                 unmuted = unmuted + 1
                 --if an fxsend is already unmuted, mute all others
@@ -1011,6 +1043,7 @@ local function fxChanInfo(chan)
                 fxIdx = GetSendIndex(chan, fxChan)
             end
         end
+        MST('fx channels',fxChannels)
         fxChannels[chan] = { chan = fxChan, mute = chanFxMuted, idx = fxIdx }
     end
     return fxChannels[chan]
@@ -1042,13 +1075,15 @@ function SetFxByIdx(chan,fxIdx)
 end
 
 --remove the old send, and rebuild, in case there are non-conforming settings
+--called on any bank change, as isFX is a bank setting
 function SetChanFxStatus(chan, isfx)
     for dest = 1, CH_COUNT do
         if dest ~= chan then
             local muted IsSendMuted(chan, dest)
             RemoveSend(chan, dest)
             if isfx then
-                AddReceive(chan, dest)
+                MSG('addReceive: adding receive to track ',dest,'from track ',chan)
+                AddSend(dest, chan)
                 SetSendPreFader(dest,chan)
                 MuteSend(dest,chan, muted) --restore the mute setting
             end
@@ -1067,16 +1102,6 @@ function GetChFxList(chan)
         end
     end
     return chFX, #chFX
-end
-
-function ClearFX(chan)
-    local track = GetTrack(chan)
-    local count = reaper.TrackFX_GetCount(track)
-    if count > 0 then
-        for idx = reaper.TrackFX_GetCount(track) - 1, 0, -1 do
-            reaper.TrackFX_Delete(track, idx)
-        end
-    end
 end
 
 function GetChFxName(chan)
@@ -1100,9 +1125,9 @@ function SetFxChanByName(name, chan)
 end
 
 function IncFxNum(chan,inc)
-    local idx = GetFxIndex(chan)
+    local idx = GetFxChanIdx(chan)
     local count = #GetChFxList(chan)
-    MSG('IncFxNum: count=',count,'fx index=',idx, 'increment =',inc)
+    MSG('IncFxNum: count=',count,'increment =',inc,'fx index=',idx)
     local newVal = IncrementValue(idx,1,count,true,inc)
     --MSG('IncFxNum: inc, new val=', newVal)
     SetFxByIdx(chan, newVal)
@@ -1115,10 +1140,6 @@ function GetFxForIndex(chan,index)
     return tracks[index],count
 end
 
-function GetFxIndex(chan)
-    local _,_,fxIndex = GetFxChan(chan)
-    return fxIndex
-end
 
 
 --###########################################################################################--
@@ -1223,15 +1244,18 @@ function Pan(chan, fader)
     end
 end
 
---[[
-function GetMeter(tracknum,chan)
+function GetMeter(chan)
+    --val_to_dB = function(val) return 20*math.log(val, 10) end
+    --dB_to_val = function(dB_val) return 10^(dB_val/20) end
     --peak = Track_GetPeakInfo(track, channel);
-    --amp_dB = 8.6562;
+    local amp_dB = 8.6562;
     --peak_in_dB = amp_dB*log(peak);
     local track = GetTrack(tracknum)
-    local level = reaper.Track_GetPeakInfo( track, chan )
+    local peakL, peakR = reaper.Track_GetPeakInfo(track, 0 ), reaper.Track_GetPeakInfo(track, 1 )
+    local dbL, dbR =  amp_dB*log(peakL),amp_dB*log(peakR)
+    return 10^(dbL/20), 10^(dbR/20)
     ----MSG('level =',level,'chan = ',chan)
-    return level
+    --return levelL,levelR
 end--]]
 --------------------------------------------------------------------------------------------
 ---------------------------------NOTESOURCE SWITCHING---------------------------------------
@@ -1249,30 +1273,23 @@ end
 
 function SetOutputByNotesource( chan, nsindex)
     --MSG('SetOutputByNotesource: nsindex=',nsindex)
-    --If an inst has output D, it should NOT change with ns!
-    --TODO: don't use MCS for this value--query NS
-    local output = GetMoonParam(chan, MCS.AUDIO_OUT)
+    --If an inst has output D, it should NOT change with ns!  That's a separate hard out.
+    local output = GetOutputSend(chan)
     --MSG('SetOutputByNotesource: output=',output)
     if output ~= AUDIO_OUT.D then
         --MSG('SetOutputByNotesource: Setting by notesource',nsindex)
         if nsindex == NS.KBD then
             SetOutputSend(chan, TRACKS.OUT_A)
-            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.A)
         elseif nsindex == NS.ROLI then
             SetOutputSend(chan,TRACKS.OUT_B)
-            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.B)
         elseif nsindex == NS.DUAL then
             SetOutputSend(chan,TRACKS.OUT_A)
-            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.A)
         elseif nsindex == NS.NONE then
             SetOutputSend(chan,TRACKS.OUT_C)
-            SetMoonParam(chan,MCS.AUDIO_OUT,AUDIO_OUT.C)
         end
-    else SetOutputSend(chan,TRACKS.OUT_D)
-        --MSG('SetOutputByNotesource: Setting by output D:', output)
     end
 end
-
+--we should just look to the controller type in mcs for now
 function MuteSendsByNotesource(chan,nsIndex)
     if nsIndex == NS.KBD then
         MuteSend(TRACKS.IN_KEYB,chan,false)
@@ -1397,7 +1414,7 @@ function ClearRouting(chan)
     reaper.Main_OnCommand(commandID, 0)
 end
 --Only used when creating a wkp from scratch.  Still probably useful, but needs work.
-function ConfigureTrack(chan)
+--[[function ConfigureTrack(chan)
     --clear any fx sends or returns
     ClearRouting(chan)
     --add all outputs to the track:
@@ -1456,7 +1473,7 @@ function ConfigureTrack(chan)
     if fx == chan then fx = GetFxForIndex(2) end
     MuteSend(chan,fx,false)
     SetFxLevel(chan,0)
-end
+end--]]
 
 ---------------------------------------------------------------------------------------------------------------
 --#############################################################################################################
@@ -1757,7 +1774,7 @@ end
 
 
 
-
-MSG(GetTime())
+InitOutputRouting()
+--MSG(GetTime())
 --Test()
 --reaper.Track_GetPeakInfo( track, chan ) --use for meters

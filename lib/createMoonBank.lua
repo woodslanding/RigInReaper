@@ -122,7 +122,7 @@ function Bank:presetsAsOptions()
     local options = {}
     --if #self:getPresets() == 0 then return options end
     for i, preset in ipairs(self:getPresets()) do
-        options[i] = { name = preset }
+        options[i] = { name = preset, color = GetRGB(self.hue, self.sat, BRIGHTNESS) }
     end
     return options
 end

@@ -159,7 +159,8 @@ function MButtonPanel:setOption(idx,parameters)
             index = idx,
             state = params.state or 0,
             color = params.color or self.color or 'gray',
-            textColor = params.textColor or 'text',
+            textColor = params.textColor or self.textColor or 'text',
+            selTextColor = params.selTextColor or params.textColor or self.selTextColor or self.textColor or 'text',
             momentary = params.momentary or self.momentary,
             name = params.name or '???',
             func = params.func or self.func,
@@ -212,7 +213,7 @@ function MButtonPanel:selectByName(name, doNotRun)
         end
     end
 end
---takes and index, or an option.  DoNotRun only updates the display, does not run the action
+--takes an index, or an option.  DoNotRun only updates the display, does not run the action
 --when a button is pressed, the button's func is called, which runs this.  Then, buttonPanel
 --runs (optionally) the option associated with the function, which will be the panel's func method,
 --unless the option has overridden it.
@@ -229,11 +230,13 @@ function MButtonPanel:select(index,doNotRun)
             if self.multi then   --in multimode we ignore everything in options except state
                 if option.state == 0 then
                     option.state = 1
+                    sw.textColor = option.selTextColor
                     sw:val(option.state)
                     self.selection[index] = option
                     if not doNotRun then option:func() end
                 else
                     option.state = 0
+                    sw.textColor = option.textColor
                     sw:val(option.state)
                     self.selection[index] = nil
                     if doNotRun == false then option:func() end
@@ -247,10 +250,12 @@ function MButtonPanel:select(index,doNotRun)
                     if option and index and sw.option.index == index then
                         if not self.momentary then sw.frame = 1 end
                         option.state = 1
+                        sw.textColor = option.selTextColor or self.selTextColor or 'text'
                         self.selection = option
                         MST(option,'selected option')
                         option:func()
                     else sw.frame = 0
+                        sw.textColor = option.textColor or self.textColor or 'text'
                     end
                     sw:redraw()
                 end
