@@ -37,7 +37,7 @@ IMAGE_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Images/"
 BANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/Banks/"
 GBANK_FOLDER = reaper.GetResourcePath().."/Scripts/_RigInReaper/GBanks/"
 
-BRIGHTNESS = 50
+BRIGHTNESS = 60
 
 REAPER_TEMPO = 120
 BEAT = 4  --default to 4/4
@@ -421,6 +421,7 @@ function Fullscreen(window, off)
     else style = originalStyle
     end
     if not off then
+
         reaper.JS_Window_Show( win, "RESTORE" )
         reaper.JS_Window_SetStyle( win, "MAXIMIZE" )
     else
@@ -435,7 +436,7 @@ function ResizeWindow(window, x, y, w, h)
     local title = window.name
     local win = reaper.JS_Window_Find(title, true)
     reaper.JS_Window_SetPosition(win, x, y, w, h)
-    window:update()
+    --window:update()
 end
 
 function GetLayoutXandY(i,x,y,w,h,rows)
@@ -704,7 +705,7 @@ end
 function GetSendCount(chan)
     local track = GetTrack(chan)
     local count = reaper.GetTrackNumSends( track, REAPER.SEND )
-    --Msg('GetSendCount:chan',chan,'count',count)
+    --MSG('GetSendCount:chan',chan,'count',count)
     return count
 end
 
@@ -729,35 +730,25 @@ function GetNumberOfTrack(track)
 end
 
 function RemoveSend(chan,destCh)
-    --removes ALL routing between two channels!
-    --MSG('REMOVING SEND: Source, Destination for Removal: ', chan, destCh )
-    local track = GetTrack(chan)
-    local sendCount =  reaper.GetTrackNumSends( track, REAPER.SEND )
-    --MSG('Number of sends:', sendCount)
-    for idx = 1, sendCount do
-        local destTrack = reaper.BR_GetMediaTrackSendInfo_Track( track, REAPER.SEND, idx - 1, 1 )
-        local dest = GetNumberOfTrack(track)
-        MSG('checking idx:',idx, 'track:', dest)
-        if dest == destCh then
-            MSG('Removing send: ', chan, dest)
-            reaper.RemoveTrackSend( track, REAPER.SEND, idx-1 )
-        end
+    local src_track = GetTrack(chan)
+    local dest_track = GetTrack(destCh)
+    local send_count = reaper.GetTrackNumSends(src_track, REAPER.SEND)
+    for i = send_count - 1, 0, -1 do -- loop from end
+        local dest_track2 = reaper.BR_GetMediaTrackSendInfo_Track(src_track, REAPER.SEND, i, 1)
+        if dest_track == dest_track2 then reaper.RemoveTrackSend(src_track, 0, i) end
     end
 end
 
-function AddReceive(desttrack, srctrack)
-
-end
-
-function AddSend(srctrack,desttrack)
-    RemoveSend(srctrack, desttrack)
-    local mediatrack = GetTrack(srctrack)
-    local mediaFxTrack = GetTrack(desttrack)
+function AddSend(chan,destCh)
+    RemoveSend(chan, destCh)
+    local mediatrack = GetTrack(chan)
+    local mediaFxTrack = GetTrack(destCh)
     if mediatrack and mediaFxTrack then
         reaper.CreateTrackSend( mediatrack, mediaFxTrack )
-    else ERR('AddReceive, no track found: ', desttrack, srctrack)
+    else ERR('AddReceive, no track found: ', destCh, chan)
     end
 end
+
 
 function IsReceiveMuted(chan, index)
     local track = GetTrack(chan)
@@ -768,6 +759,7 @@ end
 function GetSendIndex(chan, destChan)
     for i = 1, GetSendCount(chan) do
         local dest = GetSendDest(chan, i)
+        --MSG('GetSendIndex: dest = ', dest, 'SourceChan = ',chan, 'index = ',i)
         if dest == destChan then
             return i
         end
@@ -871,16 +863,36 @@ end
 --#############################################################################################
 ---------------------------------------TRANSPORT CONTROLS -------------------------------------
 
---project tempo doesn't seem to update anything?
 function SetTempo(tempo)
+    MSG('calling tempo:', tempo)
     reaper.SetCurrentBPM( 0, tempo, 0 )
+    --Home()  --think this is an okay idea...
+
+end
+
+--might someday want to be able to locate to the nearest beat.
+--Still don't know if beat fx work with transport stopped
+function Home()
+    reaper.Main_OnCommand( 40042, 0 )
+end
+
+function SetLoop( msrCount )
+    --start point is zero.
+    --end point is # measures at LOCAL tempo.  Needs to be converted to reaper tempo
+    local reaperEnd =  reaper.TimeMap2_beatsToTime( getCurrentProject(), 0, msrCount )
+    ---local localEnd = reaperEnd * (REAPER_TEMPO/LOCAL_TEMPO)  --or the reverse :\
+    local loopstart, loopend = reaper.GetSet_LoopTimeRange( true, true, 0, reaperEnd, true )
 end
 
 function GetTempo()
     return  reaper.Master_GetTempo()
 end
 
-local function initTempo()
+function Stop()
+    reaper.Main_OnCommand(1016, 0)
+end
+
+function InitTempo()
     --local bpm, beat, denominator = ultraschall.GetProject_Tempo(getCurrentProjectFilename())
     local bpm = GetTempo()
     MSG("BPM", bpm)
@@ -888,15 +900,16 @@ local function initTempo()
     REAPER_TEMPO = bpm
     HEMIOLA = 1
     QUAVER = 1
+    reaper.GetSetRepeat(1)
+    SetLoop(16) --default to two measures for now
+    reaper.Main_OnCommand( 1007, 0 )  --PLAY!
 end
 --get/set. reaper's tempo is a combination of these.
 --LOCAL_TEMPO is the persisted displayTempo
 --quaver is a multiplier of two
---modifier is for triplet or dotted rhythms
+--hemiola is for triplet or dotted rhythms
 function Tempo(displayTempo, quaver, hemiola )
     MSG("calling tempo: display = ", displayTempo, ', quaver = ',quaver,', modifier = ', hemiola)
-    if LOCAL_TEMPO and REAPER_TEMPO then  --do nothing
-    else initTempo() end
     if not displayTempo and not hemiola and not quaver then return LOCAL_TEMPO end
     if quaver then QUAVER = quaver end
     if hemiola then HEMIOLA = hemiola end
@@ -918,12 +931,7 @@ function GetTime()
     local string = ultraschall.SecondsToTime(reaper.time_precise())
     MSG('time = ',string)
 end
---might someday want to be able to locate to the nearest beat.
---Still don't know if beat fx work with transport stopped
-function Home()
-    reaper.Main_OnCommandEx( 40042, 0, -1 )
-    --commandID: 40042
-end
+
 
 --------------------------------------------------------------------------------------------------------------
 ------#######################################################################################################
@@ -1006,11 +1014,11 @@ function IsEffectCh(chan)
 end
 -- gets fx chan info.  Also makes sure fx settings are conformant
 local function fxChanInfo(chan)
-    if not fxChannels[chan] then
+    --if not fxChannels[chan] or rebuild then
         --conformant settings:  all muted and one phased, or one unmuted and no phased
         local fxList = GetChFxList(chan)
         local unmuted = 0
-        local flipped = 0
+        local flipCount = 0
         local fxChan = 0
         local fxIdx = 0
         local chanFxMuted = false
@@ -1029,30 +1037,32 @@ local function fxChanInfo(chan)
             chanFxMuted = true
             for i,dest in ipairs(fxList) do
                 if IsPhaseFlipped(chan, dest) then
-                    flipped = flipped + 1
-                    if flipped > 1 then SetSendPhase(chan, dest, false)
+                    flipCount = flipCount + 1
+                    if flipCount > 1 then SetSendPhase(chan, dest, false)
                     else fxChan = dest
                         fxIdx = i
                     end
                 end
             end
-            if flipped == 0 then
+            if flipCount == 0 then
                 fxChan = fxList[1]
                 MSG('flipping phase:',chan, fxChan)
                 SetSendPhase(chan, fxChan, true)
                 fxIdx = GetSendIndex(chan, fxChan)
             end
         end
-        MST('fx channels',fxChannels)
+        --MST('fx channels',fxChannels)
         fxChannels[chan] = { chan = fxChan, mute = chanFxMuted, idx = fxIdx }
-    end
+        --MST('fx for chan '..chan, fxChannels[chan])
+    --end
+
     return fxChannels[chan]
 end
 
 --returns fx chan, creating the sends if needed
 function GetFxChan(ch)     return fxChanInfo(ch).chan end
 function IsFxMuted(ch)     return  fxChanInfo(ch).mute end
-function GetFxChanIdx(ch)  return  fxChanInfo(ch).fxIdx end
+function GetFxChanIdx(ch)  return  fxChanInfo(ch).idx end
 
 function SetFxChan(chan, destCh)
     local prevFx, fxMuted = GetFxChan(chan)
@@ -1080,7 +1090,7 @@ function SetChanFxStatus(chan, isfx)
     for dest = 1, CH_COUNT do
         if dest ~= chan then
             local muted IsSendMuted(chan, dest)
-            RemoveSend(chan, dest)
+            RemoveSend(dest, chan)
             if isfx then
                 MSG('addReceive: adding receive to track ',dest,'from track ',chan)
                 AddSend(dest, chan)
@@ -1363,6 +1373,7 @@ end
 
 function NsSolo(chan, solo)
     if solo then
+        MSG('NSSOLO: val = ',solo)
         SetMoonParam(chan,MCS.NS_SOLO,solo)
         --MSG('SetNsSolo: Setting nss to',solo,'track', chan)
         local nsNum = GetMoonParam(chan, MCS.KEYB_TYPE)
@@ -1372,7 +1383,7 @@ function NsSolo(chan, solo)
             if GetMoonParam(chan, MCS.NS_SOLO) ~= 1 then
                 --MSG('SetNsSolo: found non-soloed track',tracknum)
                 if high > low then
-                    SetMoonParam(chan, MCS.NS_MUTED,1)
+                    --SetMoonParam(chan, MCS.NS_MUTED, 1)  --does not exist.  query gui?  how to get this?
                     SetMoonParam(chan, MCS.NS_MUTE_HI, high)
                     SetMoonParam(chan, MCS.NS_MUTE_LO, low)
                 else --no note solo
@@ -1381,6 +1392,17 @@ function NsSolo(chan, solo)
             end
         end
     else return GetMoonParam(chan, MCS.NS_SOLO)
+    end
+end
+
+function GetNsStatus(chan, enable)
+    --if we are a nsSolo channel, return enable * 2
+    if NsSolo(chan) == 1 then return enable * 2
+    --if we are not, check if we are compromised
+    else
+        local nsNum = GetMoonParam(chan, MCS.KEYB_TYPE)
+        if #GetNotesoloChans(nsNum) > 0 then return enable * 1
+        else return enable * 3 end
     end
 end
 
@@ -1720,11 +1742,6 @@ function LoadMoonPreset(chan, fxNum, presetName)
     reaper.SetTrackStateChunk(track, str, false)
 end
 
-
----------------------------------------------------------------------------------------------------------------
---#############################################################################################################
--------------------------------------------------INITIALIZATION------------------------------------------------
---initTempo()
 ---------------------------------------------------------------------------------------------------------------
 --#############################################################################################################
 -------------------------------------------------TESTING METHODS-----------------------------------------------
@@ -1772,9 +1789,17 @@ end
 
 --end
 
+--ClearChanSends()
+--AddSend(2,5)
+--AddSend(2,5)
+--AddSend(2,5)
+--AddSend(2,5)
+--AddSend(2,5)
+--AddSend(2,5)
+--RemoveSend(2,5)
 
-
-InitOutputRouting()
+--ClearChanSends()
+--InitOutputRouting()
 --MSG(GetTime())
 --Test()
 --reaper.Track_GetPeakInfo( track, chan ) --use for meters

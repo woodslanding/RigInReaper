@@ -4,14 +4,16 @@ author: Eric Moon
 version: .55
 changelog:
  /* v. 0.55 -- Seems like we might need to store FX Status in here.  FxStatus = [off, internal, external, both]
-    this would be read-only, as it can't directly affect the audio sends.  this will be scripted
+    this would be read-only, as it can't directly affect the audio sends.  this will be scripted.
+    Same with Audio Output Settings?
  /* v. 0.53 -- TODO -- need to get notesource soloing figured out.  Perhaps go by channels.
-    So Roli can solo for all channels it's working with.  [Covered in MoonUtils??]
+    So Roli can solo for all channels it's working with.  [Cover in MoonUtils??]
     But what if a nsSoloed roli instrument is using ch2-8, and another roli instrument is using 2-16?
     We don't want notes on channels 9-16 not to be soloed!
     I guess we need to declare a global ROLI channel range, which the track doesn't need to use all of.
     X-16, where X is the number of other sources + 1.
     If we get memory sharing figured out, we should also make it so PANIC affects all instances of the FX.
+    Better yet, just run it from the script
 
     v. 0.52 -- Removed key counting, using method to find lowest open ch for roli notes
                Notes now stored by key if using Roli with non-MPE vst.  Fixed fake sus for this.
@@ -56,19 +58,19 @@ about:
 //
 slider1:s_enable=1<0,1,1{off,on}>Midi Enable
 
-slider4:s_octave=0<-5,5,1>Octave transpose
-slider5:s_semi=0<-7,7,1>Semitone transpose
-slider6:s_semiToCC=0<0,127,1>Semi->CC# (0 for none)
-slider7:s_hands=0<0,1,1{off,on}>Hands (LH up 8va, RH down 8va)
+slider3:s_octave=0<-5,5,1>Octave transpose
+slider4:s_semi=0<-7,7,1>Semitone transpose
+slider5:s_semiToCC=0<0,127,1>Semi->CC# (0 for none)
+slider6:s_hands=0<0,1,1{off,on}>Hands (LH up 8va, RH down 8va)
 
 slider8:s_loNote=0<0,127,1>Lo Note (MIDI Note #)
 slider9:s_hiNote=127<0,127,1>Hi Note (MIDI Note #)
 slider10:s_loFold=0<0,127,1>Fold lo (MIDI Note #)
 slider11:s_hiFold=127<0,127,1>Fold hi (MIDI Note #)
 //NOTESOURCE
-slider13:s_nsStatus=0<0,1,1{off,on}>NS Status
-slider14:s_nsMuteLo=0<0,127,1>NS Mute Low (MIDI Note #)
-slider15:s_nsMuteHi=0<0,127,1>NS Mute High (MIDI Note #)
+slider12:s_nsStatus=0<0,1,1{off,on}>NS Status
+slider13:s_nsMuteLo=0<0,127,1>NS Mute Low (MIDI Note #)
+slider14:s_nsMuteHi=0<0,127,1>NS Mute High (MIDI Note #)
 //PEDALS
 slider16:s_susType=0<0,2,0{normal,ignored,faked}>Sus Type
 slider17:s_hold=0<0,1,1{off,hold}>Hold
@@ -76,19 +78,20 @@ slider18:s_expToCC=3<0,127,1>ExpToCC#
 slider19:s_expCurve=0<0,3,1{Normal,Reverse,X-Fade,Rev Xfade}>Expr Curve
 
 //MPE for Src:Both,
-slider20:s_mpeSrc=0<0,3,1{Normal,Dual,MPE,NONE}>Controller Type
-slider21:s_mpeVST=0<0,1,1{no,yes}>MPE vst
-slider22:s_baseCh=0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}>ChanOut (base chan for MPE)
-slider23:s_mpePoly=5<1,15,1>MPE poly to vst
-slider24:s_ATtoCC=0<0,11,1{off,1,2,3,4,5,6,7,8,9,10,11}>AT->CC
+slider21:s_mpeSrc=0<0,3,1{Normal,MPE,Dual,NONE}>Controller Type
+slider22:s_mpeVST=0<0,1,1{no,yes}>MPE vst
+slider23:s_baseCh=0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}>ChanOut (base chan for MPE)
+slider24:s_mpePoly=5<1,15,1>MPE poly to vst
+slider25:s_ATtoCC=0<0,11,1{off,1,2,3,4,5,6,7,8,9,10,11}>AT->CC
+slider26:s_aTouchLatch=0<0,127,1>AT Toggle Level (0 for off)
 
-slider25:s_pbNorm=2<0,48,1>Normal pb range (e.g. 2)
-slider26:s_pbMPE=48<1,48,1>MPE pb range (e.g. 48)
-slider27:s_pbVST=48<1,48,1>VST pb range (e.g. 12)
-slider28:s_bendToNotes=0<0,1,1{off,on}>PB->notes
+slider27:s_pbNorm=2<0,48,1>Normal pb range (e.g. 2)
+slider28:s_pbMPE=48<1,48,1>MPE pb range (e.g. 48)
+slider29:s_pbVST=48<1,48,1>VST pb range (e.g. 12)
+slider30:s_bendToNotes=0<0,1,1{off,on}>PB->notes
 
-slider30:s_outputBuss=0<0,3,1{A,B,C,D}>Output Buss
-slider31:s_audioInput=0<0,3,1{none,ext,mixer,both}>Audio Input
+slider32:s_audioInput=0<0,3,1{none,ext,mixer,both}>Audio Input
+slider33:s_outputBuss=0<0,3,1{A,B,C,D}>Output Buss
 
 slider35:s_PANIC=0<0.1.1>PANIC
 
@@ -104,8 +107,8 @@ ROLI_CC = 74;
 EXP_CC = 3; //expression midi in value....
 EXP_CH = 1;
 K_PNO = 0;
-K_DBL = 1;
-K_MPE = 2;
+K_DBL = 2;
+K_MPE = 1;
 K_NON = 3;
 
 ////////////////////////////// MIDI FUNCTIONS ///////////////////////////
@@ -120,7 +123,7 @@ SUSTAIN = 64;
 
 // Aftertouch->toggle
 touchToggleState = 0;
-toggleThreshold = 100; //value must be continuously above threshold to toggle
+//toggleThreshold = 100; //value must be continuously above threshold to toggle
 toggleDuration = 20000;  //samples of sustained pressure to toggle
 toggleCount = 0;  //reset to zero when pressure released
 counting = 0;  //are we counting?
@@ -412,7 +415,7 @@ while (midirecv(offset,msg1,msg2,msg3) && s_enable > 0 && (s_mpeSrc != K_NON))  
         //so we should maintain a count, incrementing with each block, see @block
         (status == CH_AT) && (s_aTouchLatch > 0) ?
         (
-            (msg2 > toggleThreshold) ?
+            (msg2 > s_aTouchLatch) ?
             (
                 counting = 1;
                 (toggleCount > toggleDuration) ?

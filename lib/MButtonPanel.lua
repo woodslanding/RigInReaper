@@ -252,7 +252,7 @@ function MButtonPanel:select(index,doNotRun)
                         option.state = 1
                         sw.textColor = option.selTextColor or self.selTextColor or 'text'
                         self.selection = option
-                        MST(option,'selected option')
+                        --MST(option,'selected option')
                         option:func()
                     else sw.frame = 0
                         sw.textColor = option.textColor or self.textColor or 'text'

@@ -1,19 +1,27 @@
 ------------------------------MAIN WINDOW--------------------------------
 --[[
     TODO:
-    METERING!  Need to figure out how to run the meter method in moonutils every half second or so.
-    NOTESOURcE SOLOING: can notesources be presets in MCS??  What would that look like?
-            buttton in interface switches between two (three?) presets.  But others available from preset menu.
+    ON LOAD:  should load a special file that just has bank names, and whatever else is not storable in the interface.
+        when we change a non-project value, such as bank, we'll write to this file.
+        That way if the interface crashes we can use sync() to restore the interface, without messing up the existing sounds.
+    METERING!  Should be working, but need to set up in rig before we can really check.
+    NOTESOURCE SELECT: can notesources be presets in MCS??  What would that look like?
             maybe NS could share the preset menu with VSTs, instead of duplicating bank settings.
-    FX SWITCHING:  find the bug on this.  Why is the inspector fx switcher coming up broken sometimes?
-            have to fix duplicate send issue
+        OKAY:  the built-in NS toggle just switches between two MCS presets for ROLI or KEYS.  If An effect specifies no midi in,
+        then its NS is automatically set to none.  We should allow NSources to have colors, and light the keyb icon that way
+        NSource includes MCS preset name, hue and sat, and what else?  No let's store all settings in a file, and skip the presets.
+        It could also mute sends from Keyboard or Roli...that would support more channels.  Someday, don't need it now.
+    ENABLE/NS_SOLO:  not working yet -- Debug
+    FX SWITCHING:  find the bug on this.
     SPINNERS: not displaying values on startup for octave and fx send
     BANK EDITOR:  figure out layout, and integrate in main window.
     MPanel.lua:  Write a simple panel widget that can take a texture and/or color.
     PAN: better channel display graphic--wait for meters to work.
-    METRONOME: this should be updated more often than the meters.
     DRAWBARS:  why don't they hide?  could just cover them up with the other tab(s)
     OTHER DRAWBAR TABS: Eventual support for midi input effects (arpeggiator, etc.)
+    SKIN SUPPORT?  Load png folder from prefs file.  Any other prefs yet??
+    LAYOUT MOVES:  Select --> NoSus.  NoSus-->BC.  BC--> inspector. Enable-->Select. NsSolo-->Enable
+
 ]]
 -------------------------------------------------------------------------
 -- The core library must be loaded prior to anything else
@@ -76,22 +84,6 @@ local PanelDisplay = 3
     When we start the script, we need to have a viable wkp open.  This means all 16 channels with compliant
     fx chains, and all the midi and audio tracks to support them.
 
-    Then when we start up, we needn't load up a default global preset: it is loaded already, and we just need
-    to get the ui to reflect it.
-
-    We should probably start up on the preset page for ch 1, but that is easy to change.
-
-    Every control in the ui needs a method to query reaper for its associated value, and get accordingly.
-    On startup we will run through all the ui elements and call this method.  Can use a lot of code from loading
-    and saving global presets.
-
-    Then we need to fill all the preset and bank tables for the channels.  Also fill the VST table.
-
-    Commands:
-    The panels will get functions updated as part of options loaded as their function changes.
-    So there is no need for if-> then statements to check what the preset and bank tables are displaying.
-
-
     open in global mode
     1.GLOBAL MODE:      Right panel shows global banks,
                         Left panel shows global presets for current bank:  setMode(GLOBAL)
@@ -99,13 +91,6 @@ local PanelDisplay = 3
     2.VST MODE:     Left panel shows banks for selected vst, Right panels shows master VST list
     3.CHANNEL MODE: Left panel shows presets for current channel, Right panel shows banks for current VST
 ]]
-
-local function Update()
-    --update metronome/20x sec
-    --scan all externally controlled parameters and update as needed 5x/sec
-    --update meters 5x/sec
-    --eventually increment fader to new values as needed
-end
 
 local function getColor(hue, sat)
     local saturation = sat or 60
@@ -250,7 +235,7 @@ end
 --called by the bank panel when a button is selected. name is the buttonName
 function SelectBank()
     local option = gui.banks:getSelection()
-    MST(option, 'found bank')
+    --MST(option, 'found bank')
     if PanelDisplay == GLOBAL then
         gBankname = option.name
         gui.globalBank:setCaption(gBankname)
@@ -270,7 +255,7 @@ end
 --called by the preset panel when a button is selected
 function SelectPreset()
     local option = gui.presets:getSelection()
-    MST(option, 'preset option selected')
+    --MST(option, 'preset option selected')
     if PanelDisplay == PRESET then
         presets[iCh] = option
         SetFxPreset(iCh,option.name)
@@ -393,10 +378,11 @@ function GlobalRecall(presetName, gBankname)
         VstChanged(i)
         BankChanged(i)
         PresetChanged(i)
+        SetOctave(i)
+        SetFxDisplay(i)
     end
     --set all sends at once after loading everything
     ResetSends()
-    --sync()
 end
 
 
@@ -550,7 +536,7 @@ local function createLabel(props, ch)
     local label = GUI.createElement ({
         type = "MLabel",
         vertical = props.vertical or true,
-        caption = props.caption or 'LABEL TEST '..ch,
+        caption = props.caption or '',
         name = props.name..'_'..ch,
         font = font,
         textColor = props.textColor or 'text',
@@ -601,7 +587,7 @@ local function createPanel(props, pager, options)
     end
     if options then
         panel:setOptions(options)
-        MST(options,'options')
+        --MST(options,'options')
         panel:setPage(1)
     end
     return panel
@@ -653,6 +639,7 @@ local function createButton(props, ch)
         color = props.color or nil,
         frames = props.frames or 2,
         min = props.min or 0, max = props.max or 1,
+        vals = props.vals or nil,
         x = props.x ,y = props.y, w = props.w or faderW,h = props.h,
         image = imageFolder..image..".png",
         func = props.func,
@@ -706,8 +693,9 @@ gui = {
         },
     },
     leftMenu = {  x = presetX + (2 * btnW), y = 0, color = 'gray', w = chBtnW, options = {
-            { name = 'Quit', image = 'Quit', momentary = true, func = function(self) CloseWindow(window) end },
-            { name = 'Console', image = 'Console', momentary = false, func = function() ultraschall.BringReaScriptConsoleToFront() end },
+            { name = 'Quit', image = 'Quit', momentary = true, func = function(self) Stop() CloseWindow(window) end },
+            { name = 'Console', image = 'Console', momentary = true, func = function() ultraschall.BringReaScriptConsoleToFront() end },
+            { name = 'LeftHalf', image = 'Left', momentary = true, func = function() ResizeWindow(window, 0, 0, totalW/2, totalH) end },
         },
     },
     globalBank = { name = 'gBank', save = true, multi = false, h = 12,  fontSize = 18, x = bankX - btnW, y = 0, w = 4 * btnW, textColor = 'gray', sync = function(self)  end},
@@ -737,20 +725,22 @@ gui = {
     tempoDec = { name = 'TempoDec', w = tBtnW, x = transportX, y = 0, h = tempoH, momentary = true,  func = function(self) UpdateTempo(Tempo() - 1) end },
     tempo    = { name = 'Tempo', w = tempoW, x = transportX + tBtnW, h = tempoH, y = 0, horizontal = true, save = true, min = 50, max = 197, frames = 147, func = function(self) Tempo(self:val()) end },
     tempoInc = { name = 'TempoInc', x = totalW - tBtnW, y = 0, w = tBtnW, h = tempoH, momentary = true, func = function(self) UpdateTempo(Tempo() + 1) end },
-    hemiola = { name = 'hemiola',  w = tBtnW, h = btnH, x = transportX, y = tempoH + btnH, rows = 1, cols = 5, options = {
-        { name = 'ResetMeter', func = function(self) Tempo(nil, nil, 1) end },
-        { name = 'Quint', func = function(self) Tempo(nil, nil, .8) end },
-        { name = 'Triplet', func = function(self) Tempo(nil, nil, .75) end },
-        { name = 'Dot', func = function(self) Tempo(nil, nil, .66666666) end },
-        { name = 'DoubleDot', func = function(self) Tempo(nil, nil, .625) end},
-            }
-    },
+
     quaver =  { name = 'quaver', x = transportX, y = tempoH, w = tBtnW , rows = 1, cols = 5, options =   {
                 { name = 'Whole', image = 'Whole', func = function(self) Tempo(nil, .25) end }, --tempo multiplier affects reaper.  Store original tempo in the tempo slider
                 { name = 'Half', image = 'Half', func = function(self) Tempo(nil, .5) end },
                 { name = 'Quarter', image = 'Quarter', func = function(self) Tempo(nil, 1) end },
                 { name = 'Eighth', image = 'Eighth', func = function(self) Tempo(nil, 2) end },
                 { name = 'Sixteenth', image = 'Sixteenth', func = function(self) Tempo(nil, 4) end},
+            }
+    },
+    beat = { name = 'beat', x = transportX + (5* tBtnW), y = tempoH, w = btnH *2, h = btnH*2 , frames = 8, min = 0, max = 7, color = 'gray', displayOnly = true},
+    hemiola = { name = 'hemiola',  w = tBtnW, h = btnH, x = transportX, y = tempoH + btnH, rows = 1, cols = 5, options = {
+                { name = 'ResetMeter', func = function(self) Tempo(nil, nil, 1) end },
+                { name = 'Quint', func = function(self) Tempo(nil, nil, .8) end },
+                { name = 'Triplet', func = function(self) Tempo(nil, nil, .75) end },
+                { name = 'Dot', func = function(self) Tempo(nil, nil, .666666667) end },
+                { name = 'DoubleDot', func = function(self) Tempo(nil, nil, .625) end},
             }
     },
     ------------------------------------------------------------------------------------------------
@@ -773,7 +763,7 @@ gui = {
             { name = 'Cue', func = function(self)    CH().Cue:val(self:val()) Cue(iCh, self:val()) end },
             { name = 'Solo', func = function(self)   CH().Solo:val(self:val())  end },
             { name = 'MuteFx', func = function(self) CH().MuteFx:val(self:val())  end },
-            { name = 'NsSolo', func = function(self) CH().NsSolo:val(self:val())  end },
+            { name = 'NsSolo', func = function(self) CH().NsSolo:val(self:val()) NsSolo(iCh, self:val()) end },
             { name = 'Hands', func = function(self)  CH().Hands:val(self:val()) SetMoonParam(iCh, MCS.HANDS, self:val()) end },
             { name = 'Sharp', momentary = true, func = function(self)   CH().semi:increment(1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
             { name = 'Natural', momentary = true, func = function(self) CH().semi:val(0); CH().oct:val(0); CH().octaveSpin:setCaption('') SetMoonParam(iCh, MCS.SEMI, 0) end },
@@ -855,7 +845,7 @@ gui = {
     organDrive =  { name = 'drive', caption = 'drive', captionY = -.6, x = organX, y = paramsY + (btnH * 4) - pad, z = organZ, w = oBtnW * 4, h = btnH + pad,
                 horizontal = true, frames = 97, image = 'OrganFader',  sync = function(self)end, func = function(self) end },
     leslie = { name = 'leslie', y = paramsY + (btnH * 4) - pad, w = (2 * dbW) - pad, x = totalW - (9 * dbW) - pad, h = btnH + pad, color = organColor() },
-    organReverb = { name = 'reverb', caption = 'reverb', captionY = -.6, x = totalW - (7* dbW) - pad, y = paramsY + (btnH * 4) - pad, z = organZ, w = dbW*9, h = btnH + pad,
+    organReverb = { name = 'reverb', caption = 'reverb', captionY = -.6, x = totalW - (7* dbW) - pad, y = paramsY + (btnH * 4) - pad, z = organZ, w = dbW*9 - pad, h = btnH + pad,
                 horizontal = true, frames = 97, image = 'OrganFader', sync = function(self)end, func = function(self) end },
 
 
@@ -1016,20 +1006,12 @@ gui = {
                                     w = 16, h = spinnerH, frames = 11, min = -5, max = 5,
                                     sync = function(self) self:val(GetMoonParam(self.ch, MCS.OCTAVE)) end }, --stores oct data
     fxSpin =   { name = 'fxSpin', bg = true, save = false, x = leftPad + faderW, y = fxSendY, sync = function(self) self.caption = GetFxChan(self.ch) end,
-                                                                        func = function(self)
-                                                                            local chan = CH(self.ch)
-                                                                            MSG('self.ch--',self.ch,'self.val--', self:val())
-                                                                            IncFxNum(self.ch,self:val())
-                                                                            self.caption = GetFxChan(self.ch)
-                                                                            chan.send:setColor(ChanColor(GetFxChan(self.ch)))
-                                                                            chan.sendLabel:val(GetChFxName(self.ch)) end },
-    octaveSpin =  { name = 'octaveSpin', bg = true, save = false, x = leftPad + faderW, y = octY, chColor = true, func = function(self)
-                                                                            local chan = CH(self.ch)
-                                                                            chan.oct:increment(self:val())
-                                                                            SetMoonParam(self.ch, MCS.OCTAVE, chan.oct:val())
-                                                                            if chan.oct:val() ~= 0 then
-                                                                                self.caption = math.floor(chan.oct:val())
-                                                                            else self.caption = '' end end},
+                                    func = function(self) IncFxNum(self.ch, self:val()) SetFxDisplay(self.ch) end },
+    octaveSpin =  { name = 'octaveSpin', bg = true, save = false, x = leftPad + faderW, y = octY, chColor = true,
+                                    func = function(self)
+                                        CH(self.ch).oct:increment(self:val())
+                                        SetOctave(self.ch)
+                                    end},
     pan =    { name = 'pan', x = leftPad, y = chanY - meterH, h = panH, w = chanW, horizontal = true, z = 4,
                                     displayOnly = true, frames = 25, min = -1, max = 1,  sync = function(self) self:val(Pan(self.ch)) end  },
     meterL = { name = 'meterL', bg = true, save = false, x = leftPad, y = chanY - meterH, h = panH/2, w = chanW, horizontal = true,
@@ -1059,18 +1041,40 @@ gui = {
             { name = 'Breath', bg = true, func = function(self) MidiIN(self.ch, TRACKS.IN_BC, self:val()) end, sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_BC)) end },
             { name = 'Ped2', bg = true, func = function(self) MidiIN(self.ch, TRACKS.IN_PED2, self:val()) end, sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_PED2)) end },
             { name = 'Exp', bg = true, func = function(self) MidiIN(self.ch, TRACKS.IN_EXP, self:val()) end, sync = function(self) self:val(IsExpOn(self.ch)) end },
-            { name = 'Enable',  bg = true, vals = {1,2,3,4}, frames = 4, func = function(self) end, sync = function(self) end },
+            { name = 'Enable',  bg = true, vals = {0,1,2,3}, frames = 4, func = function(self) EnableChan(self.ch, self:val()) end, sync = function(self) end },
         },
     },
     vst   =  { name = 'vst', caption = '', color = 'black', image = 'plain', captionX = .1,
             x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'green', displayOnly = true, sync = function(self) initPlug(self.ch) self:val(plugs[self.ch].name) end },
     bank  =  { name = 'Bank', color = 'black', caption = '', image = 'plain',
             x = leftPad, y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'yellow', displayOnly = true, sync = function(self) self:val(bankLists[self.ch].name) end },
-    nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2}, frames = 3, w = faderW, h = btnH, func = function(self) end, sync = function(self) end },
+    nSource   =  { name = 'Notesource', x = leftPad, y = nsY, frames = 3, w = faderW, h = btnH, min = nil, max = nil, func = function(self) Notesource(self.ch, self:val()) end, sync = function(self) end },
     select    =  { name = 'Select', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, func = function(self) ChChanged(self.ch) end, sync = function(self) end },
     ch = {},  --this is where all the channel components will go
 }
 
+function EnableChan(chan, value)
+    MSG('enabling channel',chan,'value:',value)
+    CH().Enable:val(GetNsStatus(chan, value or 0))
+end
+
+function SetOctave(chanNum)
+    MSG('setting octave', chanNum)
+    local ch = CH(chanNum)
+    local octave = ch.oct:val()
+    SetMoonParam(chanNum, MCS.OCTAVE, octave )
+    local caption = ''
+    if octave ~= 0 then caption = math.floor(octave) end
+    ch.octaveSpin:setCaption(caption)
+end
+
+function SetFxDisplay(chanNum)
+    MSG('setting fx display')
+    local ch = CH(chanNum)
+    ch.fxSpin:setCaption(chanNum)
+    ch.send:setColor(ChanColor(GetFxChan(chanNum)))
+    ch.sendLabel:val(GetChFxName(chanNum))
+end
 
 -----------------------------------------------------------------------------------------------------------
 ---{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{  CREATE ELEMENTS  }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
@@ -1093,9 +1097,10 @@ gui.globalBank = createTitle(gui.globalBank)
 gui.tempoDec = createButton(gui.tempoDec)
 gui.tempo = createFader(gui.tempo)
 gui.tempoInc = createButton(gui.tempoInc)
-
+---transport---
 gui.hemiola = createPanel(gui.hemiola, nil, menuOptions(gui.hemiola.options))
 gui.quaver = createPanel(gui.quaver, nil, menuOptions(gui.quaver.options))
+gui.beat = createFader(gui.beat)
 
 gui.rightMenu = createMenu(gui.rightMenu)
 
@@ -1307,14 +1312,38 @@ end
 for _,layer in pairs(layers) do window:addLayers(layer) end
 
 --GlobalSave('test')
+ClearChanSends()
 InitOutputRouting() --verify output sends exist.
+InitTempo()
 window:open()
 Fullscreen(window)
 --initTables()
 GlobalRecall('default', gBankname)
+local mainCount = 0
+local function Main()
+    --update metronome/20x sec
+    local beats, measures = reaper.TimeMap2_timeToBeats(0, reaper.GetPlayPosition2() )
+    gui.beat:val(math.floor(beats * 2))  --this is reaper tempo, not gui tempo.  maybe a switch for both?  or a second display...
+    if mainCount % 5 == 0 then
+        for i, chan in ipairs(CH()) do
+            local left, right = GetMeter(i)
+            chan.meterL:val(left)
+            chan.meterR:val(right)
+        end
+    end
+    --we have to convert from reaper tempo to script tempo.  Then advance one frame each 8th note of script tempo
+    --reaper.TimeMap2_beatsToTime(0, tpos, measuresIn )
 
---sync()
---ChChanged(1)
---SetPanelsPRESETS()
-GUI.func = Update()
+    --MSG('measures =', measures, 'beats-=', beats)
+
+
+    --scan all externally controlled parameters and update as needed 5x/sec
+    --update meters 5x/sec
+    --eventually increment fader to new values as needed
+    mainCount = mainCount + 1
+end
+
+-- How often (in seconds) to run GUI.func. 0 = every loop.
+GUI.funcTime = .05
+GUI.func = Main
 GUI.Main()

@@ -108,7 +108,8 @@ end
 
 function MButton:increment(incVal)
     if incVal == 0 then return end
-    local usingRange = self.min ~= nil and self.max ~= nil
+    --
+    local usingRange = self.vals == nil
     --self:m('calling inc =,'..incVal..' using range = '..tostring(usingRange))
     if self.vals and (#self.vals ~= self.frames) then MSG('#vals must = frames')
     elseif not self.wrap then
