@@ -107,9 +107,9 @@ ROLI_CC = 74;
 EXP_CC = 3; //expression midi in value....
 EXP_CH = 1;
 K_PNO = 0;
-K_DBL = 2;
 K_MPE = 1;
-K_NON = 3;
+K_NON = 2;
+K_DBL = 3;
 
 ////////////////////////////// MIDI FUNCTIONS ///////////////////////////
 NOTE_OFF = 128;

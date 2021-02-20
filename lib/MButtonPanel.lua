@@ -218,7 +218,7 @@ end
 --runs (optionally) the option associated with the function, which will be the panel's func method,
 --unless the option has overridden it.
 function MButtonPanel:select(index,doNotRun)
-    MSG('SELECT CALLED: index = ',index)
+    --MSG('SELECT CALLED: index = ',index)
     if type(index) == 'table' then index = index.index end
     if index then
         local sw = self:getButtonForOption(index)

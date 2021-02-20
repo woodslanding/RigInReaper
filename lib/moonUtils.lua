@@ -154,7 +154,7 @@ AUDIO_IN = {
 }
 
 NS_COUNT = 4
-NS = {KBD = 0, DUAL = 1, ROLI = 2, NONE = 3}
+NS = {KBD = 0, ROLI = 1, NONE = 2, DUAL = 3}
 
 --MCS Audio output setting
 OUT_OFFSET = 3 --difference between param#s and track# for outputs
@@ -654,7 +654,7 @@ function ChanOfTrack(mediatrack)
     end
 end
 
-function GetPresetName(chan, slot)
+function GetChanPresetName(chan, slot)
     --MSG('Getting fx preset for chan: ', chan)
     if not slot then slot = INSTRUMENT_SLOT end
     local found, presetname = reaper.TrackFX_GetPreset(GetTrack(chan), slot, "")
@@ -805,7 +805,7 @@ function SetSendPreFader(chan, destChan)
 end
 
 function SetSendPhase(chan, destChan, flipped)
-    MSG('SetSendPhase: track=',tracknum,'ph=',flipped)
+    --MSG('SetSendPhase: track=',chan,'ph=',flipped)
     local idx = GetSendIndex(chan,destChan)
     local worked = reaper.SetTrackSendInfo_Value( GetTrack(chan), REAPER.SEND,idx-1, 'B_PHASE', BoolToInt(flipped))
 end
@@ -941,7 +941,7 @@ function LoadInstrument(chan,vstname)
     --we will have to select a bank before re-adding the sends
     reaper.PreventUIRefresh(1)
     local oldName = GetPluginDisplayName(GetPlugName(chan, INSTRUMENT_SLOT))
-    MSG('new fx name = '..vstname, 'old name = '..oldName)
+    --MSG('new fx name = '..vstname, 'old name = '..oldName)
     if vstname ~= oldName then
         local track = GetTrack(chan)
         reaper.TrackFX_Delete( track, INSTRUMENT_SLOT )
@@ -1012,7 +1012,10 @@ function IsEffectCh(chan)
     end
     return false --chan is not a send for testCh...
 end
+
 -- gets fx chan info.  Also makes sure fx settings are conformant
+--TODO:  Might be simpler to rethink this.  When we select an fx, maybe we should flip the phase
+--of all other sends, regardless of mute state.  Then we can unmute or mute without messing with phase
 local function fxChanInfo(chan)
     --if not fxChannels[chan] or rebuild then
         --conformant settings:  all muted and one phased, or one unmuted and no phased
@@ -1033,7 +1036,7 @@ local function fxChanInfo(chan)
             end
         end
         if unmuted == 0 then--should be one chan with a flipped phase
-            MSG('chan',chan,'all fx muted')
+            --MSG('chan',chan,'all fx muted')
             chanFxMuted = true
             for i,dest in ipairs(fxList) do
                 if IsPhaseFlipped(chan, dest) then
@@ -1046,7 +1049,7 @@ local function fxChanInfo(chan)
             end
             if flipCount == 0 then
                 fxChan = fxList[1]
-                MSG('flipping phase:',chan, fxChan)
+                --MSG('flipping phase:',chan, fxChan)
                 SetSendPhase(chan, fxChan, true)
                 fxIdx = GetSendIndex(chan, fxChan)
             end
@@ -1063,6 +1066,11 @@ end
 function GetFxChan(ch)     return fxChanInfo(ch).chan end
 function IsFxMuted(ch)     return  fxChanInfo(ch).mute end
 function GetFxChanIdx(ch)  return  fxChanInfo(ch).idx end
+
+function MuteFxForChan(chan, mute)
+    MuteSend(chan, GetFxChan(chan), mute)
+
+end
 
 function SetFxChan(chan, destCh)
     local prevFx, fxMuted = GetFxChan(chan)
@@ -1092,7 +1100,7 @@ function SetChanFxStatus(chan, isfx)
             local muted IsSendMuted(chan, dest)
             RemoveSend(dest, chan)
             if isfx then
-                MSG('addReceive: adding receive to track ',dest,'from track ',chan)
+                --MSG('addReceive: adding receive to track ',dest,'from track ',chan)
                 AddSend(dest, chan)
                 SetSendPreFader(dest,chan)
                 MuteSend(dest,chan, muted) --restore the mute setting
@@ -1117,21 +1125,7 @@ end
 function GetChFxName(chan)
     local fxChan = GetFxChan(chan)
     ----MSG('found fx chan for chan:', fxChan, chan )
-    if fxChan then  return GetPresetName(fxChan) else ERR('GetChFxName: No Fx for chan num', chan) end
-end
-
-function SetFxChanByName(name, chan)
-    local idx
-    local fx = GetChFxList(chan)
-    if #fx > 0 then
-        for i, fxChan in ipairs(fx) do
-            ----MSG('checking fx slot: '..i)
-            if GetPresetName(fxChan) == name then idx = i end
-        end
-        if not idx then idx = 1 end
-        SetFxByIdx(chan, idx)
-    else SetFxByIdx(chan, 1)
-    end
+    if fxChan then  return GetChanPresetName(fxChan) else ERR('GetChFxName: No Fx for chan num', chan) end
 end
 
 function IncFxNum(chan,inc)
@@ -1345,11 +1339,14 @@ function NotesoloLimits(chan, lo, hi)
     if hi then SetMoonParam(chan,MCS.NS_MUTE_HI,hi) end
 end
 
-function GetNotesoloChans(nsNum)
+
+--returns table { 1 = chanNum, 2 = chanNum, etc. }
+--of enabled channels with given nsNum
+function GetChansWithNS(nsNum)
     local nsTracks = {}
     for i = 1, CH_COUNT do
         local chanNS = GetMoonParam( i, MCS.KEYB_TYPE)
-        if chanNS == nsNum then
+        if chanNS == nsNum and GetMoonParam(i, MCS.MIDI_ON) == 1 then
             table.insert(nsTracks, i)
         end
     end
@@ -1359,7 +1356,7 @@ end
 function GetNsSoloMuteRange(nsNum)
     local low = 127
     local high = 0
-    for i,chan in ipairs(GetNotesoloChans(nsNum)) do
+    for i,chan in ipairs(GetChansWithNS(nsNum)) do
         --MSG('GetNsSoloMuteRange: checking track', chan)
         if GetMoonParam(chan, MCS.NS_SOLO) == 1 then --look for nsoloed insts
             --MSG('GetNsSoloMuteRange: track', chan)
@@ -1375,11 +1372,11 @@ function NsSolo(chan, solo)
     if solo then
         MSG('NSSOLO: val = ',solo)
         SetMoonParam(chan,MCS.NS_SOLO,solo)
-        --MSG('SetNsSolo: Setting nss to',solo,'track', chan)
+        MSG('SetNsSolo: Setting nss to',solo,'track', chan)
         local nsNum = GetMoonParam(chan, MCS.KEYB_TYPE)
         local low, high = GetNsSoloMuteRange(nsNum)
-        --MSG('SetNsSolo: low =',low,'high=',high)
-        for i, chan in ipairs(GetNotesoloChans(nsNum)) do
+        MSG('SetNsSolo: low =',low,'high=',high)
+        for i, chan in ipairs(GetChansWithNS(nsNum)) do
             if GetMoonParam(chan, MCS.NS_SOLO) ~= 1 then
                 --MSG('SetNsSolo: found non-soloed track',tracknum)
                 if high > low then
@@ -1394,17 +1391,18 @@ function NsSolo(chan, solo)
     else return GetMoonParam(chan, MCS.NS_SOLO)
     end
 end
-
-function GetNsStatus(chan, enable)
+--[[
+function GetEnableStatus(chan, enable)
     --if we are a nsSolo channel, return enable * 2
     if NsSolo(chan) == 1 then return enable * 2
     --if we are not, check if we are compromised
     else
         local nsNum = GetMoonParam(chan, MCS.KEYB_TYPE)
-        if #GetNotesoloChans(nsNum) > 0 then return enable * 1
+        if #GetChansWithNS(nsNum) > 0 then return enable * 1
         else return enable * 3 end
     end
 end
+--]]
 
 --###########################################################################################--
 ---------------------------------------AUDIO INPUT CONTROL------------------------------------
@@ -1593,7 +1591,7 @@ end
 --This will overwrite rpls with vsts....
 function WritePreset(chan, fxNum, presetName)
     if not fxNum then fxNum = INSTRUMENT_SLOT end
-    if not presetName then presetName = GetPresetName(chan, fxNum) end
+    if not presetName then presetName = GetChanPresetName(chan, fxNum) end
     local vstName = GetPlugName(chan, fxNum)
     --get track data
     local found, chunk = ultraschall.GetTrackStateChunk_Tracknumber(chan)
@@ -1704,7 +1702,7 @@ end
 
 function SaveMoonPreset(chan, fxNum)
     local lines, first, last  = getFXLines(chan, fxNum)
-    local presetName = GetPresetName(chan, fxNum)
+    local presetName = GetChanPresetName(chan, fxNum)
     local vstName = GetPlugName(chan, fxNum)
     local filename = BANK_FOLDER..vstName..'/'..presetName..'.MPF'
     ----MSG('file = '..filename)

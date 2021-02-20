@@ -7,7 +7,7 @@ return {
             params = {},
             presets = {"fuzz floot", "ghost Train", "Marxophone", "treadwell pad"}
         },
-        { name = "moonFX", lokey = 1, hue = 240, hikey = 127, sat = 63, isfx = 1,
+        { name = "moonFX", lokey = 1, hue = 240, hikey = 127, sat = 63, isfx = 1, midiin = 0,
             params = {},
             presets = {"MoonFX"}
         },

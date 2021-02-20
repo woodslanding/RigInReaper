@@ -401,10 +401,9 @@ Options = {
         {name = 'expcrv',title = 'Exp Curve',min = 0, max = 10, func = function(self) Bank.expcrv = Int(self) SavePlug() end },
         {name = 'ped2crv',title = 'Ped2 Curve',min = 0, max = 10, func = function(self) Bank.ped2crv = Int(self) SavePlug() end },
     },
-    --[[OTHER ARCANE BANK SETTINGS
+    --[[OTHER ARCANE BANK SETTINGS  --just recall a MCS preset for these???
     buttons:
-        AUDIO INPUT (NONE, EXT, MIXER, BOTH)
-        MIDI IN: MPE or NORMAL?  --tag on to midiIn button
+        AUDIO INPUT (NONE, MIC, LINE
         PB->NOTES
     sliders:
         MPE voice count
