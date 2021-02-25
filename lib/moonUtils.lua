@@ -526,13 +526,20 @@ function RemoveDuplicates(table)
     end
     return res
   end
---returns the index of a table array that has a .name field that matches name, or a string that matches name
+--returns the index of a table array that has a .name field that matches name, or a string that matches name, or just a matching value
 function IForName(array, name)
     for i,element in ipairs(array) do
         if type(element) == 'table' and element.name and (element.name == name) then return i end
         if type(element) == 'string' and element == name then return i end
+        if element == name then return i end
     end
     return nil
+end
+-- return the index of a table in an array of tables that has a field with the requisite value
+function IForField(array, field, value)
+    for i, element in ipairs(array) do
+        if type(element) == 'table' and element[field] and element[field] == value then return i end
+    end
 end
 
 
@@ -729,7 +736,7 @@ function GetNumberOfTrack(track)
     return reaper.GetMediaTrackInfo_Value( track, 'IP_TRACKNUMBER' )
 end
 
-function RemoveSend(chan,destCh)
+function RemoveAllSends(chan,destCh)
     local src_track = GetTrack(chan)
     local dest_track = GetTrack(destCh)
     local send_count = reaper.GetTrackNumSends(src_track, REAPER.SEND)
@@ -740,7 +747,7 @@ function RemoveSend(chan,destCh)
 end
 
 function AddSend(chan,destCh)
-    RemoveSend(chan, destCh)
+    RemoveAllSends(chan, destCh)
     local mediatrack = GetTrack(chan)
     local mediaFxTrack = GetTrack(destCh)
     if mediatrack and mediaFxTrack then
@@ -804,7 +811,7 @@ function SetSendPreFader(chan, destChan)
     end
 end
 
-function SetSendPhase(chan, destChan, flipped)
+function FlipPhase(chan, destChan, flipped)
     --MSG('SetSendPhase: track=',chan,'ph=',flipped)
     local idx = GetSendIndex(chan,destChan)
     local worked = reaper.SetTrackSendInfo_Value( GetTrack(chan), REAPER.SEND,idx-1, 'B_PHASE', BoolToInt(flipped))
@@ -812,11 +819,13 @@ end
 
 function IsPhaseFlipped(chan, destCh)
     local idx = GetSendIndex(chan, destCh)
+    if not idx then return false end
     local flipped = reaper.GetTrackSendInfo_Value(GetTrack(chan), REAPER.SEND,idx-1, 'B_PHASE')
     return flipped > 0
 end
 
 function SetOutputSend(chan,outputnum)
+    --choice for out D will have to be stored in global preset
     for i = TRACKS.OUT_A,TRACKS.OUT_D do
         if outputnum == i then
             MuteSend(chan, outputnum, false)
@@ -841,7 +850,7 @@ function Cue(chan,SetCue)
     if SetCue then
         ----MSG('cue-muting send: ',send,', SetCue = ', SetCue)
         MuteSend(chan, send, SetCue)
-        SetSendPhase(chan, send, SetCue)
+        FlipPhase(chan, send, SetCue)
     else return IsSendMuted(chan,send)
     end
 end
@@ -958,34 +967,10 @@ end
 ----------------------------------------EFFECT SWITCHING-------------------------------------
 --ROUTING:  inst -> prefader sends (to fxchans) ^ dryLevel(track fader) -> postfader sends(to outputs)
 
---an array of all the channels with mixer inputs, i.e. effects
---local because there is a dedicated function for getting a version of this for a specific channel
-local function getFxList()
-    if not currentFxList then
-        currentFxList = {}
-        for i = 1, CH_COUNT do
-            if IsEffectCh(i) then table.insert(currentFxList,i) end
-        end
-    else return currentFxList
-    end
-    return currentFxList
-end
---what channels are sending to this chan?? {1 = 10, 2 = 14, 3 = 15, etc.}
---if it is not an fxChan, we get an empty table
-function GetFxReceives(chan)
-    local channels = {}
-    if IsEffectCh then
-        for i = 1, CH_COUNT do
-            if GetFxChan(i) == chan then table.insert(channels, i) end
-        end
-    end
-    return channels
-end
-
 function ClearChanSends()
     for send = 1, CH_COUNT do
         for rcv = 1, CH_COUNT do
-            RemoveSend(send, rcv)
+            RemoveAllSends(send, rcv)
         end
     end
 end
@@ -993,103 +978,13 @@ end
 function ResetSends()
     ClearChanSends()
     for send = 1, CH_COUNT do
-        for i, rcv in ipairs(getFxList()) do
+        for i, rcv in ipairs(GetChFxList(send)) do
             AddSend(send, rcv)
             SetSendPreFader(send, rcv)
-            MuteSend(send, rcv)
+            MuteSend(send, rcv, true)
+            FlipPhase(send, rcv, true)
         end
-        MuteSend(send, GetChFxList(send)[1], false)
     end
-end
-
-function IsEffectCh(chan)
-    local testCh = 1
-    if chan == 1 then testCh = 2 end --just make sure the test channel is not the same as the channel
-    for i = 1, GetSendCount(testCh) do
-        if GetSendDest(testCh, i) == chan then
-            --MSG('found effect channel', chan)
-            return true end
-    end
-    return false --chan is not a send for testCh...
-end
-
--- gets fx chan info.  Also makes sure fx settings are conformant
---TODO:  Might be simpler to rethink this.  When we select an fx, maybe we should flip the phase
---of all other sends, regardless of mute state.  Then we can unmute or mute without messing with phase
-local function fxChanInfo(chan)
-    --if not fxChannels[chan] or rebuild then
-        --conformant settings:  all muted and one phased, or one unmuted and no phased
-        local fxList = GetChFxList(chan)
-        local unmuted = 0
-        local flipCount = 0
-        local fxChan = 0
-        local fxIdx = 0
-        local chanFxMuted = false
-        for i,dest in ipairs(fxList) do
-            if not IsSendMuted(chan, dest) then
-                unmuted = unmuted + 1
-                --if an fxsend is already unmuted, mute all others
-                if unmuted > 1 then MuteSend(chan,dest)
-                else fxChan = dest
-                    fxIdx = i
-                end
-            end
-        end
-        if unmuted == 0 then--should be one chan with a flipped phase
-            --MSG('chan',chan,'all fx muted')
-            chanFxMuted = true
-            for i,dest in ipairs(fxList) do
-                if IsPhaseFlipped(chan, dest) then
-                    flipCount = flipCount + 1
-                    if flipCount > 1 then SetSendPhase(chan, dest, false)
-                    else fxChan = dest
-                        fxIdx = i
-                    end
-                end
-            end
-            if flipCount == 0 then
-                fxChan = fxList[1]
-                --MSG('flipping phase:',chan, fxChan)
-                SetSendPhase(chan, fxChan, true)
-                fxIdx = GetSendIndex(chan, fxChan)
-            end
-        end
-        --MST('fx channels',fxChannels)
-        fxChannels[chan] = { chan = fxChan, mute = chanFxMuted, idx = fxIdx }
-        --MST('fx for chan '..chan, fxChannels[chan])
-    --end
-
-    return fxChannels[chan]
-end
-
---returns fx chan, creating the sends if needed
-function GetFxChan(ch)     return fxChanInfo(ch).chan end
-function IsFxMuted(ch)     return  fxChanInfo(ch).mute end
-function GetFxChanIdx(ch)  return  fxChanInfo(ch).idx end
-
-function MuteFxForChan(chan, mute)
-    MuteSend(chan, GetFxChan(chan), mute)
-
-end
-
-function SetFxChan(chan, destCh)
-    local prevFx, fxMuted = GetFxChan(chan)
-    if fxMuted then --turn off phase for prev and enable for new
-        SetSendPhase(chan, prevFx, false)
-        SetSendPhase(chan, destCh, true)
-    else
-        MuteSend(chan, prevFx, true)
-        MuteSend(chan, destCh, false)
-    end
-end
-
-function SetFxByIdx(chan,fxIdx)
-    MSG('set fx chan',chan,' by index:', fxIdx)
-    local fxCh = GetFxForIndex(chan, fxIdx)
-    MSG('setting fx chan to', fxCh)
-    --possible that a loaded gPreset might have bad values...
-    if fxCh == nil then SetFxChan(chan, GetChFxList(chan)[1]) end
-    SetFxChan(chan, fxCh)
 end
 
 --remove the old send, and rebuild, in case there are non-conforming settings
@@ -1097,54 +992,20 @@ end
 function SetChanFxStatus(chan, isfx)
     for dest = 1, CH_COUNT do
         if dest ~= chan then
+            MSG('calling SetChanFxStatus:', chan, dest)
             local muted IsSendMuted(chan, dest)
-            RemoveSend(dest, chan)
+            local unselected = IsPhaseFlipped(chan, dest)
+            RemoveAllSends(dest, chan)
             if isfx then
                 --MSG('addReceive: adding receive to track ',dest,'from track ',chan)
                 AddSend(dest, chan)
                 SetSendPreFader(dest,chan)
                 MuteSend(dest,chan, muted) --restore the mute setting
+                FlipPhase(dest, chan, unselected)
             end
         end
     end
-    currentFxList = nil --force a rescan of the effects
 end
-
---need to include the channel, so it won't send to itself
-function GetChFxList(chan)
-    local chFX = {}
-    for i, fxchan in ipairs(getFxList()) do
-        if fxchan ~= chan then
-            --MSG('Get chan fx list, adding ch', fxchan,'as fx to chan',chan)
-            table.insert(chFX, fxchan)
-        end
-    end
-    return chFX, #chFX
-end
-
-function GetChFxName(chan)
-    local fxChan = GetFxChan(chan)
-    ----MSG('found fx chan for chan:', fxChan, chan )
-    if fxChan then  return GetChanPresetName(fxChan) else ERR('GetChFxName: No Fx for chan num', chan) end
-end
-
-function IncFxNum(chan,inc)
-    local idx = GetFxChanIdx(chan)
-    local count = #GetChFxList(chan)
-    MSG('IncFxNum: count=',count,'increment =',inc,'fx index=',idx)
-    local newVal = IncrementValue(idx,1,count,true,inc)
-    --MSG('IncFxNum: inc, new val=', newVal)
-    SetFxByIdx(chan, newVal)
-end
-
-function GetFxForIndex(chan,index)
-    local tracks,count = GetChFxList(chan)
-    --MST(tracks, 'fx track table')
-    --MSG('GetFxForindex ',index)
-    return tracks[index],count
-end
-
-
 
 --###########################################################################################--
 -------------------------------------FX LEVEL CONTROL-----------------------------------------
@@ -1165,9 +1026,8 @@ local function getVolume(chan, useDB)
     if not useDB then return vol else return ultraschall.MKVOL2DB end
 end
 --fx sends are pre-fader, outputs are post fader
-function SetFxLevel(chan, fader)
+function SetFxLevel(chan, fxChan, fader)
     --MSG('SetFxLevel: chan ', chan,'fader val =',fader)
-    local fxChan = GetFxChan(chan)
     MSG('fx channel = ', fxChan)
     local wetlevel = math.min(fader * 2, 1)
     local drylevel = math.min(2 - (fader * 2), 1)
@@ -1176,9 +1036,9 @@ function SetFxLevel(chan, fader)
 end
 
 --need to reverse the math above...
-function GetFxLevel(chan)
+function GetFxLevel(chan, fxchan)
     --get the fx send level as param. if it is less than 1, then return half its value
-    local fxSendLevel = GetSendLevel(chan, GetFxChan(chan))
+    local fxSendLevel = GetSendLevel(chan, fxchan)
     if fxSendLevel < 1 then return fxSendLevel / 2 end
     --get the track volume, which is the fx adjustment for full wet, as param. return half its value + .5
     local dryLevel = getVolume(chan)
