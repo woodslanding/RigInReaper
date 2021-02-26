@@ -5,23 +5,16 @@
         when we change a non-project value, such as bank, we'll write to this file.
         That way if the interface crashes we can use sync() to restore the interface, without messing up the existing sounds.
     METERING!  Should be working, but need to set up in rig before we can really check.
-    NOTESOURCE SELECT: can notesources be presets in MCS??  What would that look like?
-            maybe NS could share the preset menu with VSTs, instead of duplicating bank settings.
-        OKAY:  the built-in NS toggle just switches between two MCS presets for ROLI or KEYS.  If An effect specifies no midi in,
+    NOTESOURCE SELECT: the built-in NS toggle just switches between two MCS presets for ROLI or KEYS.  If An effect specifies no midi in,
         then its NS is automatically set to none.  We should allow NSources to have colors, and light the keyb icon that way
-        NSource includes MCS preset name, hue and sat, and what else?  No let's store all settings in a file, and skip the presets.
+        NSource includes MCS preset name, hue and sat, and what else?  Store all settings in a file, and skip the presets.
         It could also mute sends from Keyboard or Roli...that would support more channels.  Someday, don't need it now.
-    ENABLE/NS_SOLO:  not working yet -- Debug
-    FX SWITCHING:  find the bug on this.
-    SPINNERS: not displaying values on startup for octave and fx send
-    BANK EDITOR:  figure out layout, and integrate in main window.
+    BANK EDITOR: Figure out VST loading on startup.   eventually:figure out layout, and integrate in main window.
     MPanel.lua:  Write a simple panel widget that can take a texture and/or color.
     PAN: better channel display graphic--wait for meters to work.
-    DRAWBARS:  why don't they hide?  could just cover them up with the other tab(s)
     OTHER DRAWBAR TABS: Eventual support for midi input effects (arpeggiator, etc.)
     SKIN SUPPORT?  Load png folder from prefs file.  Any other prefs yet??
-    LAYOUT MOVES:  More dramatic display of selected Channel (black?)
-
+    LAYOUT MOVES:  More dramatic display of selected Channel (black? white? Move Bank name to select button title)
 ]]
 -------------------------------------------------------------------------
 -- The core library must be loaded prior to anything else
@@ -71,6 +64,7 @@ local scaling = .8
 
 local imageFolder = IMAGE_FOLDER  --from MoonUtilities
 local presetFolder = GBANK_FOLDER
+local DARK_GREY = GetRGB(0,0,25)
 local indent = '    '
 -- panel states
 local PanelDisplay = 3
@@ -166,7 +160,7 @@ local function sync(elmName, chan)
 end
 
 function GetText(titleText, func)
-    Keyboard:setTitle('New Bank Name:')
+    Keyboard:setTitle(titleText)
     Keyboard:visible(true)
     Keyboard.func = func
 end
@@ -244,9 +238,9 @@ function GetChFxOptions(chan)
                     func = function(self)
                         local option = gui.iFxSelect:getOption(self.index)
                         SetFx( iCh, option.chan )
-                        CH().send:setColor(option.color)
-                        CH().sendLabel:val(option.name)
-                        CH().fxSpin:setCaption(option.chan)
+                        CH().fxLevel:setColor(option.color)
+                        CH().fxName:val(option.name)
+                        CH().fxNum:val(option.chan)
                         gui.iFxLevel:setColor(option.color)
                         gui.iFxLabel:val(option.name)
                     end
@@ -257,7 +251,7 @@ end
 
 ---called by the fxSpinner
 function  IncrementFX(chanNum, inc)
-    local fxChan = CH(chanNum).sendLabel:val()
+    local fxChan = CH(chanNum).fxName:val()
     local fxList = GetChFxList(chanNum)
     local idx = IForName(fxList, fxChan)
     local newVal = IncrementValue(idx, 1, #fxList, true, inc)
@@ -270,9 +264,12 @@ function SetFxDisplay(chanNum)
     local ch = CH(chanNum)
     local fxCh = ch.fxNum:val()
     ch.fxNum:val(fxCh)
-    ch.send:setColor(ChanColor(fxCh))
-    ch.sendLabel:val(GetChanPresetName(fxCh))
+    ch.fxLevel:setColor(ChanColor(fxCh))
+    ch.fxName:val(GetChanPresetName(fxCh))
     if chanNum == iCh then
+        gui.iFxSelect:val(fxCh)
+        gui.iFxLabel:val(ch.fxName:val())
+    end
 end
 -----------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------BANKS AND PRESETS-----------------------------------------------
@@ -375,7 +372,9 @@ end
 function SetPanelsPRESETS()
     PanelDisplay = PRESET
     gui.banks:setOptions(bankLists[iCh])
+    gui.banks:selectByName(selectedBanks[iCh].name, true)
     gui.presets:setOptions(presets[iCh])
+    gui.presets:selectByName(iCh.preset:val())
 end
 
 --------------------------------------------------------------------------------------------------
@@ -394,7 +393,7 @@ function GlobalSave(gPresetName)
     saveData = saveData..indent..'channels = {\n'
     local saveOrder = {
         'enable','nSource','NsSolo','vst','bank','preset','volume', 'pan',
-        'MuteFx','fxNum','send',
+        'MuteFx','fxNum','fxLevel',
         'Encoders','Switches1','Switches2','Breath','Drawbars',
         'oct','semi','Exp','Ped2','NoSus','Hands'
     }
@@ -420,12 +419,14 @@ function GlobalSave(gPresetName)
 end
 
 function GlobalSaveAs()
-    Keyboard:visible(true)
+    local func = function(self) GlobalSave(Keyboard.text) end
+    GetText('Save Global As', func)
+    --[[Keyboard:visible(true)
     Keyboard.func = function(self)
         MSG('Saving preset as '..Keyboard.text)
         GlobalSave(Keyboard.text)
         Keyboard:visible(false)
-    end
+    end-- ]]
 end
 --part of startup is loading the default global bank
 function GlobalRecall(presetName, gBankname)
@@ -462,9 +463,10 @@ function GlobalRecall(presetName, gBankname)
         for name, val in pairs(channel) do
             --select is going to needlessly update a bunch of stuff each time...
             --spinners will increment unhelpfully...
-            --vst and bank have already been loaded
+            --vst and bank have already been loaded  --WHY NOT NOTESOURCE?
             if (name == 'select') or (name == 'octaveSpin') or (name =='fxSpin') or (name =='vst')
-                or (name =='bank') or (name == 'nSource') then
+                or (name =='bank')  -- or (name == 'nSource')
+                then
             else
                 --MSG('calling func for: '..name)
                 local elm = gui.ch[i][name]
@@ -526,7 +528,7 @@ local inspBtnW = 44
 local inspectorW = inspBtnW * inspectorRows
 local chanBtnRows = 7
 
-local indH, indW, indX = 18, 18, 32
+local indH, indW, indX = 17, 17, 32
 
 --x positions
 local presetX = faderW + leftPad
@@ -670,6 +672,7 @@ local function createPanel(props, pager, options)
         horizontal = false,
         multi = props.multi or false,
         image = imageFolder.."Combo.png",
+        color = props.color or DARK_GREY,
         textColor = 'text',
         selTextColor = 'black',
         rows = props.rows, cols = props.cols,
@@ -789,7 +792,7 @@ end
 gui = {
     presetPager = {  x = presetX, y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
     bankPager =   {  x = bankX,   y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
-    leftMenu = {  x = bankX + btnW + pad, y = 0, color = 'black', w = chBtnW, options = {
+    leftMenu = {  x = bankX + btnW + pad, y = 0, w = chBtnW, options = {
             { name = 'Quit', image = 'Quit', momentary = true, func = function(self) Stop() CloseWindow(window) end },
             { name = 'Console', image = 'Console', momentary = true, func = function() ultraschall.BringReaScriptConsoleToFront() end },
             { name = 'LeftHalf', image = 'Left', momentary = true, func = function() ResizeWindow(window, 0, 0, totalW/2, totalH) end },
@@ -815,7 +818,7 @@ gui = {
 
     presets =   {   name = 'presetPanel', x = presetX, y = presetY, rows = presetRows, cols = presetCols, chColor = true,
                 func = function(self) SelectPreset() end},
-    presetMenu = { name = 'PresetsMenu', color = 'black', x = bankX - chBtnW - pad, y = btnW, w = chBtnW, cols = 1, rows = 3, options = {
+    presetMenu = { name = 'PresetsMenu', x = bankX - chBtnW - pad, y = btnW, w = chBtnW, cols = 1, rows = 3, options = {
                 { name = 'GlobalPage', image = 'Global', func = function() SetPanelsGLOBAL() end },
                 { name = 'PresetsPage', image = 'Presets', func = function() SetPanelsPRESETS() end},
                 { name = 'VstPage', image = 'Vst', func = function() SetPanelsVST() end},
@@ -836,7 +839,7 @@ gui = {
                 { name = 'Sixteenth', image = 'Sixteenth', func = function(self) Tempo(nil, 4) end},
             }
     },
-    beat = { name = 'beat', x = transportX + (5* tBtnW), y = tempoH, w = btnH *2, h = btnH*2 , frames = 8, min = 0, max = 7, color = 'gray', displayOnly = true},
+    beat = { name = 'beat', x = transportX + (5* tBtnW), y = tempoH, w = btnH *2, h = btnH*2 , frames = 8, min = 0, max = 7, color = DARK_GREY, displayOnly = true},
     hemiola = { name = 'hemiola',  w = tBtnW, h = btnH, x = transportX, y = tempoH + btnH, rows = 1, cols = 5, options = {
                 { name = 'ResetMeter', func = function(self) Tempo(nil, nil, 1) end },
                 { name = 'Quint', func = function(self) Tempo(nil, nil, .8) end },
@@ -852,9 +855,19 @@ gui = {
     iFxLabel =  {   name = 'fxLabel', x = leftPad + pad, y = paramsY + 55, fontSize = 24, h = 5 * btnH, },
     iPanFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true, caption = 'pan', captionY = -.7,
                     w = 3 * inspBtnW, h = btnH, func =  function(self) CH().pan:val(self:val()) Pan(iCh, self:val()) end },
+    iFlat = { name = 'Flat', x = paramsX, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:increment(-1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
+    iNatural = { name = 'Natural', x= paramsX + inspBtnW, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:val(0); CH().oct:val(0); CH().octaveSpin:setCaption('') SetMoonParam(iCh, MCS.SEMI, 0) end },
+    iSharp = { name = 'Sharp', x = paramsX + (inspBtnW * 2), y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:increment(1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
+    audioInputs = { name = 'audioIns', x = paramsX + (4.5 * btnW), y = paramsY, w = inspBtnW, h = btnH,  rows = 1, cols = 4, multi = true, options = {
+            { name = 'Mic1'},
+            { name = 'Mic2'},
+            { name = 'Inst'},
+            { name = 'LineIn'},
+        },
+    },
     iBankTitle = { name = 'bankTitle', h = 20, x = paramsX + btnW, y = paramsY-12, w = btnW * 4, fontSize = 16, displayOnly = true, textColor = 'gray' },
     iTrackTitle = {  name = 'trackTitle', x = paramsX + btnW, y = paramsY, w = btnW * 4, func = function(self) OpenPlugin(iCh) end },  --show vst
-    paramTabs = { name = 'paramTabs',x = paramsX + (5 * btnW), y = paramsY, rows = 1, cols = 2, color = GetRGB(0,0,75), options = {
+    paramTabs = { name = 'paramTabs',x = paramsX + (6 * btnW), y = paramsY, rows = 1, cols = 2, color = GetRGB(0,0,75), options = {
             { name = 'Params', func = function(self) gui.params.layer:show() gui.mappings.layer:hide() end },
             { name = 'Mappings', func = function(self) gui.params.layer:hide() gui.mappings.layer:show() end },
         },
@@ -862,22 +875,23 @@ gui = {
     iFxSelect =  {   name = 'fxSelect', x = chanBtnX, y = paramsY + btnH, rows = paramRows, cols = 1, func = function(self) end },
     iFxSelectPager = {  x = faderW + leftPad, y = paramsY, w = btnW, h = btnH, image = "HorizSpin" , horizontal = true},
     inspector = {   x = inspectorX, y = paramsY + btnH, w = inspBtnW, h = btnH, chColor = true, options = {
-            { name = 'Cue', func = function(self)    CH().Cue:val(self:val()) Cue(iCh, self:val()) end },
-            { name = 'Solo', func = function(self)   CH().Solo:val(self:val())  end },
-            { name = 'MuteFx', func = function(self) CH().MuteFx:val(self:val())  end },
+            { name = 'Cue', func = function(self)  CH().Cue:val(self:val()) Cue(iCh, self:val()) end },
             { name = 'NoSus', func = function(self) CH().NoSus:val(self:val()) SetMoonParam(iCh, MCS.SUSTAIN, self:val()) end },
-
-            { name = 'Hands', func = function(self)  CH().Hands:val(self:val()) SetMoonParam(iCh, MCS.HANDS, self:val()) end },
-            { name = 'Sharp', momentary = true, func = function(self)   CH().semi:increment(1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
-            { name = 'Natural', momentary = true, func = function(self) CH().semi:val(0); CH().oct:val(0); CH().octaveSpin:setCaption('') SetMoonParam(iCh, MCS.SEMI, 0) end },
-            { name = 'Flat', momentary = true, func = function(self)    CH().semi:increment(-1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
-
-            { name = 'Breath', func = function(self) CH().Breath:val(self:val()) MidiIN(self.ch, TRACKS.IN_BC, self:val()) end },
+            { name = 'Mod', func = function(self) CH().Mod:val(self:val())  end },
             { name = 'Switches1', func = function(self) CH().Switches1:val(self:val()) MidiIN(iCh, TRACKS.IN_SW1, self:val()) end },
+
+            { name = 'Solo', func = function(self)   CH().Solo:val(self:val())  end },
+            { name = 'AuxOut', func = function(self) CH().AuxOut:val(self:val())  end },
+            { name = 'Pressure', func = function(self) CH().Pressure:val(self:val())  end },
             { name = 'Switches2', func = function(self) CH().Switches2:val(self:val()) MidiIN(iCh, TRACKS.IN_SW2, self:val()) end },
+
+            { name = 'MuteFx', func = function(self) CH().MuteFx:val(self:val())  end },
+            { name = 'Hands', func = function(self)  CH().Hands:val(self:val()) SetMoonParam(iCh, MCS.HANDS, self:val()) end },
+            { name = 'Breath', func = function(self) CH().Breath:val(self:val()) MidiIN(self.ch, TRACKS.IN_BC, self:val()) end },
             { name = 'Drawbars', func = function(self)  CH().Drawbars:val(self:val()) MidiIN(iCh, TRACKS.IN_DRWB, self:val()) end },
         },
     },
+
     params =    {   name = 'params', x = paramsX, y = paramsY + btnH, rows = paramRows, cols = paramCols, chColor = true, func = function(self) end },
     mappings =  {  name = 'mappings', x = paramsX, y = paramsY + btnH, rows = paramRows, cols = paramCols, multi = true, options = {
          --this is basically just a cheat sheet, right? Eventually they might be active, and display/edit values...
@@ -923,6 +937,7 @@ gui = {
             { name = 'Mods', func = function(self) ShowOrganCtl(false) end },
         },
     },
+
     organControls = { name = 'organControls', x = organX, y = paramsY + btnH, h = dbH/2, w = oBtnW, rows = 2, cols = 4, multi = true, options =  {
             { name = 'ch vib',   sync = function(self) end, func = function(self) end },
             { name = 'leslie',    sync = function(self) end, func = function(self) end },
@@ -956,7 +971,7 @@ gui = {
     ------------------------------------------------------------------------------------------------
     -- this data is stored unless save = false
     fxNum =     { name = 'fxNum', x = leftPad + 45, y = fxSendY + 17, h = btnH, textColor = 'white', fontSize = 20, func = function(self) SetFx(self.ch, self:val()) end },
-    send =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, GetFx(self.ch), self:val()) gui.iFxLevel:val(self:val()) end,
+    fxLevel =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, GetFx(self.ch), self:val()) gui.iFxLevel:val(self:val()) end,
                 sync = function(self) self:val(GetFxLevel(self.ch)) self:setColor(ChanColor(self.ch)) end},
     fxName =  { name = 'sendLabel', x = leftPad + 4, y = fxSendY + 12, w = 120, h = 20, fontSize = 18, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
     semi =     { name = 'Semi', bg = true, x = semiX, y = fxSendY, displayOnly = true, wrap = false, z = 4,
@@ -965,7 +980,7 @@ gui = {
                                     w = 16, h = spinnerH, frames = 11, min = -5, max = 5,
                                     sync = function(self) self:val(GetMoonParam(self.ch, MCS.OCTAVE)) end }, --stores oct data
     fxSpin =   { name = 'fxSpin', bg = true, save = false, x = leftPad + faderW, y = fxSendY, captionX = .1,
-                                    func = function(self)  IncrementFX(self.ch) end }, --don't call val() here!
+                                    func = function(self)  IncrementFX(self.ch, self.val) end }, --don't call val() here!
     octaveSpin =  { name = 'octaveSpin', bg = true, save = false, x = leftPad + faderW, y = octY, captionX = .1, chColor = true,
                                     func = function(self)
                                         CH(self.ch).oct:increment(self:val())
@@ -981,12 +996,15 @@ gui = {
     preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 106, fontSize = 26,  sync = function(self) end  },
     volume =    { name = 'volume', bg = true, x = leftPad, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) Output(self.ch,self:val()) end ,  sync = function(self) self:val(Output(self.ch)) end },
 
-    lights =  { x = leftPad + indX, y = chanY + pad, w = indW, h = indH, displayOnly = true, z = indZ, options = {
+    lights =  { x = leftPad + indX, y = chanY + 4, w = indW, h = indH, displayOnly = true, z = indZ, options = {
             { name = 'Cue', save = false, sync = function(self) self:val(Cue(self.ch)) end },
             { name = 'Solo', save = false, sync = function(self) end },
             { name = 'MuteFx', sync = function(self) end },
             { name = 'NoSus', sync = function(self) self:val(GetMoonParam(self.ch, MCS.SUSTAIN) == 0) end },
+            { name = 'AuxOut', sync = function(self) end },
             { name = 'Hands', sync = function(self) GetMoonParam(self.ch, MCS.HANDS) end },
+            { name = 'Mod', sync = function(self) end },
+            { name = 'Pressure', sync = function(self) end },
             { name = 'Breath', sync = function(self) MidiIN(self.ch, TRACKS.IN_BC, self:val()) end },
             { name = 'Switches1', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_SW1)) end },
             { name = 'Switches2', sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_SW2)) end },
@@ -1007,7 +1025,7 @@ gui = {
             x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'green', displayOnly = true, sync = function(self) initPlug(self.ch) self:val(plugs[self.ch].name) end },
     bank  =  { name = 'Bank', color = 'black', caption = '', image = 'plain',
             x = leftPad, y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'yellow', displayOnly = true, sync = function(self) self:val(bankLists[self.ch].name) end },
-    nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2,3}, frames = 4, w = faderW, h = btnH, min = nil, max = nil, func = function(self) SetNSource(self) end, sync = function(self) end },
+    nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2,3}, frames = 4, w = faderW, h = btnH, min = nil, max = nil, func = function(self) SetNSource(self.ch) end, sync = function(self) end },
     enable    =  { name = 'Enable', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, vals = {0,1,2,3}, frames = 4, color = 'black', func = function(self) SetEnable(self) end, sync = function(self) end },
     ch = {},  --this is where all the channel components will go
 }
@@ -1020,13 +1038,20 @@ function SetEnable(elm)
     UpdateStatus()
 end
 
-function SetNSource(elm)
+function SetNSource(ch)
+    local elm = CH(ch).nSource
+    local out  --todo: add support for separate output
     if elm and elm:val() then
         local val = elm:val()
         MSG("ns val for ch", elm.ch, '=',val)
         local bank = selectedBanks[elm.ch]
         if bank.isfx == 1 and bank.midiin == 0  then elm:val(2)
         else elm:val(val % 2)  --limit setting by clicking to 0 or 1
+        end
+        if CH(ch).AuxOut:val() == 1 then  SetOutputSend(ch, TRACKS.OUT_D)
+        elseif bank.midiin == 0 then SetOutputSend(ch, TRACKS.OUT_C)
+        elseif elm:val() == NS.KBD then SetOutputSend(ch, TRACKS.OUT_A)
+        elseif elm:val() == NS.ROLI then SetOutputSend(ch, TRACKS.OUT_B)
         end
     end
     UpdateStatus()
@@ -1133,10 +1158,13 @@ for i, btn in ipairs(gui.inspector.options) do
     btn.x, btn.y = GetLayoutXandY(i, gui.inspector.x, gui.inspector.y, gui.inspector.w, btnH, paramRows)
     btn.w, btn.h = gui.inspector.w, gui.inspector.h
     btn.chColor = gui.inspector.chColor
-    if not btn.momentary then btn.name = 'I'..btn.name end
+    btn.name = 'I'..btn.name
     --MSG('Creating inspector button: '..btn.name)
     gui[btn.name] = createButton(btn)
 end
+gui.iSharp = createButton(gui.iSharp)
+gui.iNatural = createButton(gui.iNatural)
+gui.iFlat = createButton(gui.iFlat)
 --PARAMS--------------------------------------------------------------
 gui.paramTabs = createPanel(gui.paramTabs, nil, gui.paramTabs.options)
 gui.params = createPanel(gui.params)  -- todo: show encoder soloing!
@@ -1172,9 +1200,9 @@ end
 for i = 1,channelCount do
     ----MSG('Chan '..i)
     local ch = {}
-    ch.sendLabel =  createLabel(gui.fxName,i)
+    ch.fxName =  createLabel(gui.fxName,i)
     ch.fxNum =      createTitle(gui.fxNum, i)
-    ch.send =       createFader(gui.send, i)
+    ch.fxLevel =       createFader(gui.fxLevel, i)
     ch.semi =       createButton(gui.semi,i)
     ch.oct =        createButton(gui.oct,i)
     ch.fxSpin =     createSpinner(gui.fxSpin,i)
@@ -1184,7 +1212,7 @@ for i = 1,channelCount do
     ch.pan =        createFader(gui.pan, i)
 
     for num,option in ipairs(gui.lights.options) do
-        option.x, option.y = GetLayoutXandY(num, gui.lights.x, gui.lights.y, indW, indH, 10)
+        option.x, option.y = GetLayoutXandY(num, gui.lights.x, gui.lights.y, indW, indH, 12)
         option.h, option.w = gui.lights.h, gui.lights.w
         option.displayOnly = gui.lights.displayOnly
         option.z = gui.lights.z
@@ -1233,7 +1261,7 @@ function PresetChanged(chNum)
     gui.iTrackTitle:val(name)
     for i, chanNum in ipairs(GetFxReceives(chNum)) do
         --change their send name to the new preset name
-        gui.ch[chanNum].sendLabel:val(name)
+        gui.ch[chanNum].fxName:val(name)
     end
 end
 --update the gui when a bank is changed
@@ -1242,7 +1270,7 @@ function BankChanged(chNum)
     gui.iBankTitle:val(name)
     CH().bank:val(name)
     for i, rcvCh in ipairs(GetFxReceives(chNum)) do
-        gui.ch[rcvCh].send:setColor(ChanColor(chNum))
+        gui.ch[rcvCh].fxLevel:setColor(ChanColor(chNum))
     end
 end
 function VstChanged(chNum)
@@ -1267,12 +1295,12 @@ function ChChanged(chNum)
     gui.iTrackTitle:setCaption(CH().preset:val())
     gui.params:setColor(color, true)
     --fx
-    gui.iFxLabel:val( CH().sendLabel:val() )
-    gui.iFxLevel:val( CH().send:val())
+    gui.iFxLabel:val( CH().fxName:val() )
+    gui.iFxLevel:val( CH().fxLevel:val())
     local options = GetChFxOptions(iCh)
     gui.iFxSelect:setOptions(options)
     --MST(gui.fxSelect.options, 'OPTIONS')
-    local idx = IForField(options, 'chan', CH().sendLabel:val())
+    local idx = IForField(options, 'chan', CH().fxNum:val())
     gui.iFxSelect:select(idx, true)
     gui.iFxSelect:pageToSelection()
 
@@ -1293,9 +1321,9 @@ function ChChanged(chNum)
             gui[inspName]:setColor(color)
         end
     end
-    gui.Sharp:setColor(color)
-    gui.Flat:setColor(color)
-    gui.Natural:setColor(color)
+    gui.iSharp:setColor(color)
+    gui.iFlat:setColor(color)
+    gui.iNatural:setColor(color)
     gui.iPanFader:setColor(color)
 
     for name,ctl in pairs(gui) do

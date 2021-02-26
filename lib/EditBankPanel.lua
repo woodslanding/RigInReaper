@@ -1,8 +1,8 @@
 --------------------------------------------------------Edit Banks---------------------------------------
 --[[
 
-    Should NS info be stored with bank?  FI, MPE mode, PB range, etc.?
-    Or should we create a real NS editing panel?  Maybe a tab on the organ panel?
+    Should NS info be stored with bank?  Maybe.  If we need special MCS settings to make a bank work for both ROLI and KEYS
+        e.g. organ should have pb->notes enabled
 
     PARAMS PANEL:   Shows all mappable controls, and allows them to be mapped to parameters.
     MENU:
@@ -25,7 +25,7 @@
         1. Stored as RPL, and found in Bank File.  ALL GOOD!
         2. Stored as RPL, and not found in Bank.  ADD TO BANK!
         3. Found in Bank, but no RPL.  MISSING RPL!!
-        4. Fxps. mostly just for reaktor, which will not actually load up with any!!
+        4. Fxps. mostly just for reaktor, which will not actually load up with any!!  <<REALLY???
                     so, we just need a 'get fxps' command and options to convert some or all to RPLs
     OPTIONS:
         There are Options for Viewing and Converting Presets:
@@ -48,7 +48,7 @@
         1. AT --> CC and TOGGLE/ threshold
         2. MPE or NORMAL or BOTH --not stored with bank--set from notesource
         3. MPE voice count
-        4. AUDIO INPUT (line, mic1, mic2, inst)  -should be a chan option, not stored with bank!
+        4. AUDIO INPUT(S) (line, mic1, mic2, inst)  -should be a chan option, not stored with bank.
         5.
 
 

@@ -98,11 +98,11 @@ TRACKS = {
             IN_DRWB = 23 + CH_COUNT,  --drawbar port
             IN_ORG_CTL = 24 + CH_COUNT,--drawbar port
         --AUDIO INPUTS
-        IN_AUDIO_LINE = 25 + CH_COUNT,
-        IN_AUDIO_MIC1 = 26 + CH_COUNT,
-        IN_AUDIO_MIC2 = 27 + CH_COUNT,
+        IN_AUDIO_MIC1 = 25 + CH_COUNT,
+        IN_AUDIO_MIC2 = 26 + CH_COUNT,
         IN_AUDIO_INST = 28 + CH_COUNT,
-        IN_AUDIO_MON = 29 + CH_COUNT
+        IN_AUDIO_LINE = 29 + CH_COUNT,
+        IN_AUDIO_MON = 30 + CH_COUNT
 }
 
 INPUT_DEVICE_NAME = 'HD Audio Mic input 1'
