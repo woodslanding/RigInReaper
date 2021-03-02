@@ -1,9 +1,9 @@
 return { 
     masterVol = 0,
-    globalPreset = "default",
-    globalBank = "default",
-    tempo = 0,
     monitorVol = 0,
+    globalPreset = "default",
+    tempo = 0,
+    globalBank = "default",
     channels = {
         { enable = 1, nSource = 0, NsSolo = 0, vst = "reaktor", bank = "favorites", preset = "fuzz floot", volume = 1.0, pan = 0.0, MuteFx = 0, fxNum = 3, fxLevel = 0.75, oct = 1.0, semi = 2.0, Exp = 1, Ped2 = 0, NoSus = 0, Hands = 0, Encoders = 0, Switches1 = 0, Switches2 = 0, Breath = 0, Drawbars = 0, },
         { enable = 0, nSource = 0, NsSolo = 0, vst = "kontakt", bank = "test", preset = "Record Player Music Box", volume = 0.73148148148148, pan = 0.0, MuteFx = 0, fxNum = 4, fxLevel = 0.5, oct = 1.0, semi = 0.0, Exp = 1, Ped2 = 0, NoSus = 0, Hands = 0, Encoders = 0, Switches1 = 0, Switches2 = 0, Breath = 0, Drawbars = 0, },

@@ -142,25 +142,17 @@ end
 function RefreshBanks()
     local i = 1
     local plugName = GetPlugName(channel)
-    --[[for name,vst in pairs(GetBankFileTable()) do
-        MSG('setting option '..name..' to '..vst)
-        VSTPanel:setOption(i,{
-            name = name,
-            vst = vst
-        })
-        local vstFile = vst..'.dll'
-        if vstFile == plugName then VSTPanel:select(i) end
-        i = i + 1
-    end--]]
-
+    MST('bank file table',GetBankFileTable())
+    VSTPanel:setOptions(GetBankFileTable())
     VSTPanel:setPage(1)
 end
+
 function LoadPlug()
     Banks = Plug:getBankList()
     BankPanel.options = {}
     BankPanel:setColor('gray',true)
     for i,bankName in ipairs(Banks) do
-        --MSG('Adding option for bankpanel: '..bank)
+        MSG('Adding option for bankpanel: '..bankName)
         local bank = Plug:getBank(bankName)
         BankPanel:setOption(i,{name = bankName, bank = bank, color = GetRGB(bank.hue,bank.sat,BRIGHTNESS)})
     end
@@ -743,9 +735,14 @@ local panel = MButtonPanel.new({
 Options.chanPanel = panel
 RefreshChannels()
 
---[[function RefreshChannels()
+function RefreshChannels()
     for i = 1, channelCount do
-        Options.chanPanel:setOption(i, {name = GetPluginDisplayName(GetPlugName(i)), func = function(self) channel = self.index end  } )
+        Options.chanPanel:setOption(i, {name = GetPluginDisplayName(GetPlugName(i)),
+                func = function(self) channel = self.index
+                    Plug = Plugin.load(VSTPanel:getSelection().name)
+                    LoadPlug()
+                end
+                } )
     end
     Options.chanPanel:setPage(1)
 end--]]

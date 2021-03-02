@@ -598,8 +598,11 @@ end
 function Esc(val)
     if type(val) == 'string' then return ("%q"):format(val) else return val end
 end
-
-function CleanComma(s)  return s:sub(1, string.len(s) -2) end
+--just strips a number of characters off the end of the string.  default is 1
+function CleanComma(s, num)
+    local trim = 2
+    if num then trim = num + 1 end
+      return s:sub(1, string.len(s) - trim) end
 
 ---------------------------------------------------------------------
 ---------------------------------MOON PARAMS-------------------------
@@ -992,7 +995,7 @@ end
 function SetChanFxStatus(chan, isfx)
     for dest = 1, CH_COUNT do
         if dest ~= chan then
-            MSG('calling SetChanFxStatus:', chan, dest)
+            --MSG('calling SetChanFxStatus:', chan, dest)
             local muted IsSendMuted(chan, dest)
             local unselected = IsPhaseFlipped(chan, dest)
             RemoveAllSends(dest, chan)
@@ -1369,8 +1372,14 @@ function decFxPreset(tracknum, fx)
     local presetmove = -1
     reaper.TrackFX_NavigatePresets( GetTrack(chan), fx, presetmove )
 end
+--
 function SetFxPreset(chan, presetname) --Test:  if RPL and built-in have same name, RPL is chosen??
-    reaper.TrackFX_SetPreset( GetTrack(chan), INSTRUMENT_SLOT, presetname )
+    MSG("SETTING FX PRESET, CHAN", chan)
+    local unchanged, previous = reaper.TrackFX_GetPreset(GetTrack(chan), INSTRUMENT_SLOT, '')
+    MSG('previous, current', previous, presetname)
+    if previous ~= presetname then
+        reaper.TrackFX_SetPreset( GetTrack(chan), INSTRUMENT_SLOT, presetname )
+    end
 end
 
 function GetParamName(tracknum,fxnum, paramnum)

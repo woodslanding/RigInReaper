@@ -110,6 +110,7 @@ local presetPages = {} --table of preset pages
 local bankLists = {}  -- list of banks for selected vst by channel
 local selectedBanks = {} --list of selected banks by channel
 local bankPages = {} --list of bank pages
+local gPreset = 'default'
 
 ---------------------------------------------------------------------------------------------
 --[[
@@ -164,18 +165,19 @@ function GetText(titleText, func)
     Keyboard:visible(true)
     Keyboard.func = func
 end
-
-function ChanColor(chan, hue, sat)
+--get or set
+function ChanColor(chan, hue, sat, level)
+    local lvl = level or BRIGHTNESS
     --MSG('color for chan:',chan, hue, sat)
     if not hue then
-        if chan then return getColor(selectedBanks[chan].hue, selectedBanks[chan].sat)
+        if chan then return getColor(selectedBanks[chan].hue, selectedBanks[chan].sat, lvl)
         else return 'gray' end
     end
     for _, elm in pairs(gui.ch[chan]) do
         --MSG(elm.name, "Setting color")
-        if elm.bg then elm:setColor(getColor(hue, sat)) end
+        if elm.bg then elm:setColor(GetRGB(hue, sat, lvl)) end
         --MSG('setting color for chan ', chan)
-        SetChanColor(chan, hue, sat)
+        SetChanColor(chan, hue, sat, lvl)
     end
 end
 
@@ -192,6 +194,7 @@ end
 -------------------------------------------------------------------------------------------------------
 --an array of all the channels with mixer inputs, i.e. effects
 --need to include the channel, so it won't send to itself
+--format {1 = fxChan1, 2 = fxChan2}
 function GetChFxList(chan)
     local chFX = {}
     for i = 1, CH_COUNT do
@@ -210,7 +213,9 @@ function SetFx(chan, destCh)
             FlipPhase(chan, dest, true)
         else
             FlipPhase(chan, dest, false)
+            --MSG('setting fx for ch',chan,' to ch ',destCh)
             local ismuted = CH(chan).MuteFx:val() == 1
+            --MSG('seting fx to ',destCh, 'mute val ==', ismuted)
             MuteSend(chan, dest, ismuted )
         end
     end
@@ -219,6 +224,13 @@ end
 
 function GetFx(chan)
     return CH(chan).fxNum:val()
+end
+
+function MuteFx(chan, mute)
+    MuteSend(chan, GetFx(chan), mute)
+    local color = 'red'
+    if not mute then color = ChanColor(GetFx(chan)) end
+    CH(chan).fxLevel:setColor(color)
 end
 
 function GetFxReceives(chan)
@@ -233,14 +245,15 @@ end
 function GetChFxOptions(chan)
     local options = {}
     for i, fxch in ipairs(GetChFxList(chan)) do
-        --MSG('fx chan = ',fxch)
-        options[i] = {name = gui.ch[fxch].preset:val(), color = ChanColor(fxch), chan = fxch,
+        --MSG('creating option for fxChan', fxch)
+        options[i] = {name = gui.ch[fxch].preset:val(), color = ChanColor(fxch), ch = fxch,
                     func = function(self)
                         local option = gui.iFxSelect:getOption(self.index)
-                        SetFx( iCh, option.chan )
+                        MST('calling func for fx option',option)
+                        SetFx( iCh, GetChFxList(iCh)[option.index] ) --for some reason the option does not have a 'ch' field!!?
                         CH().fxLevel:setColor(option.color)
                         CH().fxName:val(option.name)
-                        CH().fxNum:val(option.chan)
+                        CH().fxNum:val(option.ch)
                         gui.iFxLevel:setColor(option.color)
                         gui.iFxLabel:val(option.name)
                     end
@@ -251,19 +264,19 @@ end
 
 ---called by the fxSpinner
 function  IncrementFX(chanNum, inc)
-    local fxChan = CH(chanNum).fxName:val()
+    local fxChan = CH(chanNum).fxNum:val()
     local fxList = GetChFxList(chanNum)
     local idx = IForName(fxList, fxChan)
+    MSG('Index for fx', fxChan, '=', idx )
     local newVal = IncrementValue(idx, 1, #fxList, true, inc)
     CH(chanNum).fxNum:val(newVal)
     SetFx(chanNum, fxList[newVal])
 end
 
 function SetFxDisplay(chanNum)
-    MSG('setting fx display')
+    --MSG('setting fx display')
     local ch = CH(chanNum)
     local fxCh = ch.fxNum:val()
-    ch.fxNum:val(fxCh)
     ch.fxLevel:setColor(ChanColor(fxCh))
     ch.fxName:val(GetChanPresetName(fxCh))
     if chanNum == iCh then
@@ -289,11 +302,14 @@ function LoadBank(bankname, chan)
     if wasfx and isfx then --fxlists will not change
     elseif not wasfx and not isfx then --ditto
     elseif wasfx and not isfx then
-        --increment all channels that sent to the old FX
+        --increment AND MUTE FX OF all channels that sent to the old FX
         for i = 1, CH_COUNT do
             --unless we are doing the first load.
             if CH(i).fxNum:val() and CH(i).fxNum:val() > 0 then
-                if i ~= chan and CH(i).fxNum:val() == chan then IncrementFX(i, 1) end
+                if i ~= chan and CH(i).fxNum:val() == chan then
+                    IncrementFX(i, 1)
+                    MuteFx(i,true)
+                end
             else --we don't have an fxNum for this channel yet.  Fill it in later.
             end
         end
@@ -345,7 +361,8 @@ function SelectPreset()
         SetFxPreset(iCh,option.name)
         PresetChanged(iCh)
     elseif PanelDisplay == GLOBAL then
-        GlobalRecall(option.name, gBankname)
+        gPreset = option.name
+        GlobalRecall(gPreset, gBankname)
     elseif PanelDisplay == VST then
         --we've already loaded bank data, but still need to instantiate the vst dll
         LoadPlug(gui.banks:getSelectionData())
@@ -372,48 +389,52 @@ end
 function SetPanelsPRESETS()
     PanelDisplay = PRESET
     gui.banks:setOptions(bankLists[iCh])
-    gui.banks:selectByName(selectedBanks[iCh].name, true)
-    gui.presets:setOptions(presets[iCh])
-    gui.presets:selectByName(iCh.preset:val())
+    gui.banks:selectByName(selectedBanks[iCh].name)
+    gui.presets:setOptions(selectedBanks[iCh]:presetsAsOptions())
+    gui.presets:selectByName(CH().preset:val())
 end
 
 --------------------------------------------------------------------------------------------------
 ---------------------------------     GLOBAL LOAD/SAVE   -----------------------------------------
 --------------------------------------------------------------------------------------------------
 
-function GlobalSave(gPresetName)
+function GlobalSave(preset)
+    if not preset then local preset = gPreset end
     local saveData = 'return '..'{ \n'
     for name,elm in pairs(gui) do
         --MSG('saving element: '..name)
         if elm.save then
             --MSG('saving ctl: '..name)
-            saveData = saveData..indent..name..' = '..Esc(elm:val())..',\n'
+            saveData = saveData..name..' = '..Esc(elm:val())..',\n'
         end
     end
-    saveData = saveData..indent..'channels = {\n'
+    saveData = saveData..'channels = {\n'
     local saveOrder = {
-        'enable','nSource','NsSolo','vst','bank','preset','volume', 'pan',
-        'MuteFx','fxNum','fxLevel',
-        'Encoders','Switches1','Switches2','Breath','Drawbars',
-        'oct','semi','Exp','Ped2','NoSus','Hands'
+        {'vst','bank','preset','volume', 'pan','fxLevel',},
+        {'enable','nSource','NsSolo','MuteFx','fxNum',
+        'oct','semi','Exp','Ped2','NoSus','Hands',
+        'Encoders','Switches1','Switches2','Breath','Drawbars'}
     }
     for num,chan in ipairs(gui.ch) do --color is not a table, but we can get it from the bank...
-        saveData = saveData..indent..indent..'{ '
+        saveData = saveData..indent..'{ '
         --for name, elm in pairs(chan) do
-        for i, controlName in ipairs(saveOrder) do
-            local elm = chan[controlName]
-            if type(elm) == 'table' and elm.save ~= false then
-                MSG('saving control: '..name)
-                saveData = saveData..name..' = '..Esc(elm:val())..', '
+        for i, datatype in ipairs(saveOrder) do
+            for i, controlName in ipairs(datatype) do
+                local elm = chan[controlName]
+                if type(elm) == 'table' and elm.save ~= false then
+                    --MSG('saving control: '..name)
+                    saveData = saveData..controlName..' = '..Esc(elm:val())..', '
+                end
             end
+            saveData = saveData..'\n'..indent
         end
-        saveData = saveData..'},\n'
+        saveData = CleanComma(saveData,6)..'},\n'
     end
-    saveData = saveData..indent..'},'..'\n}'
+    saveData = saveData..'},'..'\n}'
     local folder = GBANK_FOLDER..'/'..gui.globalBank.name
-    if not CreateFolder(folder) then MSG("Couldn't create folder: "..folder) end
-    local file = io.open(folder..'/'..gPresetName..'.lua','w')
-    MSG('writing to file: '..gPresetName)
+    if not CreateFolder(folder) then --[[MSG("Couldn't create folder: "..folder)]] end
+    local file = io.open(folder..'/'..preset..'.lua','w')
+    MSG('writing to file: '..preset)
     file:write(saveData)
     file:close()
 end
@@ -443,14 +464,14 @@ function GlobalRecall(presetName, gBankname)
     for name,gval in pairs(data) do
         if name == 'channels' then
             for i,chan in ipairs(gval) do
-                MSG('Channel: '..i)
+                --MSG('Channel: '..i)
                 for name, val in pairs(chan) do
                     --check for obselete fields....
                     local elm = gui.ch[i][name]
                     if elm then elm:val(val)
                         --if elm:func() then elm:func(elm) end
 
-                        MSG('GLOBAL_LOAD:', name, ', set value to ', elm:val())
+                        --MSG('GLOBAL_LOAD:', name, ', set value to ', elm:val())
                     end--update control
                 end
             end
@@ -476,8 +497,6 @@ function GlobalRecall(presetName, gBankname)
                 end
             end
         end
-        --clear all holds
-        channel.Hold:val(0)
         VstChanged(i)
         BankChanged(i)
         PresetChanged(i)
@@ -486,7 +505,7 @@ function GlobalRecall(presetName, gBankname)
         UpdateStatus(i)
     end
     --set all sends at once after loading everything
-    ResetSends()
+    --ResetSends()
 end
 
 
@@ -636,7 +655,7 @@ end
 local function createLabel(props, ch)
     if not ch then ch = '' end
     local fontSize = props.fontSize or 22
-    local font = {'Calibri', fontSize,"b"}
+    local font = {'Calibri', fontSize,"n"}
     local label = GUI.createElement ({
         type = "MLabel",
         vertical = props.vertical or true,
@@ -792,7 +811,7 @@ end
 gui = {
     presetPager = {  x = presetX, y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
     bankPager =   {  x = bankX,   y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
-    leftMenu = {  x = bankX + btnW + pad, y = 0, w = chBtnW, options = {
+    leftMenu = {  x = presetX + btnW + pad, y = 0, w = chBtnW, options = {
             { name = 'Quit', image = 'Quit', momentary = true, func = function(self) Stop() CloseWindow(window) end },
             { name = 'Console', image = 'Console', momentary = true, func = function() ultraschall.BringReaScriptConsoleToFront() end },
             { name = 'LeftHalf', image = 'Left', momentary = true, func = function() ResizeWindow(window, 0, 0, totalW/2, totalH) end },
@@ -808,7 +827,7 @@ gui = {
         },
     },
     masterVol = {   name = 'masterVol', save = true, image = 'masterVol', color = 'green', x = masterVolX, y = presetY, h = btnH*6,  frames = 108,
-                        func = function(self) MSG('volume = '..self:val()) end},
+                        func = function(self) end},
     masterLabel =  { name = 'masterLabel', caption = 'MASTER', fontSize = 36, textColor = 'gray', x = masterVolX + pad + 2, y = 116, w = 120, h = 24 },
     monitorVol = {  name = 'monitor',save = true, image = 'monitorVol', color = 'yellow', x = 0, y = presetY, h = btnH * 6, frames = 72, func = function(self) end },
     monitorLabel =  { name = 'monitorLabel', caption = 'MONITOR', fontSize = 36, textColor = 'gray', x = 6, y = 132, w = 100, h = 24 },
@@ -824,7 +843,7 @@ gui = {
                 { name = 'VstPage', image = 'Vst', func = function() SetPanelsVST() end},
             },
     },
-    banks =     {   name = 'bankPanel', x = bankX, y = presetY, rows = presetRows, cols = bankCols, func = function(self) SelectBank() end },
+    banks =     { name = 'bankPanel', x = bankX, y = presetY, rows = presetRows, cols = bankCols, func = function(self) SelectBank() end },
     -------------------------------------------TRANSPORT---------------------------
     -------------------------------------------------------------------------------
     tempoDec = { name = 'TempoDec', w = tBtnW, x = transportX, y = 0, h = tempoH, momentary = true,  func = function(self) UpdateTempo(Tempo() - 1) end },
@@ -851,7 +870,7 @@ gui = {
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ ROW 2 }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
-    iFxLevel =  {   name = 'fxLevel', image = 'send', x = leftPad, y = paramsY ,frames = 72, h = 5 * btnH, func = function(self) SetFxLevel(iCh, GetFx(iCh), self:val()) CH().send:val(self:val()) end},
+    iFxLevel =  {   name = 'fxLevel', image = 'send', x = leftPad, y = paramsY ,frames = 72, h = 5 * btnH, func = function(self) SetFxLevel(iCh, GetFx(iCh), self:val()) CH().fxLevel:val(self:val()) end},
     iFxLabel =  {   name = 'fxLabel', x = leftPad + pad, y = paramsY + 55, fontSize = 24, h = 5 * btnH, },
     iPanFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true, caption = 'pan', captionY = -.7,
                     w = 3 * inspBtnW, h = btnH, func =  function(self) CH().pan:val(self:val()) Pan(iCh, self:val()) end },
@@ -885,7 +904,7 @@ gui = {
             { name = 'Pressure', func = function(self) CH().Pressure:val(self:val())  end },
             { name = 'Switches2', func = function(self) CH().Switches2:val(self:val()) MidiIN(iCh, TRACKS.IN_SW2, self:val()) end },
 
-            { name = 'MuteFx', func = function(self) CH().MuteFx:val(self:val())  end },
+            { name = 'MuteFx', func = function(self) CH().MuteFx:val(self:val()) MuteFx(iCh, self:val() == 1) end },
             { name = 'Hands', func = function(self)  CH().Hands:val(self:val()) SetMoonParam(iCh, MCS.HANDS, self:val()) end },
             { name = 'Breath', func = function(self) CH().Breath:val(self:val()) MidiIN(self.ch, TRACKS.IN_BC, self:val()) end },
             { name = 'Drawbars', func = function(self)  CH().Drawbars:val(self:val()) MidiIN(iCh, TRACKS.IN_DRWB, self:val()) end },
@@ -993,10 +1012,9 @@ gui = {
     meterR = { name = 'meterR', bg = true, save = false, x = leftPad, y = chanY - (meterH/2), h = panH/2, w = chanW, horizontal = true,
                                     displayOnly = true, frames = 25, chColor = true },
 
-    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 106, fontSize = 26,  sync = function(self) end  },
+    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 106, fontSize = 26, func = function(self) end, sync = function(self) end  },
     volume =    { name = 'volume', bg = true, x = leftPad, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) Output(self.ch,self:val()) end ,  sync = function(self) self:val(Output(self.ch)) end },
-
-    lights =  { x = leftPad + indX, y = chanY + 4, w = indW, h = indH, displayOnly = true, z = indZ, options = {
+     lights =  { x = leftPad + indX, y = chanY + 4, w = indW, h = indH, displayOnly = true, z = indZ, options = {
             { name = 'Cue', save = false, sync = function(self) self:val(Cue(self.ch)) end },
             { name = 'Solo', save = false, sync = function(self) end },
             { name = 'MuteFx', sync = function(self) end },
@@ -1011,6 +1029,7 @@ gui = {
             { name = 'Drawbars',  sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_DRWB)) end },
         },
     },
+    tracknum = {name = 'tracknum', x = chanBtnX, y = chanY, w = chBtnW, h = btnH, fontSize = 26, textColor = 'text', save = false, captionY = -.1, func = function(self) ChChanged(self.ch) end},
     buttons = { x = chanBtnX, y = chanY, w = chBtnW, h = btnH, chColor = true, options =  {
             --need a method to query bank for sustain type
             { name = 'Select', bg = true, save = false, func = function(self) ChChanged(self.ch) end, sync = function(self) end },
@@ -1026,13 +1045,13 @@ gui = {
     bank  =  { name = 'Bank', color = 'black', caption = '', image = 'plain',
             x = leftPad, y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'yellow', displayOnly = true, sync = function(self) self:val(bankLists[self.ch].name) end },
     nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2,3}, frames = 4, w = faderW, h = btnH, min = nil, max = nil, func = function(self) SetNSource(self.ch) end, sync = function(self) end },
-    enable    =  { name = 'Enable', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, vals = {0,1,2,3}, frames = 4, color = 'black', func = function(self) SetEnable(self) end, sync = function(self) end },
+     enable    =  { name = 'Enable', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, vals = {0,1,2,3}, frames = 4, color = 'black', func = function(self) SetEnable(self) end, sync = function(self) end },
     ch = {},  --this is where all the channel components will go
 }
 
 --keep from clicking past val == 1
 function SetEnable(elm)
-    MSG('setting enable to: ',elm:val(), ', chan:',elm.ch)
+    ----MSG('setting enable to: ',elm:val(), ', chan:',elm.ch)
     if elm:val() > 1  then elm:val(0) end
     SetMoonParam(elm.ch, MCS.MIDI_ON, elm:val())
     UpdateStatus()
@@ -1043,7 +1062,7 @@ function SetNSource(ch)
     local out  --todo: add support for separate output
     if elm and elm:val() then
         local val = elm:val()
-        MSG("ns val for ch", elm.ch, '=',val)
+        --MSG("ns val for ch", elm.ch, '=',val)
         local bank = selectedBanks[elm.ch]
         if bank.isfx == 1 and bank.midiin == 0  then elm:val(2)
         else elm:val(val % 2)  --limit setting by clicking to 0 or 1
@@ -1059,13 +1078,13 @@ end
 --resets all enable values for chans that share the source channel's notesource
 function UpdateStatus()
     for nS = 0,1 do
-        MSG('nS = ', nS)
+        --MSG('nS = ', nS)
         for _,i in ipairs(GetChansWithNS(nS)) do
             local ch = CH(i)
             if GetMoonParam(i, MCS.MIDI_ON) == 0 then --do nothing
                 --this should ignore disabled channels and fx channels
             elseif IsNsSoloed(nS) then
-                MSG('notesource for chan', i, ':',nS, 'isNsSoloed' )
+                --MSG('notesource for chan', i, ':',nS, 'isNsSoloed' )
                 if ch.NsSolo:val() == 1 then ch.enable:val(ENABLE.NSOLO)
                 else ch.enable:val(ENABLE.NMUTED) end
             else ch.enable:val(ENABLE.ON)
@@ -1078,7 +1097,7 @@ function IsNsSoloed(nsNum)
     for i, chan in ipairs(GetChansWithNS(nsNum)) do
         --MST('channels for ns '..nsNum, GetChansWithNS(nsNum))
         if CH(chan).NsSolo:val() == 1 then
-            MSG('notesolo chan = ', chan)
+            --MSG('notesolo chan = ', chan)
             return true
         end
     end
@@ -1087,7 +1106,7 @@ end
 
 
 function SetOctave(chanNum)
-    MSG('setting octave', chanNum)
+    --MSG('setting octave', chanNum)
     local ch = CH(chanNum)
     local octave = ch.oct:val()
     SetMoonParam(chanNum, MCS.OCTAVE, octave )
@@ -1159,7 +1178,7 @@ for i, btn in ipairs(gui.inspector.options) do
     btn.w, btn.h = gui.inspector.w, gui.inspector.h
     btn.chColor = gui.inspector.chColor
     btn.name = 'I'..btn.name
-    --MSG('Creating inspector button: '..btn.name)
+    ----MSG('Creating inspector button: '..btn.name)
     gui[btn.name] = createButton(btn)
 end
 gui.iSharp = createButton(gui.iSharp)
@@ -1198,7 +1217,7 @@ end
 
 ------------------------------------------    CREATE   CHANNEL -------------------------------------
 for i = 1,channelCount do
-    ----MSG('Chan '..i)
+    ------MSG('Chan '..i)
     local ch = {}
     ch.fxName =  createLabel(gui.fxName,i)
     ch.fxNum =      createTitle(gui.fxNum, i)
@@ -1222,12 +1241,16 @@ for i = 1,channelCount do
     ch.preset = createLabel(gui.preset, i)
     ch.volume = createFader(gui.volume, i)
 
+    --ch.tracknum = createTitle(gui.tracknum, i)
+    --ch.tracknum:val(i)
+
     for num, option in ipairs(gui.buttons.options) do
         option.x, option.y = GetLayoutXandY(num, gui.buttons.x, gui.buttons.y, chBtnW, btnH, 10)
         option.h, option.w = gui.buttons.h, gui.buttons.w
         option.chColor = true
         ch[option.name] = createButton(option,i)
     end
+    ch.Select:setCaption(i)
     ch.vst = createTitle(gui.vst,i)
     ch.bank = createTitle(gui.bank,i)
     ch.nSource = createButton(gui.nSource, i)
@@ -1279,7 +1302,9 @@ function VstChanged(chNum)
 end
 --called by channel select button
 function ChChanged(chNum)
-    --MSG('got here')
+    --restore color of previous channel
+    --ChanColor(iCh, selectedBanks[iCh].hue, selectedBanks[iCh].sat)
+    ----MSG('got here')
     iCh = chNum
     local color = ChanColor(chNum)
     if PanelDisplay == PRESET then
@@ -1297,10 +1322,12 @@ function ChChanged(chNum)
     --fx
     gui.iFxLabel:val( CH().fxName:val() )
     gui.iFxLevel:val( CH().fxLevel:val())
+    gui.iFxLevel:setColor( ChanColor(GetFx(iCh)))
     local options = GetChFxOptions(iCh)
     gui.iFxSelect:setOptions(options)
     --MST(gui.fxSelect.options, 'OPTIONS')
     local idx = IForField(options, 'chan', CH().fxNum:val())
+    --MSG('fx index = ',idx)
     gui.iFxSelect:select(idx, true)
     gui.iFxSelect:pageToSelection()
 
@@ -1312,14 +1339,11 @@ function ChChanged(chNum)
     --get inspector
     for i,elm in ipairs(gui.lights.options) do
         local lightName = elm.name  -- the original options don't have an 'I'
-        --MSG('light: '..lightName)
+        ----MSG('light: '..lightName)
         local inspName = 'I'..lightName
         --set global gui inspector values to channel's light values
-        if inspName ~= 'IEmpty' then  --except this one!
-            --MST(gui[inspName],inspName)
-            gui[inspName]:val(CH()[lightName]:val())
-            gui[inspName]:setColor(color)
-        end
+        gui[inspName]:val(CH()[lightName]:val())
+        gui[inspName]:setColor(color)
     end
     gui.iSharp:setColor(color)
     gui.iFlat:setColor(color)
@@ -1330,19 +1354,17 @@ function ChChanged(chNum)
         --MSG('ctl = '..name)
         if ctl.chColor and ctl.color then ctl:setColor(CH().color) end
     end
-
+    --CH(chNum).volume:setColor(ChanColor(chNum))
+    --CH(iCh).volume:setColor('yellow')
+    --ChanColor(iCh, 0,0,0)
     gui.iPanFader:val(CH().pan:val())--]]
 end
 
 for _,layer in pairs(layers) do window:addLayers(layer) end
 
---GlobalSave('test')
-ClearChanSends()
-InitOutputRouting() --verify output sends exist.
 InitTempo()
 window:open()
 Fullscreen(window)
---initTables()
 GlobalRecall('default', gBankname)
 SetPanelsGLOBAL()
 ChChanged(1)
