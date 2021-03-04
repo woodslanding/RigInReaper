@@ -42,6 +42,7 @@ require 'moonUtils'
 
 local Bank = {}
 Bank.__index = Bank
+local ALL = 'all'
 
 local PATH = BANK_FOLDER
 
@@ -109,13 +110,7 @@ function Bank:getColor()
 end
 
 function Bank:getPresets()
-
     return ArraySort(self.presets)
-    --[[for preset in pairs(self.presets) do
-        table.insert(presets,tostring(self.presets[preset]))
-    end
-    ArraySort(presets)
-    return presets--]]
 end
 
 function Bank:presetsAsOptions()
@@ -157,7 +152,7 @@ function Plugin:getPresetString()
 end
 --returns a table of banks
 function Plugin:getBanks() --sorts them also
-    local banks = {}
+    local banks = { }
     for i,name in ipairs(self:getBankList()) do
         table.insert(banks, self:getBank(name))
     end
