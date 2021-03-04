@@ -202,7 +202,8 @@ end
     have a value table, however, we'll want to deliver the appropriate value by
     referencing the FrameNumber.
 ]]
-function MButton:val(set)
+--if passFunc is enabled, a change of value will call the control's func method
+function MButton:val(set, runAction)
     if set == false then set = 0 end
     if set == true then set  = 1 end
     --if set then MSG('setting val to '..set..' for '..self.name)end
@@ -229,6 +230,8 @@ function MButton:val(set)
             self:setFrame(frame)
         end
     end
+
+    if set and runAction then self:func(self) end
 end
 
 function MButton:m(text)

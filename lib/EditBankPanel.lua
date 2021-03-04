@@ -101,22 +101,22 @@ Mode = nil
 MODES = {BANK = 'Bank Mode', PRESET = 'Preset Mode'}
 local PRESET = {NORMAL = 1, NO_RPL_FOR_FXP = 2, FXP_ONLY = 3, MISSING_RPL = 4 }
 
-local channel = 1  --We will get this from the main window
+local iCh = 1  --We will get this from the main window
 local channelCount = CH_COUNT  --TODO: query moonutils to get this
 --------------------------------------------------------------------------------------------------------------------
 ------------------------------------------------------ FUNCTIONS ---------------------------------------------------
 --------------------------------------------------------------------------------------------------------------------
 
-function setchannel(track)  channel = track end
+function setchannel(track)  iCh = track end
 
-function Int(ctl) return Math.round(ctl:val()) end
+function I(ctl) return Math.round(ctl:val()) end
 
 function Map(ctl)
     MSG('mapping control '..ctl.name)
     --if reaper.Get_LastTouch_FX then
         local _, _, paramNum = GetLastTouchedFX()
         if paramNum then
-            local paramName = GetParamName(channel,INSTRUMENT_SLOT,paramNum)
+            local paramName = GetParamName(iCh,INSTRUMENT_SLOT,paramNum)
             MST(ctl,'Mapping Control:')
             Bank:setParam(ctl.name,paramNum)
             SavePlug()
@@ -129,11 +129,13 @@ function RefreshChannels()
     for i = 1,channelCount do
         Options.chanPanel:setOption(i, { name = GetPluginDisplayName(GetPlugName(i)),
                                         color = 'gray',
-                                        func = function(self) channel = self.index
-                                            SetTrackSelected(channel)
+                                        func = function(self) iCh = self.index
+                                            SetTrackSelected(iCh)
                                             local name =  Options.chanPanel:getSelectionData()
                                             MSG('selecting value: ', name)
                                             VSTPanel:selectByName(name)
+                                            setBankMode()
+                                            BankPanel:selectByName(ALL)
                                         end })
     end
     Options.chanPanel:setPage(1)
@@ -141,10 +143,15 @@ end
 
 function RefreshBanks()
     local i = 1
-    local plugName = GetPlugName(channel)
+    local plugName = GetPlugName(iCh)
     MST('bank file table',GetBankFileTable())
     VSTPanel:setOptions(GetBankFileTable())
     VSTPanel:setPage(1)
+end
+
+function UpdateVol()
+    local vol = Output(iCh)
+    Output(iCh, vol, Bank.trim)
 end
 
 function LoadPlug()
@@ -157,29 +164,39 @@ function LoadPlug()
         BankPanel:setOption(i,{name = bankName, bank = bank, color = GetRGB(bank.hue,bank.sat,BRIGHTNESS)})
     end
     BankPanel:setPage(1)
-    LoadInstrument(channel, Plug.vstName)
+    --LoadInstrument(iCh, Plug.vstName)
 
     --Automatically add RPLs to bank?  yes?
-    local bankpres = Plug:getPresetList()
-    local rpls = GetRPLs(channel)
-    local fxps = GetFXPs(channel)
+    local bankpres = Plug:getPresets()
+    local rpls = GetRPLs(iCh)
+    --MST('rpls', rpls)
+    local fxps = GetFXPs(iCh)
+    MST('fxps',fxps)
     Presets = {}  --new format!!
     --fill presets from bankfile, and note any that do not have RPLs
     for i, preset in ipairs(bankpres) do
-        if not TableContains(rpls, preset) then
+        MSG('processing preset:', preset)
+        if not ArrayContains(rpls, preset) then
+            MSG('inserting preset',preset)
             table.insert(Presets, { name = preset, status = PRESET.MISSING_RPL, textColor = 'red' } )
             --possible option: remove missing presets
-        else table.insert(Presets, { name = preset, status = PRESET.NORMAL, textColor = 'text' } )
+        else
+
+            MSG('inserting preset',preset)
+            table.insert(Presets, { name = preset, status = PRESET.NORMAL, textColor = 'text' } )
         end
     end
     --1. Add any RPLs to bankfile, regardless
     for i, preset in ipairs(rpls) do
-        if not TableContains(bankpres, preset) then
+        --MSG('checking RPL',preset)
+        --MST('bankpres',bankpres)
+        if not ArrayContains(bankpres, preset) then
+            MSG('inserting preset',preset)
             table.insert(Presets, { name = preset, status = PRESET.NEW, textColor = 'cyan' } )
+            --MSG('added rpl',preset)
             --possible option: ask before adding new RPLs
         end
     end
-
     for i, preset in ipairs(fxps) do
         local presetTable
         --if there is an rpl for the fxp, it will already have been added to the bank, yes??
@@ -187,8 +204,10 @@ function LoadPlug()
             table.insert(Presets, { name = preset, status = PRESET.FXP_ONLY, textColor = 'yellow' } )
         end
     end
-    Presets = ArraySortByField(Presets, 'textColor')
     MST(Presets,'ALL PRESETS')
+    RemoveDuplicates(Presets)
+    --Presets = ArraySortByField(Presets, 'textColor')
+
     --Presets = ArraySort(Presets)
     --Plug.presets = Presets
     --MST(Plug,'plug')
@@ -224,7 +243,7 @@ function SetBankInfo(color)
             local bankVal = Bank.params[field]
             if bankVal then
                 MSG('control '..ctl.name..' set to '..bankVal)
-                ctl:setCaption(GetParamName(channel,INSTRUMENT_SLOT,bankVal))
+                ctl:setCaption(GetParamName(iCh,INSTRUMENT_SLOT,bankVal))
             end
         end
     end
@@ -232,6 +251,14 @@ function SetBankInfo(color)
     Options.modePanel:setPage(1)
 end
 
+function setBankMode()
+    MSG('setting Bank Mode')
+    Mode = MODES.BANK
+    BankParamLayer:show()
+    PresetPanel:setMulti(true)     BankPanel:setMulti(false)
+    --set mappings to BANK
+    PresetPanel:setPage(1)       BankPanel:setPage(1)
+end
 
 -------------------------------------------------------------------------------------------------------
 --------------------------------------------------------CONTROLS---------------------------------------
@@ -243,7 +270,7 @@ to use vst presets, we will need to convert them to rpls first.
 FOR LATER?:
 There are Options for Viewing and Converting Presets:
     View RPL's
-    View VST's
+    View VST's   --need to refresh Reaktor to get these, maybe
     View ALL   (VSTs are italicized!  Duplicate names in RED? or just don't show VSTs that are duplicates of RPLs?)
     View Presets for Selected Bank only (Bank Mode Only)
 
@@ -296,7 +323,7 @@ Options = {
             {name = 'New VST',func = function(self)
                                     Keyboard:visible(true)
                                     Keyboard.func = function()
-                                        local vstName = GetPlugName(channel)
+                                        local vstName = GetPlugName(iCh)
                                         Keyboard:setTitle('Set Display Name for '..vstName..':')
                                         Plug = Plugin.new(vstName,Keyboard.text,{})
                                         Plug:save()
@@ -304,16 +331,17 @@ Options = {
                                     end
                             end
             },
-            {name = 'ShowVST',func = function(self) OpenPlugin(channel) end },
+            {name = 'ShowVST',func = function(self) OpenPlugin(iCh) end },
             --todo: move and resize
             -- reaper.TrackFX_GetFloatingWindow( track, index )
             -- retval, ZOrder, flags = reaper.JS_Window_SetPosition( windowHWND, left, top, width, height, ZOrder, flags )
-            {name = 'Close', func = function(self) CloseWindow(BankWindow.name) end },
+            {name = 'Close', func = function(self) CloseWindow(BankWindow) end },
         },
 
     },
     panels = {
         {name = 'presets',rows = 8, cols = 5, icon = 'ComboRev',func = function(self)
+
             if Mode == MODES.BANK then
                 local presetNums = PresetPanel:getSelectionData('index')
                 MST(presetNums,'preset nums')
@@ -387,15 +415,14 @@ Options = {
         { name = 'SUS', icon = 'SusMap'},
     },
     sliders = {
-        {name = 'sat',title = 'Saturation',min = 0,max = 100,func = function(self) Bank.sat = Int(self) SavePlug() SetBankInfo() end },
-        {name = 'hue',title = 'Hue',min = 0, max = 360,func = function(self) Bank.hue = Int(self) SavePlug() SetBankInfo() end },
-        {name = 'trim',title = 'Trim',min = 0, max = 100,func = function(self) Bank.trim = Int(self) SavePlug() end },
-        {name = 'expcrv',title = 'Exp Curve',min = 0, max = 10, func = function(self) Bank.expcrv = Int(self) SavePlug() end },
-        {name = 'ped2crv',title = 'Ped2 Curve',min = 0, max = 10, func = function(self) Bank.ped2crv = Int(self) SavePlug() end },
+        {name = 'sat',title = 'Saturation',min = 0,max = 100,func = function(self) Bank.sat = I(self) SavePlug() SetBankInfo() end },
+        {name = 'hue',title = 'Hue',min = 0, max = 360,func = function(self) Bank.hue = I(self) SavePlug() SetBankInfo() end },
+        {name = 'trim',title = 'Trim',min = -20, max = 20,func = function(self) Bank.trim = I(self) UpdateVol() SavePlug() end },
+        {name = 'expcrv',title = 'Exp Curve',min = 0, max = 10, func = function(self) Bank.expcrv = I(self) SavePlug() end },
+        {name = 'ped2crv',title = 'Ped2 Curve',min = 0, max = 10, func = function(self) Bank.ped2crv = I(self) SavePlug() end },
     },
-    --[[OTHER ARCANE BANK SETTINGS  --just recall a MCS preset for these???
+    --[[OTHER ARCANE BANK SETTINGS  --just recall a MCS preset for these???  Preset panel for MCS presets?
     buttons:
-        AUDIO INPUT (NONE, MIC, LINE
         PB->NOTES
     sliders:
         MPE voice count
@@ -408,16 +435,16 @@ Options = {
         bank notes (probably display only--we don't want to type a bunch of stuff with the onscreen keyboard)
     ]]
     rangeSliders = {
-        {name = 'lokey',title = 'Low', func = function(self) Bank.lokey = Int(self) self:setCaption(GetNoteName(self:val())) SavePlug() end },
-        {name = 'hikey',title = 'High', func = function(self) Bank.hikey = Int(self) self:setCaption(GetNoteName(self:val())) SavePlug() end },
+        {name = 'lokey',title = 'Low', func = function(self) Bank.lokey = I(self) self:setCaption(GetNoteName(self:val())) SavePlug() end },
+        {name = 'hikey',title = 'High', func = function(self) Bank.hikey = I(self) self:setCaption(GetNoteName(self:val())) SavePlug() end },
     },
     bankSettings = {
         {name = 'isfx',title = 'Is Effect',func = function(self) Bank.isfx = self:val() SavePlug() end },
-        {name = 'extin',title = 'Ext Audio',func = function(self) Bank.extin = self:val() SavePlug() end },
         {name = 'midiin',title = 'MIDI In',func = function(self) Bank.midiin = self:val() SavePlug() end },
         {name = 'nsolo',title = 'NS Solo',func = function(self) Bank.nsolo = self:val() SavePlug() end },
         {name = 'fakesus',title = 'Fake Sustain',func = function(self) Bank.fakesus = self:val() SavePlug() end }, --poss. global value?
     },
+
     mode = {
         {name = 'Preset Mode', func = function(self)
             MSG('setting preset Mode')
@@ -429,19 +456,14 @@ Options = {
             --set mappings to global
             PresetPanel:setPage(1)       BankPanel:setPage(1)
         end  },
-        {name = 'Bank Mode', func = function(self)
-            MSG('setting Bank Mode')
-            Mode = MODES.BANK
-            BankParamLayer:show()
-            PresetPanel:setMulti(true)     BankPanel:setMulti(false)
-            --set mappings to BANK
-            PresetPanel:setPage(1)       BankPanel:setPage(1)
-        end  },
+        {name = 'Bank Mode', func = function(self) setBankMode() end  },
     },
     presetMenu =
     {
-        {name = 'Show All', func = function(self) end
-            --if Plug then
+
+        {name = 'Load Preset', func = function(self) SetFxPreset(iCh, self.caption) end },
+        {name = 'Hide Missing', func = function(self) end
+
         },
         {name = 'Update FXPs', func = function(self)
         end
@@ -451,7 +473,7 @@ Options = {
             Keyboard.func = function()
                 if Plug then
                     Keyboard:setTitle('Ignore Presets Named:')
-                    local presets = GetRPLs(channel, Keyboard.text)
+                    local presets = GetRPLs(iCh, Keyboard.text)
                     Plug:addPresets(presets)
                     Plug:save()
                     RefreshBanks()
@@ -738,7 +760,7 @@ RefreshChannels()
 function RefreshChannels()
     for i = 1, channelCount do
         Options.chanPanel:setOption(i, {name = GetPluginDisplayName(GetPlugName(i)),
-                func = function(self) channel = self.index
+                func = function(self) iCh = self.index
                     Plug = Plugin.load(VSTPanel:getSelection().name)
                     LoadPlug()
                 end

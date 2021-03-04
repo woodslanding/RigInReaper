@@ -63,6 +63,7 @@ function MLabel:init()
 
 
     self.textW, self.textH = gfx.measurestr(output)
+    if self.maxW then self.textW = math.min(self.textW, self.maxW) end
 
     local w, h = self.textW + 4, self.textH + 4
     lenX,lenY = w,h

@@ -42,13 +42,19 @@ require 'moonUtils'
 
 local Bank = {}
 Bank.__index = Bank
-local ALL = 'all'
+ALL = ' ALL '
 
 local PATH = BANK_FOLDER
 
-function Bank.new(name)
+function Bank.new(name, props)
     local self = setmetatable({}, Bank)
     self.name = name
+    if props then
+        for name, val in pairs(props) do
+            self[name] = val
+        end
+    end
+    MST("created bank:",self)
     return self
 end
 
@@ -126,15 +132,30 @@ end
 Plugin = {}
 Plugin.__index = Plugin
 
+function Plugin:allBankStr()
+    local str = ''
+    for name, val in pairs(self:getBank(ALL)) do
+        if not (name == 'name') and type(val) ~= 'table' then
+            str = str..name..' = '..val..', '
+        end
+    end
+    return str
+    --str = CleanComma(str)
+end
+
 function Plugin:__tostring()
     local bankT = {}
-    local plugStr = 'return {\n    vstName = '..Esc(self.vstName)..', name = '..Esc(self.name)..', emptyPreset = '..Esc(self.emptyPreset)..','
+    local titleString = '--[[Last Edited: '..Date()..' '..Time()..']]\n'
+    local plugStr = titleString..'return {\n    vstName = '..Esc(self.vstName)..', name = '..Esc(self.name)..', emptyPreset = '..Esc(self.emptyPreset)..','
+    plugStr = plugStr..self:allBankStr()
     local preStr =  '\n    presets = {'..self:getPresetString()..'}, \n'
     local bankPre = '\n    banks = {\n    '
     --self:getSortedBanks()
     for i,bank in ipairs(self:getBanks()) do  --alphabetize banks when writing
         --MSG('Writing bank:'..bankName)
-        table.insert(bankT,tostring(bank))
+        if bank.name ~= ALL then
+            table.insert(bankT,tostring(bank))
+        end
     end
     return plugStr..preStr..'    '..GetParamStr(self.params)..bankPre..table.concat(bankT,',\n    ')..'\n    }\n'..'}'
 end
@@ -152,7 +173,7 @@ function Plugin:getPresetString()
 end
 --returns a table of banks
 function Plugin:getBanks() --sorts them also
-    local banks = { }
+    local banks = {}
     for i,name in ipairs(self:getBankList()) do
         table.insert(banks, self:getBank(name))
     end
@@ -184,13 +205,9 @@ function Plugin.new(vstName, name, properties)
             self[prop] = val  --add props from method call
         end
     end
+    table.insert(self.banks, Bank.new(ALL, getMasterProps(self)))
+    --MST('master bank',self.banks[1])
     return self
-end
-
-function Plugin:getPresetList()
-    local sorted = ArraySort(self.presets)
-    --MSG('PLUGIN GETTING PRESETS = \n'..Table.stringify(sorted))
-    return sorted
 end
 
 function Plugin:addBank(bankName,properties)
@@ -208,7 +225,23 @@ function Plugin:addBank(bankName,properties)
         end
     end
     table.insert(self.banks,bank)
-    --MST(bank,'bank created')
+end
+
+function Plugin:getPresets()
+    return self.presets
+end
+
+function getMasterProps(plug)
+    local props = {}
+    props.presets = plug.presets
+    props.params = plug.params
+    props.hue = plug.hue or 0
+    props.sat = plug.sat or 0
+    props.lokey = plug.lokey or 0
+    props.hikey = plug.hikey or 127
+    props.midiin = plug.midiin or 1
+    MST(props,'master props')
+    return props
 end
 
 function Plugin:containsPreset(presetName)
@@ -268,7 +301,7 @@ function Plugin:setBankPreset(bankName,presetName)
 end
 
 function Plugin:getBank(bankName)
-    MSG('bankname = ',bankName)
+    --MSG('bankname = ',bankName)
     for i, bank in ipairs(self.banks) do
         --MSG('Checking '..self.name..' for bank '..bank.name)
         if bank.name == bankName then return bank end
@@ -286,6 +319,7 @@ function Plugin:getParam(control)
 end
 
 function Bank.init(data)
+    --MST('initializing bank data',data)
     local self = setmetatable(data,Bank)
     return self
 end
@@ -299,11 +333,13 @@ function Plugin.load(name)
     local self = setmetatable(data,Plugin)
     --MSG('initializing banks')
     for i,bank in ipairs(self.banks) do
+        MST('loading bank',bank)
         self.banks[i] = Bank.init(bank)
-        --MSG('init bank'..Table.stringify(self.banks[i]))
     end
+    table.insert(self.banks, Bank.new(ALL, getMasterProps(self)))
     return self
 end
+
 function Plugin:save()
     local filename = PATH..self.name..'.'..self.vstName..'.lua'
     local file = io.open(filename,'w')
@@ -318,6 +354,7 @@ end
     plug:setParam('A2','Chorus')
     plug:addBank('favorites',{hue = 120,sat  = 80,lokey = 30, hikey = 102})
     plug:addBank('pianos',{hue = 10,sat  = 60})
+    plug:addBank('aardvarks',{hue = 160,sat  = 60})
     plug:addBank('basses',{hue = 300,sat  = 80, hikey = 60, trim = 80})
     plug:setBankPreset('pianos','Grandeur')
     plug:setBankPreset('favorites','OB pad')
@@ -326,10 +363,14 @@ end
     plug:setBankPreset('pianos','Death Piano')
     plug:setBankPreset('pianos','poor naming')
     plug:setBankPreset('basses','Really Rad Bass!')
-    MSG('got here')
+    --MSG('got here')
     local curBank = plug:getBank('favorites')
+    MST('banks',plug:getBanks())
     curBank:setParam('A5','Wah')
-    plug:getBank('pianos'):setParam('A1','Reverb')
+    curBank = plug:getBank(ALL)
+    MST('ALL bank', curBank)
+    curBank:setParam('hue', 300)
+    plug:getBank('aardvarks'):setParam('A1','Reverb')
     --plug:getPresetList()
     return plug
 end
@@ -338,8 +379,9 @@ local plugName = 'Test'
 local plug = Plugin.test('testVst (16 outs)',plugName)
 plug:save()
 local plug2 = Plugin.load(plugName)
-print(plug2)
-print(table.concat(plug:getPresetList(),', '))
+MSG(plug2)
+MST(plug2:getBanks(),'getting banks')
+--MSG(table.concat(plug:getPresetList(),', '))
 plug2.name = 'Test2'
 plug2:save()--]]
 

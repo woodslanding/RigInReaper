@@ -170,7 +170,7 @@ function ChanColor(chan, hue, sat, level)
     local lvl = level or BRIGHTNESS
     --MSG('color for chan:',chan, hue, sat)
     if not hue then
-        if chan then return getColor(selectedBanks[chan].hue, selectedBanks[chan].sat, lvl)
+        if chan and selectedBanks and selectedBanks[chan] then return getColor(selectedBanks[chan].hue, selectedBanks[chan].sat, lvl)
         else return 'gray' end
     end
     for _, elm in pairs(gui.ch[chan]) do
@@ -231,6 +231,7 @@ function MuteFx(chan, mute)
     local color = 'red'
     if not mute then color = ChanColor(GetFx(chan)) end
     CH(chan).fxLevel:setColor(color)
+    CH(chan).fxSpin:setColor(color)
 end
 
 function GetFxReceives(chan)
@@ -252,6 +253,7 @@ function GetChFxOptions(chan)
                         MST('calling func for fx option',option)
                         SetFx( iCh, GetChFxList(iCh)[option.index] ) --for some reason the option does not have a 'ch' field!!?
                         CH().fxLevel:setColor(option.color)
+                        CH().fxSpin:setColor(option.color)
                         CH().fxName:val(option.name)
                         CH().fxNum:val(option.ch)
                         gui.iFxLevel:setColor(option.color)
@@ -266,11 +268,16 @@ end
 function  IncrementFX(chanNum, inc)
     local fxChan = CH(chanNum).fxNum:val()
     local fxList = GetChFxList(chanNum)
-    local idx = IForName(fxList, fxChan)
-    MSG('Index for fx', fxChan, '=', idx )
-    local newVal = IncrementValue(idx, 1, #fxList, true, inc)
-    CH(chanNum).fxNum:val(newVal)
-    SetFx(chanNum, fxList[newVal])
+    for i,fxCh in ipairs(fxList) do
+        if fxCh == fxChan then
+            local prevIdx = IForName(fxList, fxCh)
+            local newIdx = IncrementValue(prevIdx, 1, #fxList, true, inc)
+            local newFxCh = fxList[newIdx]
+            CH(chanNum).fxNum:val(newFxCh)
+            SetFx(chanNum, newFxCh)
+            return
+        end
+    end
 end
 
 function SetFxDisplay(chanNum)
@@ -278,6 +285,7 @@ function SetFxDisplay(chanNum)
     local ch = CH(chanNum)
     local fxCh = ch.fxNum:val()
     ch.fxLevel:setColor(ChanColor(fxCh))
+    ch.fxSpin:setColor(ChanColor(fxCh))
     ch.fxName:val(GetChanPresetName(fxCh))
     if chanNum == iCh then
         gui.iFxSelect:val(fxCh)
@@ -291,13 +299,15 @@ end
 function LoadBank(bankname, chan)
     if not chan then chan = iCh end
     local bank
-    if bankname then bank = plugs[chan]:getBank(bankname) or plugs[chan].banks[1] --in case 'bankname is invalid'
-    else bank = plugs[chan].banks[1]  end --if no bank indicated, use the first one
+    if bankname then bank = plugs[chan]:getBank(bankname) or plugs[chan].banks[1] MSG('load bank:',bankname) --in case 'bankname is invalid'
+    else bank = plugs[chan].banks[1]  MSG('no bank found, chan:',chan)
+    end--if no bank indicated, use the first one
     --need to see if fxlists will change...
     local wasfx = false
     if selectedBanks[chan] then
         wasfx = selectedBanks[chan].isfx == 1 end  --isfx could easily be nil
     local isfx = bank.isfx ~= 0
+    MSG('wasfx = ', wasfx, 'isfx',isfx)
     selectedBanks[chan] = bank
     if wasfx and isfx then --fxlists will not change
     elseif not wasfx and not isfx then --ditto
@@ -306,6 +316,7 @@ function LoadBank(bankname, chan)
         for i = 1, CH_COUNT do
             --unless we are doing the first load.
             if CH(i).fxNum:val() and CH(i).fxNum:val() > 0 then
+                MSG("SHOULD NOT BE HERE ON FIRST LOAD")
                 if i ~= chan and CH(i).fxNum:val() == chan then
                     IncrementFX(i, 1)
                     MuteFx(i,true)
@@ -315,10 +326,11 @@ function LoadBank(bankname, chan)
         end
     else
         SetChanFxStatus(chan, bank.isfx)  --add or remove sends to current channel
-    end                          --MSG('bank is fx',bank.isfx)
+    end
     if bank.midiin == 0 then CH().nSource:val(NS.NONE) end --otherwise unchanged...
+    MSG('got here')
     presets[chan] = bank:presetsAsOptions()
-    ChanColor(chan, bank.hue, bank.sat)                         --MSG('finished loading chan'..chan)
+    ChanColor(chan, bank.hue, bank.sat)                         MSG('finished loading chan'..chan)
 end
 --called to load a new plugin on a channel
 --defaults to iCh, and bank #1
@@ -362,7 +374,7 @@ function SelectPreset()
         PresetChanged(iCh)
     elseif PanelDisplay == GLOBAL then
         gPreset = option.name
-        GlobalRecall(gPreset, gBankname)
+        GlobalRecall()
     elseif PanelDisplay == VST then
         --we've already loaded bank data, but still need to instantiate the vst dll
         LoadPlug(gui.banks:getSelectionData())
@@ -398,8 +410,7 @@ end
 ---------------------------------     GLOBAL LOAD/SAVE   -----------------------------------------
 --------------------------------------------------------------------------------------------------
 
-function GlobalSave(preset)
-    if not preset then local preset = gPreset end
+function GlobalSave()
     local saveData = 'return '..'{ \n'
     for name,elm in pairs(gui) do
         --MSG('saving element: '..name)
@@ -431,81 +442,76 @@ function GlobalSave(preset)
         saveData = CleanComma(saveData,6)..'},\n'
     end
     saveData = saveData..'},'..'\n}'
-    local folder = GBANK_FOLDER..'/'..gui.globalBank.name
-    if not CreateFolder(folder) then --[[MSG("Couldn't create folder: "..folder)]] end
-    local file = io.open(folder..'/'..preset..'.lua','w')
-    MSG('writing to file: '..preset)
+    local folder = GBANK_FOLDER..'/'..gBankname
+    local file = io.open(folder..'/'..gPreset..'.lua','w')
+    MSG('writing to file: ',gPreset)
     file:write(saveData)
     file:close()
 end
 
 function GlobalSaveAs()
-    local func = function(self) GlobalSave(Keyboard.text) end
+    local func = function(self) gPreset = Keyboard.text  GlobalSave() end
     GetText('Save Global As', func)
-    --[[Keyboard:visible(true)
-    Keyboard.func = function(self)
-        MSG('Saving preset as '..Keyboard.text)
-        GlobalSave(Keyboard.text)
-        Keyboard:visible(false)
-    end-- ]]
 end
 --part of startup is loading the default global bank
-function GlobalRecall(presetName, gBankname)
+function GlobalRecall()
     if not vsts then vsts = GetBankFileTable() end
-    local path = GBANK_FOLDER..gBankname..'/'..presetName..'.lua'
+    local path = GBANK_FOLDER..gBankname..'/'..gPreset..'.lua'
+    gui.globalBank:val(gBankname)
+    gui.globalPreset:val(gPreset)
     MSG('loading file: '..path)
     local data = assert(loadfile(path))()
     --MST(data,'data')
     --first we need to load all plugins, then load banks and create needed fx sends.
     for i,channel in ipairs(data.channels) do
         LoadPlug(channel.vst, i)
+        MSG("FINISHED LOADING PLUGS")
+    end
+    for i,channel in ipairs(data.channels) do
         LoadBank(channel.bank,i)
     end
     for name,gval in pairs(data) do
         if name == 'channels' then
             for i,chan in ipairs(gval) do
                 --MSG('Channel: '..i)
-                for name, val in pairs(chan) do
+                for name, val in pairs(chan) do  --MSG('ch',i,'loading: ',name,',val',val)
                     --check for obselete fields....
                     local elm = gui.ch[i][name]
-                    if elm then elm:val(val)
-                        --if elm:func() then elm:func(elm) end
-
-                        --MSG('GLOBAL_LOAD:', name, ', set value to ', elm:val())
-                    end--update control
+                    if elm and elm:val() then elm:val(val) end--update control
+                    if elm and elm:func() then elm:func(elm) end --update reaper
                 end
             end
         else
             gui[name]:val(gval)
-            gui[name]:func()
+            gui[name]:func(gui[name])
         end
     end
     for i,channel in ipairs(gui.ch) do
-        for name, val in pairs(channel) do
+        --[[for name, elm in pairs(channel) do
             --select is going to needlessly update a bunch of stuff each time...
             --spinners will increment unhelpfully...
-            --vst and bank have already been loaded  --WHY NOT NOTESOURCE?
+            --vst and bank have already been loaded
             if (name == 'select') or (name == 'octaveSpin') or (name =='fxSpin') or (name =='vst')
                 or (name =='bank')  -- or (name == 'nSource')
-                then
+            then
             else
-                --MSG('calling func for: '..name)
-                local elm = gui.ch[i][name]
+                MSG('calling func for: ',name,',val',elm:val())
+               -- local elm = gui.ch[i][name]
                 if elm and elm:func() then
                     --elm:val(val)
                     elm:func(elm) --update reaper
                 end
             end
-        end
+        end--]]
         VstChanged(i)
         BankChanged(i)
         PresetChanged(i)
         SetOctave(i)
         SetFxDisplay(i)
         UpdateStatus(i)
+        UpdateFXMute(i)
+        UpdateCue(i)
     end
-    --set all sends at once after loading everything
-    --ResetSends()
 end
 
 
@@ -553,9 +559,9 @@ local indH, indW, indX = 17, 17, 32
 local presetX = faderW + leftPad
 
 
-local semiX = leftPad + semiPad
-local chanBtnX = leftPad + faderW
-local inspectorX = chanBtnX + btnW + pad
+local semiX = leftPad --+ semiPad
+local chanBtnX = leftPad --+ faderW
+local inspectorX = leftPad + faderW + btnW + pad
 local paramsX = inspectorX + inspectorW + pad
 local bankX = presetX + leftPad + (presetCols * btnW) + spinnerW + pad
 local transportX = bankX + (bankCols * btnW) + pad
@@ -655,7 +661,8 @@ end
 local function createLabel(props, ch)
     if not ch then ch = '' end
     local fontSize = props.fontSize or 22
-    local font = {'Calibri', fontSize,"n"}
+    local style = props.style or 'n'
+    local font = {'Calibri', fontSize, style}
     local label = GUI.createElement ({
         type = "MLabel",
         vertical = props.vertical or true,
@@ -667,8 +674,10 @@ local function createLabel(props, ch)
         x = props.x, y = props.y,
         ch = ch,
         captionX = props.captionX or 0,
+        shadow = props.shadow or true,
         save = props.save,
-        sync = props.sync or nil
+        sync = props.sync or nil,
+        maxW = props.maxW or nil
     })
 
     getLayer(titleZ):addElements(label)
@@ -809,27 +818,31 @@ end
 --------------------------------------------------------------------------------------------------------------------
 
 gui = {
+
+    quit = { name = 'Quit', image = 'Quit', x = 0, y = 0, w = chBtnW, h = btnH, momentary = true, func = function(self) Fullscreen(window, false) Stop() CloseWindow(window) end },
     presetPager = {  x = presetX, y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
     bankPager =   {  x = bankX,   y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
+    time = { name = 'date', x = bankX + (btnW * 2) + pad, y = 0, w = btnW, h = btnH, fontSize = 32, textColor = GetRGB(HUES.GREEN, 65, 40)},
+    date = { name = 'time', x = bankX + btnW + pad, y = 0, w = btnW, h = btnH, fontSize = 32, textColor = GetRGB(HUES.VIOLET, 65, 40)},
     leftMenu = {  x = presetX + btnW + pad, y = 0, w = chBtnW, options = {
-            { name = 'Quit', image = 'Quit', momentary = true, func = function(self) Stop() CloseWindow(window) end },
             { name = 'Console', image = 'Console', momentary = true, func = function() ultraschall.BringReaScriptConsoleToFront() end },
-            { name = 'LeftHalf', image = 'Left', momentary = true, func = function() ResizeWindow(window, 0, 0, totalW/2, totalH) end },
+            { name = 'LeftHalf', image = 'Left', momentary = false, func = function(self) ResizeWindow(window, 0, 0, 400, 1000, self:val() == 1) end },
             { name = 'FullScreen', image = 'FullScreen', momentary = false, func = function(self) Fullscreen(window, self:val() == 1) end },
         },
     },
-    globalBank = { name = 'gBank', save = true, multi = false, h = 12,  fontSize = 18, x = paramsX + btnW, y = 0, w = 4 * btnW, textColor = 'gray', sync = function(self)  end},
-    globalPreset = { name = 'gPreset', save = true, x = paramsX + btnW, y = pad, w = 4 * btnW, textColor = 'white', captionY = 1, func = function(self) end},
+    globalBank = { name = 'gBank', multi = false, h = 12,  fontSize = 18, x = paramsX + btnW, y = 0, w = 4 * btnW, textColor = 'gray'},
+    globalPreset = { name = 'gPreset', x = paramsX + btnW, y = pad, w = 4 * btnW, textColor = 'white', captionY = 1},
     rightMenu = { x = totalW - btnW - faderW - pad, y = (tempoH * 3) + pad, rows = 3, options =  {
             { name = 'BankEditor',momentary = true, func = function(self) OpenBankEditor() end},
             { name = 'gSave', momentary = true, func = function(self) GlobalSave(gui.globalPreset.caption) end},
             { name = 'gSave As', momentary = true, func = function(self) GlobalSaveAs()  end },
         },
     },
-    masterVol = {   name = 'masterVol', save = true, image = 'masterVol', color = 'green', x = masterVolX, y = presetY, h = btnH*6,  frames = 108,
-                        func = function(self) end},
+    masterVol = {   name = 'masterVol', save = true, image = 'masterVol', color = GetRGB(HUES.GREEN, 65, 70), x = masterVolX, y = presetY, h = btnH*6,  frames = 108,
+                        func = function(self) Output(TRACKS.OUT_MIX, self:val()) end},
     masterLabel =  { name = 'masterLabel', caption = 'MASTER', fontSize = 36, textColor = 'gray', x = masterVolX + pad + 2, y = 116, w = 120, h = 24 },
-    monitorVol = {  name = 'monitor',save = true, image = 'monitorVol', color = 'yellow', x = 0, y = presetY, h = btnH * 6, frames = 72, func = function(self) end },
+    monitorVol = {  name = 'monitor',save = true, image = 'monitorVol', color = GetRGB(HUES.GRASS, 65, 70), x = 0, y = presetY, h = btnH * 6, frames = 72,
+                        func = function(self) Output(TRACKS.OUT_MON, self:val()) end },
     monitorLabel =  { name = 'monitorLabel', caption = 'MONITOR', fontSize = 36, textColor = 'gray', x = 6, y = 132, w = 100, h = 24 },
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ ROW 1 }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
@@ -849,7 +862,7 @@ gui = {
     tempoDec = { name = 'TempoDec', w = tBtnW, x = transportX, y = 0, h = tempoH, momentary = true,  func = function(self) UpdateTempo(Tempo() - 1) end },
     tempo    = { name = 'Tempo', w = tempoW, x = transportX + tBtnW, h = tempoH, y = 0, horizontal = true, save = true, min = 50, max = 197, frames = 147, func = function(self) Tempo(self:val()) end },
     tempoInc = { name = 'TempoInc', x = totalW - tBtnW, y = 0, w = tBtnW, h = tempoH, momentary = true, func = function(self) UpdateTempo(Tempo() + 1) end },
-
+    --todo: how to save these values, and update display on recall
     quaver =  { name = 'quaver', x = transportX, y = tempoH, w = tBtnW , rows = 1, cols = 5, options =   {
                 { name = 'Whole', image = 'Whole', func = function(self) Tempo(nil, .25) end }, --tempo multiplier affects reaper.  Store original tempo in the tempo slider
                 { name = 'Half', image = 'Half', func = function(self) Tempo(nil, .5) end },
@@ -891,20 +904,20 @@ gui = {
             { name = 'Mappings', func = function(self) gui.params.layer:hide() gui.mappings.layer:show() end },
         },
     },
-    iFxSelect =  {   name = 'fxSelect', x = chanBtnX, y = paramsY + btnH, rows = paramRows, cols = 1, func = function(self) end },
+    iFxSelect =  {   name = 'fxSelect', x = faderW + pad, y = paramsY + btnH, rows = paramRows, cols = 1, func = function(self) end },
     iFxSelectPager = {  x = faderW + leftPad, y = paramsY, w = btnW, h = btnH, image = "HorizSpin" , horizontal = true},
     inspector = {   x = inspectorX, y = paramsY + btnH, w = inspBtnW, h = btnH, chColor = true, options = {
-            { name = 'Cue', func = function(self)  CH().Cue:val(self:val()) Cue(iCh, self:val()) end },
-            { name = 'NoSus', func = function(self) CH().NoSus:val(self:val()) SetMoonParam(iCh, MCS.SUSTAIN, self:val()) end },
+            { name = 'Cue', func = function(self)  CH().Cue:val(self:val(), true)  end },
+            { name = 'NoSus', func = function(self) CH().NoSus:val(self:val(), true) SetMoonParam(iCh, MCS.SUSTAIN, self:val()) end },
             { name = 'Mod', func = function(self) CH().Mod:val(self:val())  end },
             { name = 'Switches1', func = function(self) CH().Switches1:val(self:val()) MidiIN(iCh, TRACKS.IN_SW1, self:val()) end },
 
-            { name = 'Solo', func = function(self)   CH().Solo:val(self:val())  end },
-            { name = 'AuxOut', func = function(self) CH().AuxOut:val(self:val())  end },
-            { name = 'Pressure', func = function(self) CH().Pressure:val(self:val())  end },
-            { name = 'Switches2', func = function(self) CH().Switches2:val(self:val()) MidiIN(iCh, TRACKS.IN_SW2, self:val()) end },
+            { name = 'Solo', func = function(self)   CH().Solo:val(self:val(), true)  end },
+            { name = 'AuxOut', func = function(self) CH().AuxOut:val(self:val(), true)  end },
+            { name = 'Pressure', func = function(self) CH().Pressure:val(self:val(), true)  end },
+            { name = 'Switches2', func = function(self) CH().Switches2:val(self:val()) end },
 
-            { name = 'MuteFx', func = function(self) CH().MuteFx:val(self:val()) MuteFx(iCh, self:val() == 1) end },
+            { name = 'MuteFx', func = function(self) CH().MuteFx:val(self:val(),true) end },
             { name = 'Hands', func = function(self)  CH().Hands:val(self:val()) SetMoonParam(iCh, MCS.HANDS, self:val()) end },
             { name = 'Breath', func = function(self) CH().Breath:val(self:val()) MidiIN(self.ch, TRACKS.IN_BC, self:val()) end },
             { name = 'Drawbars', func = function(self)  CH().Drawbars:val(self:val()) MidiIN(iCh, TRACKS.IN_DRWB, self:val()) end },
@@ -989,22 +1002,22 @@ gui = {
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ CHANNELS }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
     -- this data is stored unless save = false
-    fxNum =     { name = 'fxNum', x = leftPad + 45, y = fxSendY + 17, h = btnH, textColor = 'white', fontSize = 20, func = function(self) SetFx(self.ch, self:val()) end },
-    fxLevel =     { name = 'Send', x = leftPad, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, GetFx(self.ch), self:val()) gui.iFxLevel:val(self:val()) end,
+    fxNum =     { name = 'fxNum', x = leftPad, y = fxSendY + 17, h = btnH, textColor = 'white', fontSize = 20, func = function(self) SetFx(self.ch, self:val()) end },
+    fxLevel =     { name = 'Send', x = chBtnW +  leftPad + 4, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, GetFx(self.ch), self:val()) gui.iFxLevel:val(self:val()) end,
                 sync = function(self) self:val(GetFxLevel(self.ch)) self:setColor(ChanColor(self.ch)) end},
-    fxName =  { name = 'sendLabel', x = leftPad + 4, y = fxSendY + 12, w = 120, h = 20, fontSize = 18, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
+    fxName =  { name = 'sendLabel', x = faderW + leftPad, y = fxSendY + 12, w = 120, h = 20, fontSize = 18, style = 'b', maxW = 6*btnH, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
     semi =     { name = 'Semi', bg = true, x = semiX, y = fxSendY, displayOnly = true, wrap = false, z = 4,
                                     w = 16, h = spinnerH, frames = 15, min = -7, max = 7, sync = function(self) self:val(GetMoonParam(self.ch, MCS.SEMI))  end }, -- stores semi data
     oct  =     { name = 'Oct', bg = true, x = semiX, y = octY, displayOnly = true, wrap = false, z = 4,
                                     w = 16, h = spinnerH, frames = 11, min = -5, max = 5,
                                     sync = function(self) self:val(GetMoonParam(self.ch, MCS.OCTAVE)) end }, --stores oct data
-    fxSpin =   { name = 'fxSpin', bg = true, save = false, x = leftPad + faderW, y = fxSendY, captionX = .1,
-                                    func = function(self)  IncrementFX(self.ch, self.val) end }, --don't call val() here!
-    octaveSpin =  { name = 'octaveSpin', bg = true, save = false, x = leftPad + faderW, y = octY, captionX = .1, chColor = true,
+    fxSpin =   { name = 'fxSpin', bg = true, save = false, x = leftPad + 8, y = fxSendY, captionX = .1,
+                                    func = function(self)  IncrementFX(self.ch, self.value) end }, --don't call val() here!
+    octaveSpin =  { name = 'octaveSpin', bg = true, save = false, x = leftPad + 8, y = octY, captionX = .1, chColor = true,
                                     func = function(self)
                                         CH(self.ch).oct:increment(self:val())
                                         SetOctave(self.ch)
-                                    end},
+                                    end  },
     pan =    { name = 'pan', x = leftPad, y = chanY - meterH, h = panH, w = chanW, horizontal = true, z = 4,
                                     displayOnly = true, frames = 25, min = -1, max = 1,  sync = function(self) self:val(Pan(self.ch)) end  },
     meterL = { name = 'meterL', bg = true, save = false, x = leftPad, y = chanY - meterH, h = panH/2, w = chanW, horizontal = true,
@@ -1012,12 +1025,12 @@ gui = {
     meterR = { name = 'meterR', bg = true, save = false, x = leftPad, y = chanY - (meterH/2), h = panH/2, w = chanW, horizontal = true,
                                     displayOnly = true, frames = 25, chColor = true },
 
-    preset =   { name = 'presetName', x = leftPad + 2, y = chanY + 106, fontSize = 26, func = function(self) end, sync = function(self) end  },
-    volume =    { name = 'volume', bg = true, x = leftPad, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) Output(self.ch,self:val()) end ,  sync = function(self) self:val(Output(self.ch)) end },
-     lights =  { x = leftPad + indX, y = chanY + 4, w = indW, h = indH, displayOnly = true, z = indZ, options = {
-            { name = 'Cue', save = false, sync = function(self) self:val(Cue(self.ch)) end },
-            { name = 'Solo', save = false, sync = function(self) end },
-            { name = 'MuteFx', sync = function(self) end },
+    preset =   { name = 'presetName', x = chBtnW + leftPad + 2, y = chanY + 106, fontSize = 26, style = 'b', maxW = btnH*5.5, func = function(self) end, sync = function(self) end  },
+    volume =    { name = 'volume', bg = true, x = leftPad + chBtnW, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) Output(self.ch,self:val(),selectedBanks[self.ch].trim) end ,  sync = function(self) self:val(Output(self.ch)) end },
+    lights =  { x = leftPad + chBtnW + indX, y = chanY + 4, w = indW, h = indH, displayOnly = true, z = indZ, options = {
+            { name = 'Cue', save = false, func = function(self) UpdateCue(self.ch) end, sync = function(self) self:val(Cue(self.ch)) end },
+            { name = 'Solo', save = false, func = function(self) UpdateSolo() end },
+            { name = 'MuteFx', func = function(self)  MuteFx(self.ch, self:val() == 1) end },
             { name = 'NoSus', sync = function(self) self:val(GetMoonParam(self.ch, MCS.SUSTAIN) == 0) end },
             { name = 'AuxOut', sync = function(self) end },
             { name = 'Hands', sync = function(self) GetMoonParam(self.ch, MCS.HANDS) end },
@@ -1045,7 +1058,7 @@ gui = {
     bank  =  { name = 'Bank', color = 'black', caption = '', image = 'plain',
             x = leftPad, y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'yellow', displayOnly = true, sync = function(self) self:val(bankLists[self.ch].name) end },
     nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2,3}, frames = 4, w = faderW, h = btnH, min = nil, max = nil, func = function(self) SetNSource(self.ch) end, sync = function(self) end },
-     enable    =  { name = 'Enable', x = chanBtnX, y = nsY, h = btnH, w = chBtnW, vals = {0,1,2,3}, frames = 4, color = 'black', func = function(self) SetEnable(self) end, sync = function(self) end },
+     enable    =  { name = 'Enable', x = leftPad + faderW, y = nsY, h = btnH, w = chBtnW, vals = {0,1,2,3}, frames = 4, color = 'black', func = function(self) SetEnable(self) end, sync = function(self) end },
     ch = {},  --this is where all the channel components will go
 }
 
@@ -1104,7 +1117,6 @@ function IsNsSoloed(nsNum)
     return false
 end
 
-
 function SetOctave(chanNum)
     --MSG('setting octave', chanNum)
     local ch = CH(chanNum)
@@ -1116,6 +1128,52 @@ function SetOctave(chanNum)
 end
 
 
+function UpdateTempo(bpm)
+    Tempo(bpm) --set reaper tempo, and global values
+    gui.tempo:val(LOCAL_TEMPO)
+end
+
+function UpdateSolo()
+    local soloChs = {}
+    local soloed = false
+    for i = 1, CH_COUNT do
+        soloChs[i] = CH(i).Solo:val() == 1
+        if soloChs[i] then soloed = true end
+    end
+    for i = 1, CH_COUNT do
+        --no soloed channels...
+        if not soloed then
+            CH(i).volume:setColor(ChanColor(i))
+            UpdateCue(i) --just in case cue is on this channel...
+            MuteOutputs(i, false)
+        elseif soloChs[i] then
+            CH(i).volume:setColor('yellow')
+            MuteOutputs(i, false)
+        else CH(i).volume:setColor('black')
+            MuteOutputs(i, true)
+        end
+    end
+end
+
+function UpdateCue(ch)
+    local chan = CH(ch)
+    Cue(ch, chan.Cue:val() == 1)
+    --todo: what if the chan is soloed? we'll see
+    if chan.Cue:val() == 1 then chan.volume:setColor('cyan')
+    else chan.volume:setColor(ChanColor(ch))
+    end
+end
+
+function UpdateFXMute(ch)
+    local chan = CH(ch)
+    local fxColor = ChanColor(GetFx(ch))
+    if chan.MuteFx:val() == 1 then
+        chan.fxLevel:setColor('red')
+        if ch == iCh then gui.iFxLevel:setColor('red') end
+    else chan.fxLevel:setColor(fxColor)
+        if ch == iCh then gui.iFxLevel:setColor(fxColor) end
+    end
+end
 
 -----------------------------------------------------------------------------------------------------------
 ---{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{  CREATE ELEMENTS  }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
@@ -1130,8 +1188,11 @@ local function menuOptions(options)
     return opts
 end
 --setBackdrop()
+gui.quit = createButton(gui.quit)
 gui.presetMenu = createPanel(gui.presetMenu, nil, menuOptions(gui.presetMenu.options))
 gui.leftMenu = createMenu(gui.leftMenu)
+gui.time = createTitle(gui.time)
+gui.date = createTitle(gui.date)
 gui.globalPreset = createTitle(gui.globalPreset)
 gui.globalBank = createTitle(gui.globalBank)
 gui.tempoDec = createButton(gui.tempoDec)
@@ -1268,11 +1329,6 @@ end
 ------------------------------------------------------------------------------------------------------------------
 ---------------------------------------------------------MIXER METHODS-------------------------------------------
 
-function UpdateTempo(bpm)
-    Tempo(bpm) --set reaper tempo, and global values
-    gui.tempo:val(LOCAL_TEMPO)
-end
-
 function CH(chan)
     if not chan then return gui.ch[iCh]
     else return gui.ch[chan] end
@@ -1303,6 +1359,7 @@ end
 --called by channel select button
 function ChChanged(chNum)
     --restore color of previous channel
+
     --ChanColor(iCh, selectedBanks[iCh].hue, selectedBanks[iCh].sat)
     ----MSG('got here')
     iCh = chNum
@@ -1333,9 +1390,10 @@ function ChChanged(chNum)
 
     for i = 1,channelCount do
         CH(i).Select:val(0)
+        CH(i).Select.textColor = 'gray'
     end
     CH().Select:val(1)
-    CH().Select:setColor(color)
+    CH().Select.textColor = 'text'
     --get inspector
     for i,elm in ipairs(gui.lights.options) do
         local lightName = elm.name  -- the original options don't have an 'I'
@@ -1363,11 +1421,13 @@ end
 for _,layer in pairs(layers) do window:addLayers(layer) end
 
 InitTempo()
+InitOutputRouting()
 window:open()
 Fullscreen(window)
-GlobalRecall('default', gBankname)
+GlobalRecall(gPreset)
 SetPanelsGLOBAL()
 ChChanged(1)
+gui.date:setCaption(Date())
 local mainCount = 0
 local function Main()
     --update metronome/20x sec
@@ -1380,6 +1440,7 @@ local function Main()
             chan.meterR:val(right)
         end
     end
+    if mainCount % 60 == 0 then gui.time:val(Time()) end
     --we have to convert from reaper tempo to script tempo.  Then advance one frame each 8th note of script tempo
     --reaper.TimeMap2_beatsToTime(0, tpos, measuresIn )
 

@@ -79,10 +79,11 @@ function MText:createTextfield()
         h = self.h,
         font = font,
         frames = 2,
-        image = ImageFolder..'combo.png',
+        image = nil,
+        textColor = 'text',
         momentary = true,
         caption = self.text,
-        color = 'black',
+        color = Color,
     })
     self.textfield = textfield
     return textfield
@@ -97,11 +98,12 @@ function MText:createTitle()
         w = self.w * 6,
         h = self.h,
         font = font,
-        image = ImageFolder..'combo.png',
+        image = nil,
         frames = 2,
         momentary = true,
         caption = self.text,
-        color = Color,
+        color = 'black',
+        textColor = Color
     })
     self.title = title
     return title
