@@ -56,19 +56,18 @@ about:
 
 //////////////////////////////// DEFINE SLIDERS  ///////////////////////////////
 //
-slider1:s_enable=1<0,1,1{off,on}>Midi Enable
-
+//TRANSPOSE
 slider3:s_octave=0<-5,5,1>Octave transpose
 slider4:s_semi=0<-7,7,1>Semitone transpose
 slider5:s_semiToCC=0<0,127,1>Semi->CC# (0 for none)
 slider6:s_hands=0<0,1,1{off,on}>Hands (LH up 8va, RH down 8va)
-
+//NOTERANGE
 slider8:s_loNote=0<0,127,1>Lo Note (MIDI Note #)
 slider9:s_hiNote=127<0,127,1>Hi Note (MIDI Note #)
 slider10:s_loFold=0<0,127,1>Fold lo (MIDI Note #)
 slider11:s_hiFold=127<0,127,1>Fold hi (MIDI Note #)
 //NOTESOURCE
-slider12:s_nsStatus=0<0,1,1{off,on}>NS Status
+slider12:s_nsMuting=0<0,1,1{off,on}>NS Muting on
 slider13:s_nsMuteLo=0<0,127,1>NS Mute Low (MIDI Note #)
 slider14:s_nsMuteHi=0<0,127,1>NS Mute High (MIDI Note #)
 //PEDALS
@@ -76,9 +75,8 @@ slider16:s_susType=0<0,2,0{normal,ignored,faked}>Sus Type
 slider17:s_hold=0<0,1,1{off,hold}>Hold
 slider18:s_expToCC=3<0,127,1>ExpToCC#
 slider19:s_expCurve=0<0,3,1{Normal,Reverse,X-Fade,Rev Xfade}>Expr Curve
-
 //MPE for Src:Both,
-slider21:s_mpeSrc=0<0,3,1{Normal,MPE,Dual,NONE}>Controller Type
+slider21:s_mpeSrc=0<0,3,1{KEYB,MPE,NONE,DUAL}>Controller Type
 slider22:s_mpeVST=0<0,1,1{no,yes}>MPE vst
 slider23:s_baseCh=0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}>ChanOut (base chan for MPE)
 slider24:s_mpePoly=5<1,15,1>MPE poly to vst
@@ -89,9 +87,6 @@ slider27:s_pbNorm=2<0,48,1>Normal pb range (e.g. 2)
 slider28:s_pbMPE=48<1,48,1>MPE pb range (e.g. 48)
 slider29:s_pbVST=48<1,48,1>VST pb range (e.g. 12)
 slider30:s_bendToNotes=0<0,1,1{off,on}>PB->notes
-
-slider32:s_audioInput=0<0,3,1{none,ext,mixer,both}>Audio Input
-slider33:s_outputBuss=0<0,3,1{A,B,C,D}>Output Buss
 
 slider35:s_PANIC=0<0.1.1>PANIC
 
@@ -190,7 +185,7 @@ function computeExp(ccval) (
 function playNote(key) (
     play = 1;
     (key < s_loNote) || (key > s_hiNote) || (s_hold == 1) ? play = 0;
-    (s_nsMuting == 1) && (key > s_nsMuteLo) && (key < snsMuteHi) ? play = 0;
+    (s_nsMuting == 1) && (key > s_nsMuteLo) && (key < s_nsMuteHi) ? play = 0;
     play;
 );
 

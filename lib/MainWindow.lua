@@ -823,7 +823,7 @@ gui = {
     date = { name = 'time', x = bankX + btnW + pad, y = 0, w = btnW, h = btnH, fontSize = S(40), textColor = GetRGB(HUES.VIOLET, 65, 40)},
     leftMenu = {  x = presetX + btnW + pad, y = 0, w = chBtnW, options = {
             { name = 'Console', image = 'Console', momentary = true, func = function() ultraschall.BringReaScriptConsoleToFront() end },
-            { name = 'LeftHalf', image = 'Left', momentary = false, func = function(self) ResizeWindow(window, 0, 0, S(500), totalH, self:val() == 1) end },
+            { name = 'LeftHalf', image = 'Left', momentary = false, func = function(self) ResizeWindow(window, totalW - S(500), 0, S(500), totalH, self:val() == 1) end },
             { name = 'FullScreen', image = 'FullScreen', momentary = false, func = function(self) Fullscreen(window, self:val() == 1) end },
         },
     },
@@ -1074,32 +1074,47 @@ function SetNSource(ch)
         local val = elm:val()
         --MSG("ns val for ch", elm.ch, '=',val)
         local bank = selectedBanks[elm.ch]
-        if bank.isfx == 1 and bank.midiin == 0  then elm:val(2)
-        else elm:val(val % 2)  --limit setting by clicking to 0 or 1
+        if bank.isfx == 1 and bank.midiin == 0  then
+             elm:val(2)
+             SetMoonParam(MCS.KEYB_TYPE, NS.NONE)
+        else
+            elm:val(val % 2)  --limit setting by clicking to 0 or 1
+            Notesource(ch, elm:val())  --this sets the MCS value, mutes the midi in, and sets the output send
         end
+        --this will reset the out if needed...
         if CH(ch).AuxOut:val() == 1 then  SetOutputSend(ch, TRACKS.OUT_D)
-        elseif bank.midiin == 0 then SetOutputSend(ch, TRACKS.OUT_C)
-        elseif elm:val() == NS.KBD then SetOutputSend(ch, TRACKS.OUT_A)
-        elseif elm:val() == NS.ROLI then SetOutputSend(ch, TRACKS.OUT_B)
         end
     end
     UpdateStatus()
 end
 --resets all enable values for chans that share the source channel's notesource
 function UpdateStatus()
-    for nS = 0,1 do
+    for nS = NS.KBD,NS.ROLI do
         --MSG('nS = ', nS)
         for _,i in ipairs(GetChansWithNS(nS)) do
             local ch = CH(i)
-            if GetMoonParam(i, MCS.MIDI_ON) == 0 then --do nothing
+            if GetMoonParam(i, MCS.KEYB_TYPE) = NS.NONE then --do nothing
+            --GetMoonParam(i, MCS.MIDI_ON) == 0 then --do nothing
                 --this should ignore disabled channels and fx channels
             elseif IsNsSoloed(nS) then
                 --MSG('notesource for chan', i, ':',nS, 'isNsSoloed' )
-                if ch.NsSolo:val() == 1 then ch.enable:val(ENABLE.NSOLO)
-                else ch.enable:val(ENABLE.NMUTED) end
-            else ch.enable:val(ENABLE.ON)
+                if ch.NsSolo:val() == 1 then ch.enable:val(ENABLE.NSOLO) SetNSMuted(i, false)  --just in case??
+                else ch.enable:val(ENABLE.NMUTED) SetNSMuted(i, true) end
+            else ch.enable:val(ENABLE.ON) SetNSMuted(i, false)
             end
         end
+    end
+end
+
+function SetNSMuted(chan, on)
+    if on then
+        SetMoonParam(chan, MCS.NS_MUTING, true)
+        local lo, hi = GetNsSoloMuteRange(GetMoonParam(chan, MCS.KEYB_TYPE))
+        SetMoonParam(chan, MCS.NS_MUTE_HI, hi )
+        SetMoonParam(chan, MCS.NS_MUTE_LO, lo )
+    else
+        --mute range doesn't matter, and will get reset when it does....
+        SetMoonParam(chan, MCS.NS_MUTING, false)
     end
 end
 

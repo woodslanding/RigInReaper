@@ -126,7 +126,7 @@ MCS = {
     HI_NOTE = 6,
     FOLD_LO = 7,
     FOLD_HI = 8,
-    NS_SOLO = 9,
+    NS_MUTING = 9,
     NS_MUTE_LO = 10,
     NS_MUTE_HI = 11,
     SUSTAIN = 12,
@@ -166,7 +166,7 @@ REAPER = {SEND = 0, RCV = -1, STEREO = 1024, MONO = 0 }
 NOTES = {'C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'}
 MONTHS = {'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'}
 
-GLOBAL_SCALE = .85
+GLOBAL_SCALE = 2
 
 ------------------LOCAL GLOBALS-------------------------------------
 local previousNotesourceSetting = 0
@@ -649,8 +649,9 @@ function GetMoonParam(chan, param)
     local val,_,_ = reaper.TrackFX_GetParam( track, MCS.SLOT, param)
     return val
 end
-
+--can accept a number or a boolean
 function SetMoonParam(chan, param, val)
+    if val == true then val = 1 elseif val == false then val = 0 end
     local track = GetTrack(chan)  --MSG('Setting moon param',param,'to',val)
     local _ = reaper.TrackFX_SetParam(track,MCS.SLOT,param,val)
 end
@@ -1155,7 +1156,7 @@ function SetOutputByNotesource( chan, nsindex)  --MSG('SetOutputByNotesource: ns
         end
     end
 end
---we should just look to the controller type in mcs for now
+--Mute the appropriate sends and set MCS for the input type
 function MuteSendsByNotesource(chan,nsIndex)
     if nsIndex == NS.KBD then
         MuteSend(TRACKS.IN_KEYB,chan,false)
@@ -1164,6 +1165,7 @@ function MuteSendsByNotesource(chan,nsIndex)
         MuteSend(TRACKS.IN_KEYB,chan,true)
         MuteSend(TRACKS.IN_ROLI,chan,false)
     elseif nsIndex == NS.DUAL then
+        --NOT SUPPORTED YET....
         MuteSend(TRACKS.IN_KEYB,chan,false)
         MuteSend(TRACKS.IN_ROLI,chan,true)
     elseif nsIndex == NS.NONE then
@@ -1187,20 +1189,6 @@ function DecrementNotesource(chan)
 end
 -------------------------------------------------------------------------------------
 ---------------------------------------NOTE SOURCE SOLOING----------------------------
-function TrackLimits(chan, lo, hi)
-    if not lo or hi then
-        return GetMoonParam(chan,MCS.LO_NOTE), GetMoonParam(chan, MCS.HI_NOTE) end
-    if lo then SetMoonParam(chan,MCS.LO_NOTE,lo) end
-    if hi then SetMoonParam(chan,MCS.HI_NOTE,hi) end
-end
-
-function NotesoloLimits(chan, lo, hi)
-    if not lo or hi then
-        return GetMoonParam(chan,MCS.NS_MUTE_LO), GetMoonParam(chan, MCS.NS_MUTE_HI) end
-    if lo then SetMoonParam(chan,MCS.NS_MUTE_LO,lo) end
-    if hi then SetMoonParam(chan,MCS.NS_MUTE_HI,hi) end
-end
-
 
 --returns table { 1 = chanNum, 2 = chanNum, etc. }
 --of enabled channels with given nsNum
@@ -1220,32 +1208,13 @@ function GetNsSoloMuteRange(nsNum)
     local high = 0
     for i,chan in ipairs(GetChansWithNS(nsNum)) do
         --MSG('GetNsSoloMuteRange: checking track', chan)
-        if GetMoonParam(chan, MCS.NS_SOLO) == 1 then   --MSG('GetNsSoloMuteRange: track', chan)
+        if GetMoonParam(chan, MCS.NS_MUTING) == 1 then   --MSG('GetNsSoloMuteRange: track', chan)
              --look for nsoloed insts
             high = math.max(high, GetMoonParam(chan,MCS.HI_NOTE))
             low = math.min(low, GetMoonParam( chan,MCS.LO_NOTE))  --MSG('GetNsSoloMuteRange: low = ',low,'high=',high)
         end
     end
     return low,high
-end
-
-function NsSolo(chan, solo)
-    if solo then                             --MSG('NSSOLO: val = ',solo)
-        SetMoonParam(chan,MCS.NS_SOLO,solo)  --MSG('SetNsSolo: Setting nss to',solo,'track', chan)
-        local nsNum = GetMoonParam(chan, MCS.KEYB_TYPE)
-        local low, high = GetNsSoloMuteRange(nsNum) --MSG('SetNsSolo: low =',low,'high=',high)
-        for i, chan in ipairs(GetChansWithNS(nsNum)) do
-            if GetMoonParam(chan, MCS.NS_SOLO) ~= 1 then  --MSG('SetNsSolo: found non-soloed track',tracknum)
-                if high > low then
-                    SetMoonParam(chan, MCS.NS_MUTE_HI, high)
-                    SetMoonParam(chan, MCS.NS_MUTE_LO, low)
-                else --no note solo
-                    SetMoonParam(chan, MCS.NS_SOLO,0)
-                end
-            end
-        end
-    else return GetMoonParam(chan, MCS.NS_SOLO)
-    end
 end
 
 --###########################################################################################--
