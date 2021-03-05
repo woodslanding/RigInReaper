@@ -51,7 +51,6 @@ local layers = {}
 local channelCount = 16
 
 local iCh = 1
-local leftX = -12
 
 local indZ = 4
 local titleZ = 4
@@ -59,8 +58,6 @@ local ctlLayerZ = 8
 local panelZ = 12
 local faderZ = 12
 local organZ = 14
-
-local scaling = .8
 
 local imageFolder = IMAGE_FOLDER  --from MoonUtilities
 local presetFolder = GBANK_FOLDER
@@ -519,29 +516,30 @@ end
 --------------------------------------------------------------------------------------------------
 --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{          LAYOUT CONSTANTS            }}}}}}}}}}}}}}}}}}}}}}}}}}}}}
 --------------------------------------------------------------------------------------------------
-local leftPad = 4
-local pad = 6
+local leftPad = S(6)
+local pad = S(8)
+local leftX = S(-15)
 
-local comboH = 36
-local btnH = 36
-local meterH = 12
-local chanW = 96
-local tBtnW = 44
-local tempoIncW = 44
-local tempoH = 44
+local comboH = S(44)
+local btnH = S(44)
+local meterH = S(16)
+local chanW = S(118)
+local tBtnW = S(54)
+local tempoIncW = S(56)
+local tempoH = S(56)
 
-local spinnerW = 44
-local spinnerH = 72
-local btnW = 96
-local faderW = 52
-local chBtnW = 44
-local semiPad = 42
-local totalW = 1536
-local totalH = 1200
-local panH = 12
-local dbW = 28
-local oBtnW = 50
-local dbH = btnH * 3 - pad - pad
+local spinnerW = S(54)
+local spinnerH = S(88)
+local btnW = S(120)
+local faderW = S(64)
+local chBtnW = S(54)
+local semiPad = S(54)
+local totalW = S(1920)
+local totalH = S(1080)
+local panH = S(16)
+local dbW = S(36)
+local oBtnW = S(62)
+local dbH = (btnH * 3) - pad - pad
 
 local presetCols = 8
 local presetRows = 6
@@ -549,15 +547,14 @@ local paramCols = 8
 local paramRows = 4
 local bankCols = 3
 local inspectorRows = 3
-local inspBtnW = 44
+local inspBtnW = S(56)
 local inspectorW = inspBtnW * inspectorRows
 local chanBtnRows = 7
 
-local indH, indW, indX = 17, 17, 32
+local indH, indW, indX = S(20), S(20), S(38)
 
 --x positions
 local presetX = faderW + leftPad
-
 
 local semiX = leftPad --+ semiPad
 local chanBtnX = leftPad --+ faderW
@@ -591,7 +588,7 @@ local function setBackdrop()
     local bkdp = GUI.createElement({
         type = "Frame",
         name = 'backdrop',
-        x = 0, y = 0, h = 1100, w = 1920,
+        x = 0, y = 0, h = S(864), w = S(1536),
         bg = GetRGB(159,30,50),
         color = 'black',
     })
@@ -630,7 +627,7 @@ local function createTitle(props,ch)
     if not ch then ch = '' end
     local image = props.image or nil
     if image then image = imageFolder..image..'.png' end
-    local fontSize = props.fontSize or 32
+    local fontSize = props.fontSize or S(32)
     local font = {'Calibri', fontSize,"b"}
     local title = GUI.createElement ({
         type = "MButton",
@@ -660,7 +657,7 @@ end
 
 local function createLabel(props, ch)
     if not ch then ch = '' end
-    local fontSize = props.fontSize or 22
+    local fontSize = props.fontSize or S(26)
     local style = props.style or 'n'
     local font = {'Calibri', fontSize, style}
     local label = GUI.createElement ({
@@ -704,7 +701,7 @@ local function createPanel(props, pager, options)
         textColor = 'text',
         selTextColor = 'black',
         rows = props.rows, cols = props.cols,
-        x = props.x, y = props.y, w = props.w or btnW, h = props.h or comboH, z = panelZ,
+        x = props.x, y = props.y, w = props.w or btnW, h = props.h or comboH,
         usePager = usePager or false,
         pagerImage = pImage,
         pagerX = px, pagerY = py, pagerW = pw, pagerH = ph,
@@ -756,7 +753,7 @@ end
 
 local function createButton(props, ch)
     if not ch then ch = '' end
-    local fontSize = props.fontSize or 22
+    local fontSize = props.fontSize or S(22)
     local font = {'Calibri', fontSize,"b"}
     local caption = props.caption or ''
     local image = props.image or props.name
@@ -822,15 +819,15 @@ gui = {
     quit = { name = 'Quit', image = 'Quit', x = 0, y = 0, w = chBtnW, h = btnH, momentary = true, func = function(self) Fullscreen(window, false) Stop() CloseWindow(window) end },
     presetPager = {  x = presetX, y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
     bankPager =   {  x = bankX,   y = 0, w = btnW, h = btnH, chColor = true, image = "HorizSpin" , horizontal = true},
-    time = { name = 'date', x = bankX + (btnW * 2) + pad, y = 0, w = btnW, h = btnH, fontSize = 32, textColor = GetRGB(HUES.GREEN, 65, 40)},
-    date = { name = 'time', x = bankX + btnW + pad, y = 0, w = btnW, h = btnH, fontSize = 32, textColor = GetRGB(HUES.VIOLET, 65, 40)},
+    time = { name = 'date', x = bankX + (btnW * 2) + pad, y = 0, w = btnW, h = btnH, fontSize = S(40), textColor = GetRGB(HUES.GREEN, 65, 40)},
+    date = { name = 'time', x = bankX + btnW + pad, y = 0, w = btnW, h = btnH, fontSize = S(40), textColor = GetRGB(HUES.VIOLET, 65, 40)},
     leftMenu = {  x = presetX + btnW + pad, y = 0, w = chBtnW, options = {
             { name = 'Console', image = 'Console', momentary = true, func = function() ultraschall.BringReaScriptConsoleToFront() end },
-            { name = 'LeftHalf', image = 'Left', momentary = false, func = function(self) ResizeWindow(window, 0, 0, 400, 1000, self:val() == 1) end },
+            { name = 'LeftHalf', image = 'Left', momentary = false, func = function(self) ResizeWindow(window, 0, 0, S(500), totalH, self:val() == 1) end },
             { name = 'FullScreen', image = 'FullScreen', momentary = false, func = function(self) Fullscreen(window, self:val() == 1) end },
         },
     },
-    globalBank = { name = 'gBank', multi = false, h = 12,  fontSize = 18, x = paramsX + btnW, y = 0, w = 4 * btnW, textColor = 'gray'},
+    globalBank = { name = 'gBank', multi = false, h = S(15),  fontSize = S(22), x = paramsX + btnW, y = 0, w = 4 * btnW, textColor = 'gray'},
     globalPreset = { name = 'gPreset', x = paramsX + btnW, y = pad, w = 4 * btnW, textColor = 'white', captionY = 1},
     rightMenu = { x = totalW - btnW - faderW - pad, y = (tempoH * 3) + pad, rows = 3, options =  {
             { name = 'BankEditor',momentary = true, func = function(self) OpenBankEditor() end},
@@ -840,10 +837,10 @@ gui = {
     },
     masterVol = {   name = 'masterVol', save = true, image = 'masterVol', color = GetRGB(HUES.GREEN, 65, 70), x = masterVolX, y = presetY, h = btnH*6,  frames = 108,
                         func = function(self) Output(TRACKS.OUT_MIX, self:val()) end},
-    masterLabel =  { name = 'masterLabel', caption = 'MASTER', fontSize = 36, textColor = 'gray', x = masterVolX + pad + 2, y = 116, w = 120, h = 24 },
+    masterLabel =  { name = 'masterLabel', caption = 'MASTER', fontSize = S(40), textColor = 'gray', x = masterVolX + pad + S(2), y = S(145), w = S(150), h = S(30) },
     monitorVol = {  name = 'monitor',save = true, image = 'monitorVol', color = GetRGB(HUES.GRASS, 65, 70), x = 0, y = presetY, h = btnH * 6, frames = 72,
                         func = function(self) Output(TRACKS.OUT_MON, self:val()) end },
-    monitorLabel =  { name = 'monitorLabel', caption = 'MONITOR', fontSize = 36, textColor = 'gray', x = 6, y = 132, w = 100, h = 24 },
+    monitorLabel =  { name = 'monitorLabel', caption = 'MONITOR', fontSize = S(36), textColor = 'gray', x = S(8), y = S(165), w = S(125), h = S(30) },
     ------------------------------------------------------------------------------------------------
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ ROW 1 }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
@@ -884,7 +881,7 @@ gui = {
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ ROW 2 }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
     iFxLevel =  {   name = 'fxLevel', image = 'send', x = leftPad, y = paramsY ,frames = 72, h = 5 * btnH, func = function(self) SetFxLevel(iCh, GetFx(iCh), self:val()) CH().fxLevel:val(self:val()) end},
-    iFxLabel =  {   name = 'fxLabel', x = leftPad + pad, y = paramsY + 55, fontSize = 24, h = 5 * btnH, },
+    iFxLabel =  {   name = 'fxLabel', x = leftPad + pad, y = paramsY + S(70), fontSize = S(30), h = 5 * btnH, },
     iPanFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true, caption = 'pan', captionY = -.7,
                     w = 3 * inspBtnW, h = btnH, func =  function(self) CH().pan:val(self:val()) Pan(iCh, self:val()) end },
     iFlat = { name = 'Flat', x = paramsX, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:increment(-1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
@@ -897,7 +894,7 @@ gui = {
             { name = 'LineIn'},
         },
     },
-    iBankTitle = { name = 'bankTitle', h = 20, x = paramsX + btnW, y = paramsY-12, w = btnW * 4, fontSize = 16, displayOnly = true, textColor = 'gray' },
+    iBankTitle = { name = 'bankTitle', h = S(20), x = paramsX + btnW, y = paramsY - S(15), w = btnW * 4, fontSize = S(20), displayOnly = true, textColor = 'gray' },
     iTrackTitle = {  name = 'trackTitle', x = paramsX + btnW, y = paramsY, w = btnW * 4, func = function(self) OpenPlugin(iCh) end },  --show vst
     paramTabs = { name = 'paramTabs',x = paramsX + (6 * btnW), y = paramsY, rows = 1, cols = 2, color = GetRGB(0,0,75), options = {
             { name = 'Params', func = function(self) gui.params.layer:show() gui.mappings.layer:hide() end },
@@ -1002,18 +999,18 @@ gui = {
     --{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ CHANNELS }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}--
     ------------------------------------------------------------------------------------------------
     -- this data is stored unless save = false
-    fxNum =     { name = 'fxNum', x = leftPad, y = fxSendY + 17, h = btnH, textColor = 'white', fontSize = 20, func = function(self) SetFx(self.ch, self:val()) end },
-    fxLevel =     { name = 'Send', x = chBtnW +  leftPad + 4, y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, GetFx(self.ch), self:val()) gui.iFxLevel:val(self:val()) end,
+    fxNum =     { name = 'fxNum', x = leftPad + 2, y = fxSendY + S(18), h = btnH, textColor = 'white', fontSize = S(24), func = function(self) SetFx(self.ch, self:val()) end },
+    fxLevel =     { name = 'Send', x = chBtnW +  leftPad + S(6), y = fxSendY, h = 4 * btnH, frames = 72, func = function(self) SetFxLevel(self.ch, GetFx(self.ch), self:val()) gui.iFxLevel:val(self:val()) end,
                 sync = function(self) self:val(GetFxLevel(self.ch)) self:setColor(ChanColor(self.ch)) end},
-    fxName =  { name = 'sendLabel', x = faderW + leftPad, y = fxSendY + 12, w = 120, h = 20, fontSize = 18, style = 'b', maxW = 6*btnH, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
+    fxName =  { name = 'sendLabel', x = faderW + leftPad, y = fxSendY + S(15), w = S(150), h = S(25), fontSize = S(22), style = 'b', maxW = 6 * btnH, sync = function(self) self:val(GetChFxName(self.ch)) end }, --fx selected by spinner, but stored here
     semi =     { name = 'Semi', bg = true, x = semiX, y = fxSendY, displayOnly = true, wrap = false, z = 4,
-                                    w = 16, h = spinnerH, frames = 15, min = -7, max = 7, sync = function(self) self:val(GetMoonParam(self.ch, MCS.SEMI))  end }, -- stores semi data
+                                    w = S(20), h = spinnerH, frames = 15, min = -7, max = 7, sync = function(self) self:val(GetMoonParam(self.ch, MCS.SEMI))  end }, -- stores semi data
     oct  =     { name = 'Oct', bg = true, x = semiX, y = octY, displayOnly = true, wrap = false, z = 4,
-                                    w = 16, h = spinnerH, frames = 11, min = -5, max = 5,
+                                    w = S(20), h = spinnerH, frames = 11, min = -5, max = 5,
                                     sync = function(self) self:val(GetMoonParam(self.ch, MCS.OCTAVE)) end }, --stores oct data
-    fxSpin =   { name = 'fxSpin', bg = true, save = false, x = leftPad + 8, y = fxSendY, captionX = .1,
+    fxSpin =   { name = 'fxSpin', bg = true, save = false, x = leftPad + S(10), y = fxSendY, captionX = .1,
                                     func = function(self)  IncrementFX(self.ch, self.value) end }, --don't call val() here!
-    octaveSpin =  { name = 'octaveSpin', bg = true, save = false, x = leftPad + 8, y = octY, captionX = .1, chColor = true,
+    octaveSpin =  { name = 'octaveSpin', bg = true, save = false, x = leftPad + S(10), y = octY, captionX = .1, chColor = true,
                                     func = function(self)
                                         CH(self.ch).oct:increment(self:val())
                                         SetOctave(self.ch)
@@ -1025,9 +1022,9 @@ gui = {
     meterR = { name = 'meterR', bg = true, save = false, x = leftPad, y = chanY - (meterH/2), h = panH/2, w = chanW, horizontal = true,
                                     displayOnly = true, frames = 25, chColor = true },
 
-    preset =   { name = 'presetName', x = chBtnW + leftPad + 2, y = chanY + 106, fontSize = 26, style = 'b', maxW = btnH*5.5, func = function(self) end, sync = function(self) end  },
+    preset =   { name = 'presetName', x = chBtnW + leftPad + 2, y = chanY + S(154), fontSize = S(32), style = 'b', maxW = btnH * 5.5, func = function(self) end, sync = function(self) end  },
     volume =    { name = 'volume', bg = true, x = leftPad + chBtnW, y = chanY, h = btnH * 6, w = faderW, frames = 108,  chColor = true, func = function(self) Output(self.ch,self:val(),selectedBanks[self.ch].trim) end ,  sync = function(self) self:val(Output(self.ch)) end },
-    lights =  { x = leftPad + chBtnW + indX, y = chanY + 4, w = indW, h = indH, displayOnly = true, z = indZ, options = {
+    lights =  { x = leftPad + chBtnW + indX, y = chanY + S(5), w = indW, h = indH, displayOnly = true, z = indZ, options = {
             { name = 'Cue', save = false, func = function(self) UpdateCue(self.ch) end, sync = function(self) self:val(Cue(self.ch)) end },
             { name = 'Solo', save = false, func = function(self) UpdateSolo() end },
             { name = 'MuteFx', func = function(self)  MuteFx(self.ch, self:val() == 1) end },
@@ -1042,7 +1039,7 @@ gui = {
             { name = 'Drawbars',  sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_DRWB)) end },
         },
     },
-    tracknum = {name = 'tracknum', x = chanBtnX, y = chanY, w = chBtnW, h = btnH, fontSize = 26, textColor = 'text', save = false, captionY = -.1, func = function(self) ChChanged(self.ch) end},
+    tracknum = {name = 'tracknum', x = chanBtnX, y = chanY, w = chBtnW, h = btnH, fontSize = S(32), textColor = 'text', save = false, captionY = -.1, func = function(self) ChChanged(self.ch) end},
     buttons = { x = chanBtnX, y = chanY, w = chBtnW, h = btnH, chColor = true, options =  {
             --need a method to query bank for sustain type
             { name = 'Select', bg = true, save = false, func = function(self) ChChanged(self.ch) end, sync = function(self) end },
@@ -1054,11 +1051,11 @@ gui = {
         },
     },
     vst   =  { name = 'vst', caption = '', color = 'black', image = 'plain', captionX = .1,
-            x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'green', displayOnly = true, sync = function(self) initPlug(self.ch) self:val(plugs[self.ch].name) end },
+            x = leftPad + (chanW / 2), y = nsY - pad, w = chanW/2, h = S(12), fontSize = S(14), textColor = 'green', displayOnly = true, sync = function(self) initPlug(self.ch) self:val(plugs[self.ch].name) end },
     bank  =  { name = 'Bank', color = 'black', caption = '', image = 'plain',
-            x = leftPad, y = nsY - pad, w = chanW/2, h = 12, fontSize = 11, textColor = 'yellow', displayOnly = true, sync = function(self) self:val(bankLists[self.ch].name) end },
+            x = leftPad, y = nsY - pad, w = chanW/2, h = S(15), fontSize = S(14), textColor = 'yellow', displayOnly = true, sync = function(self) self:val(bankLists[self.ch].name) end },
     nSource   =  { name = 'Notesource', x = leftPad, y = nsY, vals = {0,1,2,3}, frames = 4, w = faderW, h = btnH, min = nil, max = nil, func = function(self) SetNSource(self.ch) end, sync = function(self) end },
-     enable    =  { name = 'Enable', x = leftPad + faderW, y = nsY, h = btnH, w = chBtnW, vals = {0,1,2,3}, frames = 4, color = 'black', func = function(self) SetEnable(self) end, sync = function(self) end },
+    enable    =  { name = 'Enable', x = leftPad + faderW, y = nsY, h = btnH, w = chBtnW, vals = {0,1,2,3}, frames = 4, color = 'black', func = function(self) SetEnable(self) end, sync = function(self) end },
     ch = {},  --this is where all the channel components will go
 }
 
@@ -1319,7 +1316,7 @@ for i = 1,channelCount do
 
     --move them into place en masse at the end!
     for _, elm in pairs(ch) do
-        elm.x = elm.x + (chanW * (i - 1))
+        elm.x = elm.x + ((chanW + 2) * (i - 1))
     end
 
     gui.ch[i] = ch

@@ -166,6 +166,8 @@ REAPER = {SEND = 0, RCV = -1, STEREO = 1024, MONO = 0 }
 NOTES = {'C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'}
 MONTHS = {'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'}
 
+GLOBAL_SCALE = .85
+
 ------------------LOCAL GLOBALS-------------------------------------
 local previousNotesourceSetting = 0
 local currentFxList = nil
@@ -205,6 +207,10 @@ function Seconds()
 end
 
 function Int(num) return Math.round(num + 0) end
+function S(num)
+    local half = Math.round((num * GLOBAL_SCALE) / 2)
+    return half * 2
+end
 
 function MSG(...)
     if DBG_OFF then return end
