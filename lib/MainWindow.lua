@@ -1047,7 +1047,7 @@ gui = {
             { name = 'Ped2', bg = true, func = function(self) MidiIN(self.ch, TRACKS.IN_PED2, self:val()) end, sync = function(self) self:val(MidiIN(self.ch, TRACKS.IN_PED2)) end },
             { name = 'Exp', bg = true, func = function(self) MidiIN(self.ch, TRACKS.IN_EXP, self:val()) end, sync = function(self) self:val(IsExpOn(self.ch)) end },
             { name = 'Encoders', bg = true, func = function(self) MidiIN(self.ch, TRACKS.IN_ENC, self:val()) end },
-            { name = 'NsSolo', bg = true, func = function(self) NsSolo(iCh, self:val()) UpdateStatus()  end, sync = function(self) self:val(NsSolo(iCh))  end },
+            { name = 'NsSolo', bg = true, func = function(self) SetNsSolo(iCh, self:val())  end, sync = function(self) self:val(IsNsSoloed())  end },
         },
     },
     vst   =  { name = 'vst', caption = '', color = 'black', image = 'plain', captionX = .1,
@@ -1087,17 +1087,18 @@ function SetNSource(ch)
     end
     UpdateStatus()
 end
+
 --resets all enable values for chans that share the source channel's notesource
 function UpdateStatus()
     for nS = NS.KBD,NS.ROLI do
-        --MSG('nS = ', nS)
+        MSG('nS = ', nS)
         for _,i in ipairs(GetChansWithNS(nS)) do
             local ch = CH(i)
-            if GetMoonParam(i, MCS.KEYB_TYPE) = NS.NONE then --do nothing
+            if GetMoonParam(i, MCS.KEYB_TYPE) == NS.NONE then --do nothing
             --GetMoonParam(i, MCS.MIDI_ON) == 0 then --do nothing
                 --this should ignore disabled channels and fx channels
             elseif IsNsSoloed(nS) then
-                --MSG('notesource for chan', i, ':',nS, 'isNsSoloed' )
+                MSG('notesource for chan', i, ':',nS, 'isNsSoloed' )
                 if ch.NsSolo:val() == 1 then ch.enable:val(ENABLE.NSOLO) SetNSMuted(i, false)  --just in case??
                 else ch.enable:val(ENABLE.NMUTED) SetNSMuted(i, true) end
             else ch.enable:val(ENABLE.ON) SetNSMuted(i, false)
@@ -1109,6 +1110,7 @@ end
 function SetNSMuted(chan, on)
     if on then
         SetMoonParam(chan, MCS.NS_MUTING, true)
+        MSG('in set ns muting')
         local lo, hi = GetNsSoloMuteRange(GetMoonParam(chan, MCS.KEYB_TYPE))
         SetMoonParam(chan, MCS.NS_MUTE_HI, hi )
         SetMoonParam(chan, MCS.NS_MUTE_LO, lo )
@@ -1116,6 +1118,11 @@ function SetNSMuted(chan, on)
         --mute range doesn't matter, and will get reset when it does....
         SetMoonParam(chan, MCS.NS_MUTING, false)
     end
+end
+
+function SetNsSolo(chan, on)
+    CH(chan).NsSolo:val( on )
+    UpdateStatus()
 end
 
 function IsNsSoloed(nsNum)
