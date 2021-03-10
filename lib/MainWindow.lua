@@ -331,8 +331,9 @@ function LoadBank(bankname, chan)
         SetChanFxStatus(chan, bank.isfx)  --add or remove sends to current channel
     end
     if bank.midiin == 0 then
+        --TODO: enable should behave as a mute!
         CH().nSource:val(NS.NONE)
-        getLayer(pitch..chan):hide()
+        getLayer(pitch..chan):hide()  --oct, semi, octaveSpin,
     else getLayer(pitch..chan):show()
     end --otherwise unchanged...
     MSG('got here')
@@ -1077,9 +1078,17 @@ gui = {
 
 --keep from clicking past val == 1
 function SetEnable(elm)
+    --for fx with no midi input, this should function as a mute
+    if selectedBanks[elm.ch].midiin == 0 then
+        SetMoonParam(elm.ch, MCS.MIDI_ON, 0)
+        MuteOutputs(elm.ch, elm:val() == 0)
+
     ----MSG('setting enable to: ',elm:val(), ', chan:',elm.ch)
-    if elm:val() > 1  then elm:val(0) end
-    SetMoonParam(elm.ch, MCS.MIDI_ON, elm:val())
+    else
+        if elm:val() > 1  then elm:val(0) end
+        --MuteOutputs(elm.ch, 0)  could be a problem if soloed.  may not need?
+        SetMoonParam(elm.ch, MCS.MIDI_ON, elm:val())
+    end
     UpdateStatus()
 end
 
