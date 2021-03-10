@@ -885,7 +885,7 @@ gui = {
     iPanFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true, caption = 'pan', captionY = -.7,
                     w = 3 * inspBtnW, h = btnH, func =  function(self) CH().pan:val(self:val()) Pan(iCh, self:val()) end },
     iFlat = { name = 'Flat', x = paramsX, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:increment(-1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
-    iNatural = { name = 'Natural', x= paramsX + inspBtnW, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:val(0); CH().oct:val(0); CH().octaveSpin:setCaption('') SetMoonParam(iCh, MCS.SEMI, 0) end },
+    iNatural = { name = 'Natural', x= paramsX + inspBtnW, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:val(0);SetMoonParam(iCh, MCS.SEMI, 0) SetOctave(iCh, 0) end },
     iSharp = { name = 'Sharp', x = paramsX + (inspBtnW * 2), y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:increment(1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
     audioInputs = { name = 'audioIns', x = paramsX + (4.5 * btnW), y = paramsY, w = inspBtnW, h = btnH,  rows = 1, cols = 4, multi = true, options = {
             { name = 'Mic1'},
@@ -1072,15 +1072,16 @@ function SetNSource(ch)
     local out  --todo: add support for separate output
     if elm and elm:val() then
         local val = elm:val()
-        --MSG("ns val for ch", elm.ch, '=',val)
+        MSG("ns val for ch", elm.ch, '=',val)
         local bank = selectedBanks[elm.ch]
         if bank.isfx == 1 and bank.midiin == 0  then
              elm:val(2)
-             SetMoonParam(MCS.KEYB_TYPE, NS.NONE)
+             SetMoonParam(ch, MCS.KEYB_TYPE, NS.NONE)
         else
             elm:val(val % 2)  --limit setting by clicking to 0 or 1
             Notesource(ch, elm:val())  --this sets the MCS value, mutes the midi in, and sets the output send
         end
+
         --this will reset the out if needed...
         if CH(ch).AuxOut:val() == 1 then  SetOutputSend(ch, TRACKS.OUT_D)
         end
@@ -1136,10 +1137,11 @@ function IsNsSoloed(nsNum)
     return false
 end
 
-function SetOctave(chanNum)
+function SetOctave(chanNum, val)
     --MSG('setting octave', chanNum)
     local ch = CH(chanNum)
-    local octave = ch.oct:val()
+    local octave = ch.oct:val() or 0
+    if val then octave = val end
     SetMoonParam(chanNum, MCS.OCTAVE, octave )
     local caption = ''
     if octave ~= 0 then caption = math.floor(octave) end
