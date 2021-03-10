@@ -36,10 +36,10 @@ out_pin:none
 @init
     NOTE_OFF = $x80;           // note off MIDI message code
     NOTE_ON = $x90;            // note on MIDI message code
-    AFTERTOUCH_POLY = $xA0;   // poly aftertouch MIDI message code
+    AFTERTOUCH = $xA0;   // poly aftertouch MIDI message code
     CONTROL_CHANGE = $xB0;    // control change MIDI message code
     PROGRAM_CHANGE = $xC0;    // program change MIDI message code
-    AFTERTOUCH_CHANNEL = $xD0;    // channel aftertouch MIDI message code
+    PRESSURE = $xD0;    // channel aftertouch MIDI message code
     PITCH_BEND = $xE0;        // pitch bend MIDI message code
     OTHER = $xF0;
 
@@ -82,12 +82,12 @@ while
         eat = 1;
       );
 
-      ((msg == AFTERTOUCH_POLY) && (sAT == 1)) ?    // polyphonic aftertouch filter
+      ((msg == AFTERTOUCH) && (sAT == 1)) ?    // polyphonic aftertouch filter
       (
         eat = 1;
       );
 
-      ((msg == AFTERTOUCH_CHANNEL) && (sPR == 1)) ?  // polyphonic aftertouch filter
+      ((msg == PRESSURE) && (sPR == 1)) ?  // polyphonic aftertouch filter
       (
         eat = 1;
       );
