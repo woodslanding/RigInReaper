@@ -4,6 +4,8 @@ local hsluv = require "hsluv"
 
 DBG_OFF = false
 
+GLOBAL_SCALE = 1
+
 --[[
 SCYTHE EDITS AND BUGS
     color line 228:     local rgb = Table.map(colorTable, function(v) return math.floor(v * 255) end)
@@ -117,38 +119,33 @@ INSTRUMENT_SLOT = 1
 MCS = {
     NAME = "JS: midiChStrip",
     SLOT = 0,
-    OCTAVE = 0,
-    SEMI = 1,
-    SEMI_CC = 2,
-    HANDS = 3,
-    LO_NOTE = 4,
-    HI_NOTE = 5,
-    FOLD_LO = 6,
-    FOLD_HI = 7,
-    NS_MUTING = 8,
-    NS_MUTE_LO = 9,
-    NS_MUTE_HI = 10,
-    SUSTAIN = 11,
-    HOLD = 12,
-    EXP_CC = 13,
-    EXPR_CURVE = 14,
-    KEYB_TYPE = 15,
-    MPE_VST = 16,
-    MPE_BASE_CH = 17,
-    MPE_POLY = 18,
-    AT_TO_CC = 19,
-    AT_TOGGLE = 20,
-    PB_NORM = 21,
-    PB_MPE = 22,
-    PB_VST = 23,
-    PB_NOTES = 24,
-    AUDIO_IN = 25,
+    MIDI_ON = 0,
+    OCTAVE = 1,
+    SEMI = 2,
+    SEMI_CC = 3,
+    HANDS = 4,
+    LO_NOTE = 5,
+    HI_NOTE = 6,
+    FOLD_LO = 7,
+    FOLD_HI = 8,
+    NS_MUTING = 9,
+    NS_MUTE_LO = 10,
+    NS_MUTE_HI = 11,
+    SUSTAIN = 12,
+    HOLD = 13,
+    EXP_CC = 14,
+    EXPR_CURVE = 15,
+    KEYB_TYPE = 16,
+    MPE_VST = 17,
+    MPE_BASE_CH = 18,
+    MPE_POLY = 19,
+    AT_TO_CC = 20,
+    AT_TOGGLE = 21,
+    PB_NORM = 22,
+    PB_MPE = 23,
+    PB_VST = 24,
+    PB_NOTES = 25,
     PANIC = 26,
-}
-
---TODO: deprecate storing these in MCS???
-AUDIO_IN = {
-    NONE = 0, EXT = 1, MIXER = 2, BOTH = 3
 }
 
 NS_COUNT = 4
@@ -163,8 +160,6 @@ REAPER = {SEND = 0, RCV = -1, STEREO = 1024, MONO = 0 }
 
 NOTES = {'C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'}
 MONTHS = {'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'}
-
-GLOBAL_SCALE = 1
 
 ------------------LOCAL GLOBALS-------------------------------------
 local previousNotesourceSetting = 0
@@ -643,14 +638,14 @@ function PANIC()
 end
 
 function GetMoonParam(chan, param)
-    local track = GetTrack(chan)   MSG('getting Moon param,', param, ', track: ', chan)
+    local track = GetTrack(chan)   --MSG(', track: ', chan,'getting Moon param,', param )
     local val,_,_ = reaper.TrackFX_GetParam( track, MCS.SLOT, param)
     return val
 end
 --can accept a number or a boolean
 function SetMoonParam(chan, param, val)
     if val == true then val = 1 elseif val == false then val = 0 end
-    local track = GetTrack(chan)  MSG('Setting moon param',param,'to',val)
+    local track = GetTrack(chan)  --MSG('Setting moon param',param,'to',val)
     local _ = reaper.TrackFX_SetParam(track,MCS.SLOT,param,val)
 end
 
@@ -710,7 +705,7 @@ end
 
 function EnableChan(chan,set)
     if set == nil then
-        return GetMoonParam(chan, MCS.MIDI_ON)
+        return GetMoonParam(chan, MCS.KEYB_TYPE) ~= NS.NONE
     else
         SetMoonParam(chan, MCS.MIDI_ON, set)
     end
@@ -1205,7 +1200,7 @@ function GetNsSoloMuteRange(nsNum)
     local low = 127
     local high = 0
     for i,chan in ipairs(GetChansWithNS(nsNum)) do
-        --MSG('GetNsSoloMuteRange: checking track', chan)
+        MSG('GetNsSoloMuteRange: checking track', chan)
         if GetMoonParam(chan, MCS.NS_MUTING) == 1 then   --MSG('GetNsSoloMuteRange: track', chan)
              --look for nsoloed insts
             high = math.max(high, GetMoonParam(chan,MCS.HI_NOTE))

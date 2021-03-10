@@ -55,7 +55,8 @@ about:
 */
 
 //////////////////////////////// DEFINE SLIDERS  ///////////////////////////////
-//
+//ENABLE
+slider1:s_enable=1<0,1,1{off,on}>Midi Enable
 //TRANSPOSE
 slider3:s_octave=0<-5,5,1>Octave transpose
 slider4:s_semi=0<-7,7,1>Semitone transpose
@@ -88,7 +89,7 @@ slider28:s_pbMPE=48<1,48,1>MPE pb range (e.g. 48)
 slider29:s_pbVST=48<1,48,1>VST pb range (e.g. 12)
 slider30:s_bendToNotes=0<0,1,1{off,on}>PB->notes
 
-slider35:s_PANIC=0<0.1.1>PANIC
+slider35:s_PANIC=0<0,1,1>PANIC
 
 // these lines tell Reaper the effect has no audio input/output, which enables processing optimizations.  MIDI-only FX should always have these lines.
 in_pin:none
@@ -186,6 +187,8 @@ function playNote(key) (
     play = 1;
     (key < s_loNote) || (key > s_hiNote) || (s_hold == 1) ? play = 0;
     (s_nsMuting == 1) && (key > s_nsMuteLo) && (key < s_nsMuteHi) ? play = 0;
+
+
     play;
 );
 

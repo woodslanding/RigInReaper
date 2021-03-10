@@ -58,6 +58,7 @@ local ctlLayerZ = 8
 local panelZ = 12
 local faderZ = 12
 local organZ = 14
+local pitch = 'pitchlayer'
 
 local imageFolder = IMAGE_FOLDER  --from MoonUtilities
 local presetFolder = GBANK_FOLDER
@@ -91,8 +92,13 @@ local function getColor(hue, sat)
     return GetRGB(hue, saturation)
 end
 
-local function getLayer(z)
-    if layers[z] then return layers[z]
+--get or set from pool of layers.  Organized by either z-order or specific name
+--when getting an existing layer by name, z does not matter...
+local function getLayer(z, name)
+    if name then
+        if layers[name] then return layers[name]
+        else layers[name] = GUI.createLayer({name = name, z = z}) end
+    elseif layers[z] then return layers[z]
     else layers[z] = GUI.createLayer({name = 'layer'..z, z = z})
     end
     return layers[z]
@@ -324,7 +330,11 @@ function LoadBank(bankname, chan)
     else
         SetChanFxStatus(chan, bank.isfx)  --add or remove sends to current channel
     end
-    if bank.midiin == 0 then CH().nSource:val(NS.NONE) end --otherwise unchanged...
+    if bank.midiin == 0 then
+        CH().nSource:val(NS.NONE)
+        getLayer(pitch..chan):hide()
+    else getLayer(pitch..chan):show()
+    end --otherwise unchanged...
     MSG('got here')
     presets[chan] = bank:presetsAsOptions()
     ChanColor(chan, bank.hue, bank.sat)                         MSG('finished loading chan'..chan)
@@ -758,6 +768,9 @@ local function createButton(props, ch)
     local caption = props.caption or ''
     local image = props.image or props.name
     local z = props.z or ctlLayerZ
+    local layername = nil
+    if props.layer then  layername = props.layer end
+    local layer = getLayer(z, layername)
     local button = GUI.createElement({
         name = props.name..'_'..ch,
         displayOnly = props.displayOnly or false,
@@ -779,13 +792,16 @@ local function createButton(props, ch)
         bg = props.bg or nil
     })
     --MSG('Created Element: '..button.name)
-    getLayer(z):addElements(button)
+    layer:addElements(button)
     return button
 end
 
 local function createSpinner(props, ch)
     if not ch then ch = '' end
     local z = props.z or ctlLayerZ
+    local layername = nil
+    if props.layer then  layername = props.layer end
+    local layer = getLayer(z, layername)
     local image
     if props.image then image = props.image else image = 'Spinner' end
     local spinner = GUI.createElement({
@@ -804,7 +820,7 @@ local function createSpinner(props, ch)
         save = false,
         bg = props.bg or nil
     })
-    getLayer(z):addElements(spinner)
+    layer:addElements(spinner)
     return spinner
 end
 
@@ -885,7 +901,7 @@ gui = {
     iPanFader =  {   name = 'Ipan', x = inspectorX, y = paramsY, frames = 97, min = -1, max = 1, horizontal = true, chColor = true, caption = 'pan', captionY = -.7,
                     w = 3 * inspBtnW, h = btnH, func =  function(self) CH().pan:val(self:val()) Pan(iCh, self:val()) end },
     iFlat = { name = 'Flat', x = paramsX, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:increment(-1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
-    iNatural = { name = 'Natural', x= paramsX + inspBtnW, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:val(0); CH().oct:val(0); CH().octaveSpin:setCaption('') SetMoonParam(iCh, MCS.SEMI, 0) end },
+    iNatural = { name = 'Natural', x= paramsX + inspBtnW, y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:val(0);SetMoonParam(iCh, MCS.SEMI, 0) SetOctave(iCh, 0) end },
     iSharp = { name = 'Sharp', x = paramsX + (inspBtnW * 2), y = paramsY, h = btnH, w = inspBtnW, momentary = true, func = function(self) CH().semi:increment(1,false) SetMoonParam(iCh, MCS.SEMI, CH().semi:val()) end },
     audioInputs = { name = 'audioIns', x = paramsX + (4.5 * btnW), y = paramsY, w = inspBtnW, h = btnH,  rows = 1, cols = 4, multi = true, options = {
             { name = 'Mic1'},
@@ -1072,15 +1088,16 @@ function SetNSource(ch)
     local out  --todo: add support for separate output
     if elm and elm:val() then
         local val = elm:val()
-        --MSG("ns val for ch", elm.ch, '=',val)
+        MSG("ns val for ch", elm.ch, '=',val)
         local bank = selectedBanks[elm.ch]
         if bank.isfx == 1 and bank.midiin == 0  then
              elm:val(2)
-             SetMoonParam(MCS.KEYB_TYPE, NS.NONE)
+             SetMoonParam(ch, MCS.KEYB_TYPE, NS.NONE)
         else
             elm:val(val % 2)  --limit setting by clicking to 0 or 1
             Notesource(ch, elm:val())  --this sets the MCS value, mutes the midi in, and sets the output send
         end
+
         --this will reset the out if needed...
         if CH(ch).AuxOut:val() == 1 then  SetOutputSend(ch, TRACKS.OUT_D)
         end
@@ -1136,10 +1153,11 @@ function IsNsSoloed(nsNum)
     return false
 end
 
-function SetOctave(chanNum)
+function SetOctave(chanNum, val)
     --MSG('setting octave', chanNum)
     local ch = CH(chanNum)
-    local octave = ch.oct:val()
+    local octave = ch.oct:val() or 0
+    if val then octave = val end
     SetMoonParam(chanNum, MCS.OCTAVE, octave )
     local caption = ''
     if octave ~= 0 then caption = math.floor(octave) end
@@ -1302,10 +1320,16 @@ for i = 1,channelCount do
     ch.fxName =  createLabel(gui.fxName,i)
     ch.fxNum =      createTitle(gui.fxNum, i)
     ch.fxLevel =       createFader(gui.fxLevel, i)
+    ch.fxSpin =     createSpinner(gui.fxSpin,i)
+
+    gui.semi.layer = pitch..i
+    --have to figure out how to make a blank panel to replace this...
+    --gui.octaveSpin.layer = pitch..i
+    gui.oct.layer = pitch..i
     ch.semi =       createButton(gui.semi,i)
     ch.oct =        createButton(gui.oct,i)
-    ch.fxSpin =     createSpinner(gui.fxSpin,i)
     ch.octaveSpin = createSpinner(gui.octaveSpin,i)
+
     ch.meterL =     createFader(gui.meterL, i)
     ch.meterR =     createFader(gui.meterR, i)
     ch.pan =        createFader(gui.pan, i)

@@ -487,32 +487,32 @@ Options = {
 --------------------------------------------------------------------------------------------------------------
 ------------------------------------------- GUI Elements -----------------------------------------------------
 --------------------------------------------------------------------------------------------------------------
-local btnH = 36
-local meterH = 12
+local btnH = S(45)
+local meterH = S(15)
 local chanH = (btnH * 6)
-local comboH = 36
+local comboH = S(45)
 
-local leftPad = 4
-local chanW = 96
-local faderW = 52
-local leftW = 52
-local rightW = 44
+local leftPad = S(5)
+local chanW = S(120)
+local faderW = S(65)
+local leftW = S(65)
+local rightW = S(55)
 
-local presetY = 16
+local presetY = S(20)
 
 local presetCols = 8
 local rows = 16
 
 local imageFolder = reaper.GetResourcePath().."\\scripts\\_RigInReaper\\Images\\"
 local mappingLayer = GUI.createLayer({name = "mappingLayer", z = 10})
-local  pad = 8
-local w,h = 96,36
-local layerZ = 40
+local  pad = S(10)
+local w,h = S(120),S(45)
+local layerZ = S(50)
 local x,y = 0,0
 
 --------------------------------------------------------------------------------------------------------------
 ----------------------------------------------LAYOUT CONTROL MAPPINGS-----------------------------------------
-w,h = 96,36
+w,h = S(120),S(45)
 y = 0
 
 for i, b in ipairs(Options.controlMappings) do
@@ -594,7 +594,7 @@ for i,s in ipairs(Options.sliders) do
 end
 
 for i,s in ipairs(Options.rangeSliders) do
-    local wid, ht = 42, 252
+    local wid, ht = S(40), S(315)
     local xpos, ypos = GetLayoutXandY(i, (12 * w) + (pad * 2),0, wid, ht, 1)
     local slider = GUI.createElement({
         type = 'MSlider',
