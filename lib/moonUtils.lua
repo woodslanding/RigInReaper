@@ -4,6 +4,8 @@ local hsluv = require "hsluv"
 
 DBG_OFF = false
 
+GLOBAL_SCALE = 1
+
 --[[
 SCYTHE EDITS AND BUGS
     color line 228:     local rgb = Table.map(colorTable, function(v) return math.floor(v * 255) end)
@@ -158,8 +160,6 @@ REAPER = {SEND = 0, RCV = -1, STEREO = 1024, MONO = 0 }
 
 NOTES = {'C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'}
 MONTHS = {'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'}
-
-GLOBAL_SCALE = 1
 
 ------------------LOCAL GLOBALS-------------------------------------
 local previousNotesourceSetting = 0
