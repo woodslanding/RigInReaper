@@ -1,118 +1,43 @@
-desc: MB MIDI Event Filter
-author: mabian edited by eMoon
-version: 1.0
-changelog: - Added note filter
+desc:MIDI FILTER
+tags: MIDI
+author: Eric Moon
+version: 4.1
+changelog: alpha
 about:
-  # MB MIDI Event Filter
+## Description
+    MIDI FILTER
 
-  Simple but flexible MIDI plugin that allows filtering out (suppressing) specific MIDI events in the FX chain on which it is added.
+////////////////////////////////////////////////
+desc:MIDI Message Filter with SySex v7
 
-  It can be used to prevent recording unwanted MIDI messages by using the “record (output)” REAPER track recording mode (if in track FX chain) or to discard them right at the source (if in Input FX chain).
-
-  Additionally, event “rechannelization” option is available, to route to a specified MIDI channel all events that aren't filtered out.
-
-  Different filter settings are available per MIDI message category (pitch bend, poly aftertouch, channel aftertouch and up to 4 control changes).
-
-// MB MIDI Event Filter2
-// 16.05.2010
-
-slider1:sChan=0<0,17,1{Off,All,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>MIDI Channel for filters
-slider2:sOut=0<0,16,1{Same as input,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>MIDI Channel for output
-slider3:sNotes=0<0,1,1{Off,On}>Notes filter
-slider4:sPW=0<0,1,1{Off,On}>Pitch Wheel filter
-slider5:sAT=0<0,1,1{Off,On}>Polyphonic Aftertouch filter
-slider6:sPR=0<0,1,1{Off,On}>Channel Aftertouch(pressure) filter
-slider7:sPC=0<0,1,1{Off,On}>Program Change filter
-slider8:sOT=0<0,1,1{Off,On}>Other events filter
-slider9:sCC1=0<0,129,1{Off,All,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127}>Control Change filter #1
-slider10:sCC2=0<0,129,1{Off,All,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127}>Control Change filter #2
-slider11:sCC3=0<0,129,1{Off,All,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127}>Control Change filter #3
-slider12:sCC4=0<0,129,1{Off,All,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127}>Control Change filter #4
-
+slider1:0<0,1,1{ON,OFF}}>Note off :
+slider2:0<0,1,1{ON,OFF}}>Note on :
+slider3:0<0,1,1{ON,OFF}}>Polyphonic Aftertouch :
+slider4:0<0,1,1{ON,OFF}}>Control Change :
+slider5:0<0,1,1{ON,OFF}}>Program Change :
+slider6:0<0,1,1{ON,OFF}}>Channel Aftertouch :
+slider7:0<0,1,1{ON,OFF}}>Pitch Bend Change :
+slider8:0<0,1,1{ON,OFF}}>Sysex :
 
 in_pin:none
 out_pin:none
 
-@init
-    NOTE_OFF = $x80;           // note off MIDI message code
-    NOTE_ON = $x90;            // note on MIDI message code
-    AFTERTOUCH = $xA0;   // poly aftertouch MIDI message code
-    CONTROL_CHANGE = $xB0;    // control change MIDI message code
-    PROGRAM_CHANGE = $xC0;    // program change MIDI message code
-    PRESSURE = $xD0;    // channel aftertouch MIDI message code
-    PITCH_BEND = $xE0;        // pitch bend MIDI message code
-    OTHER = $xF0;
-
 @block
-while
+
+while(len = midirecv_buf(offset, buf, 65535))
 (
-  midirecv(mpos, msg1, msg23) ?
-  (
-    // get message components
-    msg = (msg1 & $xf0);             // message type nibble
-    channel = (msg1 & $x0f) + 1;    // channel nibble
-    eat = 0;
+   pass = 1;
 
-    (
-     ((msg != 0) && ((sChan == 1) || (sChan == channel + 1)))) ?
-    (
-      lastmsg = msg;
+   s = buf[0] & 0xF0;
 
-      (msg == CONTROL_CHANGE)  ?              // control change filter
-      (
-        cnum = (msg23 & $xff);
-        (
-        ((sCC1 == 1) || (sCC1 == cnum + 2)) ||
-        ((sCC2 == 1) || (sCC2 == cnum + 2)) ||
-        ((sCC3 == 1) || (sCC3 == cnum + 2)) ||
-        ((sCC4 == 1) || (sCC4 == cnum + 2))
-        ) ?
-        (
-          eat = 1;
-        );
-      );
+   slider1 && s == 0x80 ? pass = 0; // Note Off
+   slider2 && s == 0x90 ? pass = 0; // Note On
+   slider3 && s == 0xA0 ? pass = 0; // Polyphonic Aftertouch
+   slider4 && s == 0xB0 ? pass = 0; // Control Change
+   slider5 && s == 0xC0 ? pass = 0; // Program Change
+   slider6 && s == 0xD0 ? pass = 0; // Channel Aftertouch
+   slider7 && s == 0xE0 ? pass = 0; // Pitch Bend
+   slider8 && s == 0xF0 ? pass = 0; // SysEx
 
-      ((msg == (NOTE_OFF || NOTE_ON)) && (sPW == 1)) ?      // note filter
-      (
-        eat = 1;
-      );
-
-       ((msg == PITCH_BEND) && (sPW == 1)) ?      // pitch bend filter
-      (
-        eat = 1;
-      );
-
-      ((msg == AFTERTOUCH) && (sAT == 1)) ?    // polyphonic aftertouch filter
-      (
-        eat = 1;
-      );
-
-      ((msg == PRESSURE) && (sPR == 1)) ?  // polyphonic aftertouch filter
-      (
-        eat = 1;
-      );
-
-      ((msg == PROGRAM_CHANGE) && (sPC == 1)) ?    // program changes
-      (
-        eat = 1;
-      );
-      ((msg == OTHER) && (sPC == 1)) ?    // other events
-      (
-        eat = 1;
-      );
-    );
-
-    (eat == 0) ?
-    (
-      // channel remap
-      sOut > 0 ?
-      (
-        msg1 = msg | (sOut - 1);
-      );
-
-      midisend(mpos, msg1, msg23);
-    );
-  );
-
-  msg1;
+   pass ? midisend_buf(offset, buf, len);
 );
