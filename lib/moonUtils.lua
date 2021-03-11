@@ -8,9 +8,12 @@ GLOBAL_SCALE = 1
 
 --[[
 SCYTHE EDITS AND BUGS
+    --BUG: RGB must be integers
     color line 228:     local rgb = Table.map(colorTable, function(v) return math.floor(v * 255) end)
+    --needed for fullscreen support
     window, line 148:   local w, h = self.currentW, self.currentH + self.titleHeight
     layer, line 111:    gfx.setimgdim(self.buffer, self.window.currentW, self.window.currentH + self.window.titleHeight)
+    --EDITED for vert. frames.  Should be redone to support both
     sprite... edit for vert or horiz frames
 ]]
 
