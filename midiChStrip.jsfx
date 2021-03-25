@@ -29,9 +29,8 @@ about:
 /////////////////////////////////////////////////////////////////////////////////
 // .55 -- added support for AT toggling
 //////////////////////////////// DEFINE SLIDERS  ///////////////////////////////
-//The following sliders have no effect locally, they are just used to store info for
-//track templates and actions:  ExpToCC, output buss, audio input, use Drawbars,hue,sat
-//The following are read only, and written by scripts:  NsMuteHi,NsMuteLo
+
+//The following are read only, and written by scripts: NsMute NsMuteHi,NsMuteLo
 slider1:s_enable=1<0,1,1{off,on}>Midi Enable
 
 slider4:s_octave=0<-5,5,1>Octave transpose
@@ -44,18 +43,16 @@ slider9:s_hiNote=127<0,127,1>Hi Note (MIDI Note #)
 slider10:s_loFold=0<0,127,1>Fold lo (MIDI Note #)
 slider11:s_hiFold=127<0,127,1>Fold hi (MIDI Note #)
 //NOTESOURCE
-slider13:s_nsStatus=0<0,1,1{off,on}>NS Status
+slider13:s_nsMute=0<0,1,1{off,on}>NS Status
 slider14:s_nsMuteLo=0<0,127,1>NS Mute Low (MIDI Note #)
-slider15:s_nsMuteHi=0<0,127,1>NS Mute High (MIDI Note #)
+slider15:s_nsMuteHi=127<0,127,1>NS Mute High (MIDI Note #)
 //PEDALS
 slider16:s_susType=0<0,2,0{normal,ignored,faked}>Sus Type
 slider17:s_hold=0<0,1,1{off,hold}>Hold
-slider18:s_expToCC=3<0,127,1>ExpToCC#
-slider19:s_expCurve=0<0,3,1{Normal,Reverse,X-Fade,Rev Xfade}>Expr Curve
 
 //MPE for Src:Both,
-slider20:s_mpeSrc=1<0,3,1{Normal,Dual,MPE,NONE}>Controller Type
-slider21:s_mpeVST=1<0,1,1{no,yes}>MPE vst
+slider20:s_mpeSrc=0<0,3,1{KEYB,MPE,NONE,DUAL}>Controller Type
+slider21:s_mpeVST=0<0,1,1{no,yes}>MPE vst
 slider22:s_baseCh=1<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}>ChanOut (base chan for MPE)
 slider23:s_mpePoly=5<1,15>MPE poly to vst
 slider24:s_ATtoCC=0<0,11,1{off,1,2,3,4,5,6,7,8,9,10,11}>AT->CC
@@ -76,12 +73,10 @@ options:no_meter
 ext_noinit = 1; //don't reset on stop/start
 //CONSTANTS
 ROLI_CC = 74;
-EXP_CC = 3; //expression midi in value....
-EXP_CH = 1;
 K_PNO = 0;
-K_DBL = 1;
-K_MPE = 2;
-K_NON = 3;
+K_MPE = 1;
+K_NON = 2;
+K_DBL = 3;
 
 ////////////////////////////// MIDI FUNCTIONS ///////////////////////////
 NOTE_OFF = 128;
@@ -149,13 +144,13 @@ function sendCC(num,val)  (
             : midisend(0,CC + s_baseCh,num,val);
         )
 );
-
+/*
 function computeExp(ccval) (
     s_expCurve == 0 ? val = ccval :
     s_expCurve == 1 ? val = 127 - ccval :
     s_expCurve == 2 ? val = min(ccval*2, 127):
     s_expCurve == 3 ? val = min(127-(ccval*2),127);
-);
+);*/
 
 function playNote(key) (
     play = 1;
@@ -258,7 +253,7 @@ enablePrev = s_enable; //check for change in hold value
 counting ? toggleCount = toggleCount + 1 : toggleCount = 0;
 
 /////////////////////////////////////////////////////MIDI RECEIVE//////////////////////////////
-while (midirecv(offset,msg1,msg2,msg3)) && s_enable > 0 && (s_mpeSrc != K_NON) ?  //input none really NONE?
+while (midirecv(offset,msg1,msg2,msg3) && (s_enable > 0) && (s_mpeSrc != K_NON)) ?  //input none really NONE?
     (
     heldNotes == 0 ?  noteCount = 0;
     status = getStatus(msg1);
